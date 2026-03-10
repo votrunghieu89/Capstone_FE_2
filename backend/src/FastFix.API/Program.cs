@@ -1,6 +1,8 @@
+using FastFix.Core.Entities;
 using FastFix.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,7 +48,7 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:80")
+        policy.WithOrigins("http://localhost:3000", "http://localhost:3001", "http://localhost:80")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -104,8 +106,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 
-// SignalR Hubs
-// app.MapHub<ChatHub>("/hubs/chat");
-// app.MapHub<NotificationHub>("/hubs/notifications");
+// TODO: SignalR Hubs – enable when NotificationHub is implemented
 
 app.Run();

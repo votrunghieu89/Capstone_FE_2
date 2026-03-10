@@ -12,9 +12,9 @@ langchain-google-genai==2.0.8
 spacy==3.8.4
 
 # ML & Data
-scikit-learn==1.6.1
-pandas==2.2.3
-numpy==2.2.2
+scikit-learn>=1.0.0
+pandas>=2.0.0
+numpy<2.0.0
 
 # Image Processing
 Pillow==11.1.0
