@@ -69,7 +69,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         toast.success('Đăng nhập thành công! 🎉');
         onClose();
         loginForm.reset();
-        // window.location.href = '/';
+        window.location.href = '/customer';
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Đăng nhập thất bại';
@@ -85,9 +85,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         fullName: data.fullName,
         phone: data.phone || undefined,
       });
-      toast.success('Đăng ký thành công! 🎉');
+      toast.success('Đăng ký thành công! Chào mừng bạn đến với FastFix 🎉');
       onClose();
       registerForm.reset();
+      // Redirect to customer portal after registration
+      window.location.href = '/customer';
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Đăng ký thất bại';
       toast.error(msg);
@@ -157,11 +159,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   <button
                     key={t}
                     onClick={() => switchTab(t)}
-                    className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-                      tab === t
-                        ? 'bg-primary text-white shadow-md shadow-primary/30'
-                        : 'text-text-secondary hover:text-white'
-                    }`}
+                    className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${tab === t
+                      ? 'bg-primary text-white shadow-md shadow-primary/30'
+                      : 'text-text-secondary hover:text-white'
+                      }`}
                   >
                     {t === 'login' ? 'Đăng nhập' : 'Đăng ký'}
                   </button>
