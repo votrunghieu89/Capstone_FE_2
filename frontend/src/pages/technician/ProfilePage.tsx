@@ -1,29 +1,88 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   User, Mail, Phone, MapPin, Briefcase, Edit, Star, 
   ShieldCheck, Award, Settings, LogOut, ChevronRight,
-  Target, Zap, Clock
+  Target, Zap, Clock, X, Save, Loader2
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import technicianService, { type TechnicianProfile } from '@/services/technicianService';
+import toast from 'react-hot-toast';
 
 export default function TechProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState<TechnicianProfile | null>(null);
 
-  const techInfo = {
-    fullName: 'Alex Johnson',
-    email: 'alex.johnson@email.com',
-    phone: '+84 (0555) 123-4567',
-    areas: ['Trung Tâm', 'Giữa Thành Phố', 'Khu Kinh Doanh'],
-    specialties: ['Điều Hòa', 'Điện Nước', 'Thiết Bị Bếp'],
-    totalJobs: 127,
-    completionRate: 98,
-    avgRating: 4.85,
-    reviewCount: 428,
-    since: 'Tháng 1, 2024',
-    level: 'Chuyên Gia Vàng',
-    certifications: ['Chứng chỉ HVAC Pro', 'An toàn Điện Bậc 3', 'Kỹ thuật Plumbing Quốc tế']
+  // Form State
+  const [formData, setFormData] = useState({
+    fullName: '',
+    phone: '',
+    bio: '',
+    experienceYears: 0,
+    hourlyRate: 0,
+    serviceRadiusKm: 10,
+    specialties: [] as string[]
+  });
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      const data = await technicianService.getProfile();
+      setProfile(data);
+      setFormData({
+        fullName: data.fullName || '',
+        phone: data.phone || '',
+        bio: data.bio || '',
+        experienceYears: data.experienceYears,
+        hourlyRate: data.hourlyRate || 0,
+        serviceRadiusKm: data.serviceRadiusKm,
+        specialties: data.specialties || []
+      });
+    } catch (err) {
+      toast.error('Không thể tải thông tin hồ sơ');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSaving(true);
+      await technicianService.updateProfile(formData);
+      toast.success('Cập nhật hồ sơ thành công');
+      setIsEditing(false);
+      await fetchProfile();
+    } catch (err) {
+      toast.error('Lỗi khi cập nhật hồ sơ');
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Đang tải hồ sơ...</p>
+      </div>
+    );
+  }
+
+  if (!profile) return (
+    <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-center p-6">
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Không tìm thấy thông tin hồ sơ</p>
+        <button onClick={fetchProfile} className="text-blue-500 text-xs font-black uppercase">Thử lại</button>
+    </div>
+  );
 
   return (
     <div className="p-2 md:p-6 space-y-8 pb-20 overflow-x-hidden">
@@ -35,7 +94,11 @@ export default function TechProfilePage() {
             <div className="relative">
               <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-blue-500 to-purple-600 p-1">
                 <div className="w-full h-full rounded-[22px] bg-[#0f172a] flex items-center justify-center overflow-hidden">
-                   <User className="w-16 h-16 text-slate-500" />
+                   {profile.avatarUrl ? (
+                     <img src={profile.avatarUrl} alt={profile.fullName} className="w-full h-full object-cover" />
+                   ) : (
+                     <User className="w-16 h-16 text-slate-500" />
+                   )}
                 </div>
               </div>
               <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-2 rounded-xl shadow-lg border-2 border-[#0f172a]">
@@ -46,15 +109,15 @@ export default function TechProfilePage() {
             <div className="flex-1 text-center md:text-left space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-3xl font-black text-foreground tracking-tight uppercase">{techInfo.fullName}</h1>
-                  <p className="text-blue-400 font-bold text-xs uppercase tracking-[0.2em] mt-1">{techInfo.level}</p>
+                  <h1 className="text-3xl font-black text-white tracking-tight uppercase">{profile.fullName}</h1>
+                  <p className="text-blue-400 font-bold text-xs uppercase tracking-[0.2em] mt-1">{profile.level}</p>
                 </div>
                 <div className="flex gap-2 justify-center">
                   <button className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/5 transition-all text-slate-400">
                     <Settings size={20} />
                   </button>
                   <button 
-                    onClick={() => setIsEditing(!isEditing)}
+                    onClick={() => setIsEditing(true)}
                     className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20"
                   >
                     <Edit size={16} />
@@ -66,15 +129,15 @@ export default function TechProfilePage() {
               <div className="flex flex-wrap justify-center md:justify-start gap-6 pt-4">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Mail size={16} className="text-blue-500" />
-                  <span className="text-sm font-medium">{techInfo.email}</span>
+                  <span className="text-sm font-medium">{profile.email}</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-400">
                   <Phone size={16} className="text-emerald-500" />
-                  <span className="text-sm font-medium">{techInfo.phone}</span>
+                  <span className="text-sm font-medium">{profile.phone || 'Chưa cập nhật'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-400">
                   <Clock size={16} className="text-purple-500" />
-                  <span className="text-sm font-medium italic">Tham gia {techInfo.since}</span>
+                  <span className="text-sm font-medium italic">Tham gia {profile.since}</span>
                 </div>
               </div>
             </div>
@@ -85,10 +148,10 @@ export default function TechProfilePage() {
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Hoàn Thành', value: techInfo.totalJobs, icon: Target, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-          { label: 'Tỷ Lệ Thành Công', value: `${techInfo.completionRate}%`, icon: Zap, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-          { label: 'Đánh Giá', value: techInfo.avgRating, icon: Star, color: 'text-amber-400', bg: 'bg-amber-500/10', sub: `${techInfo.reviewCount} Reviews` },
-          { label: 'Hạng', value: 'Bạc', icon: Award, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+          { label: 'Hoàn Thành', value: profile.totalJobsCompleted, icon: Target, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+          { label: 'Tỷ Lệ Thành Công', value: `98%`, icon: Zap, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+          { label: 'Đánh Giá', value: profile.averageRating.toFixed(1), icon: Star, color: 'text-amber-400', bg: 'bg-amber-500/10', sub: `${profile.totalReviews} Reviews` },
+          { label: 'Hạng', value: profile.level.split(' ').pop(), icon: Award, color: 'text-purple-400', bg: 'bg-purple-500/10' },
         ].map((stat, idx) => (
           <motion.div 
             key={idx}
@@ -99,7 +162,7 @@ export default function TechProfilePage() {
               <stat.icon className={cn("w-5 h-5", stat.color)} />
             </div>
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</p>
-            <p className="text-2xl font-black text-foreground mt-1">{stat.value}</p>
+            <p className="text-2xl font-black text-white mt-1">{stat.value}</p>
             {stat.sub && <p className="text-[10px] text-slate-600 font-bold mt-1 uppercase">{stat.sub}</p>}
           </motion.div>
         ))}
@@ -109,32 +172,37 @@ export default function TechProfilePage() {
         {/* Left Column: Details */}
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-[#0f172a]/50 backdrop-blur-md rounded-3xl border border-white/5 p-8 shadow-xl">
-            <h3 className="text-lg font-black text-foreground uppercase tracking-tight mb-8">Kỹ năng & Chuyên môn</h3>
+             <div className="mb-8">
+                <h3 className="text-lg font-black text-white uppercase tracking-tight mb-4">Giới thiệu</h3>
+                <p className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">
+                  {profile.bio || 'Chưa có thông tin giới thiệu. Hãy cập nhật hồ sơ để khách hàng hiểu rõ hơn về bạn.'}
+                </p>
+             </div>
+
+            <h3 className="text-lg font-black text-white uppercase tracking-tight mb-8">Kỹ năng & Chuyên môn</h3>
             
             <div className="space-y-8">
               <div>
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Lĩnh vực chuyên sâu</p>
                 <div className="flex flex-wrap gap-2">
-                  {techInfo.specialties.map(s => (
+                  {profile.specialties.length > 0 ? profile.specialties.map(s => (
                     <span key={s} className="px-5 py-2.5 bg-blue-500/10 text-blue-400 text-xs font-black rounded-xl border border-blue-500/20 uppercase tracking-tight">
                       {s}
                     </span>
-                  ))}
+                  )) : (
+                    <p className="text-xs text-slate-600 italic">Chưa cập nhật chuyên môn</p>
+                  )}
                 </div>
               </div>
 
               <div>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Chứng chỉ hành nghề</p>
-                <div className="space-y-3">
-                  {techInfo.certifications.map(c => (
-                    <div key={c} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-all group">
-                      <div className="flex items-center gap-3">
-                        <Award size={18} className="text-amber-500" />
-                        <span className="text-sm font-bold text-slate-300">{c}</span>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-600 group-hover:text-blue-500 transition-all" />
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Kinh nghiệm</p>
+                <div className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                    <Briefcase size={20} className="text-blue-500" />
+                    <div>
+                        <p className="text-sm font-bold text-slate-300">{profile.experienceYears} năm kinh nghiệm</p>
+                        <p className="text-[10px] text-slate-600 uppercase font-bold">Thâm niên trong nghề</p>
                     </div>
-                  ))}
                 </div>
               </div>
             </div>
@@ -144,14 +212,28 @@ export default function TechProfilePage() {
         {/* Right Column: Work Areas & Account */}
         <div className="space-y-8">
           <div className="bg-[#0f172a]/50 backdrop-blur-md rounded-3xl border border-white/5 p-8 shadow-xl">
-            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-6">Khu vực phục vụ</h3>
-            <div className="space-y-4">
-              {techInfo.areas.map(a => (
-                <div key={a} className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
-                  <span className="text-sm font-bold text-slate-300">{a}</span>
-                </div>
-              ))}
+            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-6">Thông tin dịch vụ</h3>
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/10">
+                    <MapPin size={18} className="text-emerald-500" />
+                 </div>
+                 <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Bán kính phục vụ</p>
+                    <p className="text-sm font-bold text-slate-300">{profile.serviceRadiusKm} km</p>
+                 </div>
+              </div>
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/10">
+                    <Zap size={18} className="text-amber-500" />
+                 </div>
+                 <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Giá mỗi giờ</p>
+                    <p className="text-sm font-bold text-slate-300">
+                        {profile.hourlyRate ? `${profile.hourlyRate.toLocaleString()}đ` : 'Thỏa thuận'}
+                    </p>
+                 </div>
+              </div>
             </div>
           </div>
 
@@ -163,6 +245,119 @@ export default function TechProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {isEditing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !saving && setIsEditing(false)}
+              className="absolute inset-0 bg-[#02050b]/90 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#0f172a] border border-white/10 rounded-[40px] overflow-hidden shadow-2xl"
+            >
+              <form onSubmit={handleSave} className="p-8 md:p-10 space-y-8 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between">
+                   <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Chỉnh sửa hồ sơ</h2>
+                   <button 
+                     type="button"
+                     onClick={() => setIsEditing(false)}
+                     className="p-2 text-slate-500 hover:text-white transition-colors"
+                   >
+                     <X size={24} />
+                   </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Họ và tên</label>
+                      <input 
+                        required
+                        value={formData.fullName}
+                        onChange={e => setFormData({ ...formData, fullName: e.target.value })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Số điện thoại</label>
+                      <input 
+                        value={formData.phone}
+                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
+                      />
+                   </div>
+                   <div className="md:col-span-2 space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Giới thiệu bản thân</label>
+                      <textarea 
+                        rows={3}
+                        value={formData.bio}
+                        onChange={e => setFormData({ ...formData, bio: e.target.value })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all resize-none"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Số năm kinh nghiệm</label>
+                      <input 
+                        type="number"
+                        value={formData.experienceYears}
+                        onChange={e => setFormData({ ...formData, experienceYears: parseInt(e.target.value) || 0 })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bán kính phục vụ (km)</label>
+                      <input 
+                        type="number"
+                        value={formData.serviceRadiusKm}
+                        onChange={e => setFormData({ ...formData, serviceRadiusKm: parseInt(e.target.value) || 0 })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
+                      />
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Giá mỗi giờ (VND)</label>
+                      <input 
+                        type="number"
+                        value={formData.hourlyRate}
+                        onChange={e => setFormData({ ...formData, hourlyRate: parseInt(e.target.value) || 0 })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
+                      />
+                   </div>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                   <button 
+                     type="button"
+                     onClick={() => setIsEditing(false)}
+                     disabled={saving}
+                     className="flex-1 py-4 bg-white/5 text-slate-400 rounded-[20px] font-black text-xs uppercase tracking-widest border border-white/5 hover:bg-white/10 transition-all"
+                   >
+                     Hủy bỏ
+                   </button>
+                   <button 
+                     type="submit"
+                     disabled={saving}
+                     className="flex-[2] py-4 bg-blue-600 text-white rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-blue-500 transition-all shadow-2xl shadow-blue-600/40 flex items-center justify-center gap-2"
+                   >
+                     {saving ? (
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                     ) : (
+                       <Save size={16} />
+                     )}
+                     Lưu thay đổi
+                   </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
