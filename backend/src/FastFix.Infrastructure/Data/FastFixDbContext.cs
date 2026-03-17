@@ -110,6 +110,7 @@ public class FastFixDbContext : DbContext
             e.HasKey(ts => new { ts.TechnicianId, ts.SkillId });
             e.Property(ts => ts.TechnicianId).HasColumnName("technician_id");
             e.Property(ts => ts.SkillId).HasColumnName("skill_id");
+            e.Property(ts => ts.ProficiencyLevel).HasColumnName("proficiency_level");
             e.HasOne(ts => ts.Technician).WithMany(t => t.TechnicianSkills)
                 .HasForeignKey(ts => ts.TechnicianId);
             e.HasOne(ts => ts.Skill).WithMany(s => s.TechnicianSkills)

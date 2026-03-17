@@ -33,8 +33,28 @@ public class TechnicianController : ControllerBase
             .ThenInclude(ts => ts.Skill)
             .FirstOrDefaultAsync(u => u.Id == userId);
 
-        if (user == null || user.TechnicianProfile == null)
-            return NotFound(new { message = "Technician profile not found." });
+        if (user == null) return NotFound(new { message = "User not found." });
+
+        if (user.TechnicianProfile == null)
+        {
+            // Auto-create a default profile if missing
+            var newProfile = new TechnicianProfile
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Bio = "Cập nhật giới thiệu của bạn tại đây...",
+                ExperienceYears = 0,
+                HourlyRate = 0,
+                IsAvailable = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.TechnicianProfiles.Add(newProfile);
+            await _db.SaveChangesAsync();
+            
+            user.TechnicianProfile = newProfile;
+            user.TechnicianProfile.TechnicianSkills = new List<TechnicianSkill>();
+        }
 
         var profile = user.TechnicianProfile;
         
