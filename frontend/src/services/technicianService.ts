@@ -21,11 +21,9 @@ export interface TechnicianProfile {
 
 export interface TechnicianProfileUpdate {
   fullName: string;
+  email: string;
   phone?: string;
   bio?: string;
-  experienceYears: number;
-  hourlyRate?: number;
-  serviceRadiusKm: number;
   specialties: string[];
 }
 

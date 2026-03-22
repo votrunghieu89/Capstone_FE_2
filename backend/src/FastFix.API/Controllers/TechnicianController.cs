@@ -99,15 +99,13 @@ public class TechnicianController : ControllerBase
 
         // Update User info
         user.FullName = req.FullName;
+        user.Email = req.Email ?? user.Email;
         user.Phone = req.Phone;
         user.UpdatedAt = DateTime.UtcNow;
 
         // Update Profile info
         var profile = user.TechnicianProfile;
         profile.Bio = req.Bio;
-        profile.ExperienceYears = req.ExperienceYears;
-        profile.HourlyRate = req.HourlyRate;
-        profile.ServiceRadiusKm = req.ServiceRadiusKm;
         profile.UpdatedAt = DateTime.UtcNow;
 
         // Update Skills (Simplified replacement)

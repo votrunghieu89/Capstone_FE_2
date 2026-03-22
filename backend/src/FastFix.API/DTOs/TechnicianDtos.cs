@@ -2,11 +2,9 @@ namespace FastFix.API.DTOs;
 
 public record TechnicianProfileUpdateDto(
     string FullName,
+    string? Email,
     string? Phone,
     string? Bio,
-    int ExperienceYears,
-    decimal? HourlyRate,
-    decimal ServiceRadiusKm,
     string[] Specialties
 );
 

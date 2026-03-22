@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Clock, CheckCircle, AlertCircle, MapPin, DollarSign,
   TrendingUp, Phone, Briefcase, Star, ArrowUpRight,
@@ -10,14 +11,14 @@ import {
   ResponsiveContainer, AreaChart, Area
 } from 'recharts';
 
-const earningsData = [
-  { name: 'Th 2', total: 120000 },
-  { name: 'Th 3', total: 180000 },
-  { name: 'Th 4', total: 150000 },
-  { name: 'Th 5', total: 250000 },
-  { name: 'Th 6', total: 210000 },
-  { name: 'Th 7', total: 320000 },
-  { name: 'CN', total: 280000 },
+const completedJobsData = [
+  { name: 'Th 2', count: 4 },
+  { name: 'Th 3', count: 6 },
+  { name: 'Th 4', count: 3 },
+  { name: 'Th 5', count: 7 },
+  { name: 'Th 6', count: 5 },
+  { name: 'Th 7', count: 8 },
+  { name: 'CN', count: 6 },
 ];
 
 export function CommandCenter() {
@@ -27,7 +28,6 @@ export function CommandCenter() {
     { label: 'Công Việc Hôm Nay', value: '4', icon: Briefcase, color: 'blue', trend: '+2' },
     { label: 'Hoàn Thành', value: '2', icon: CheckCircle, color: 'green', trend: '100%' },
     { label: 'Đang Thực Hiện', value: '1', icon: Clock, color: 'amber', trend: 'Active' },
-    { label: 'Thu Nhập Hôm Nay', value: '180.000đ', icon: DollarSign, color: 'emerald', trend: '+15%' },
   ];
 
   const colorMap: Record<string, { icon: string; iconBg: string; text: string }> = {
@@ -103,7 +103,7 @@ export function CommandCenter() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {stats.map((stat, idx) => {
           const Icon = stat.icon;
           const colors = colorMap[stat.color];
@@ -136,20 +136,20 @@ export function CommandCenter() {
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-[#0f172a]/50 backdrop-blur-md rounded-2xl p-6 border border-white/5 shadow-xl h-full">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-lg font-bold text-foreground">Thu Nhập Hàng Tuần</h2>
+              <h2 className="text-lg font-bold text-foreground">Công Việc Đã Hoàn Thành Trong Tuần</h2>
               <div className="flex items-center gap-4 text-xs font-medium">
                 <div className="flex items-center gap-2 text-blue-400">
                   <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  Tổng Thu (VNĐ)
+                  Số lượng công việc
                 </div>
               </div>
             </div>
             
             <div className="h-[280px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={earningsData}>
+                <AreaChart data={completedJobsData}>
                   <defs>
-                    <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                     </linearGradient>
@@ -166,19 +166,19 @@ export function CommandCenter() {
                     axisLine={false} 
                     tickLine={false} 
                     tick={{ fill: '#64748b', fontSize: 12 }}
-                    tickFormatter={(value) => `${value / 1000}k`}
                   />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
                     itemStyle={{ color: '#f1f5f9', fontWeight: 'bold' }}
+                    formatter={(value) => [`${value} công việc`, 'Số lượng']}
                   />
                   <Area 
                     type="monotone" 
-                    dataKey="total" 
+                    dataKey="count" 
                     stroke="#3b82f6" 
                     strokeWidth={3}
                     fillOpacity={1} 
-                    fill="url(#colorTotal)" 
+                    fill="url(#colorCount)" 
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -202,9 +202,12 @@ export function CommandCenter() {
                 );
               })}
             </div>
-            <button className="w-full mt-4 py-2 text-xs font-bold text-blue-500 hover:text-blue-400 transition-colors uppercase tracking-widest">
+            <Link 
+              to="/technician/don-hang/da-tiep-nhan"
+              className="w-full mt-4 flex items-center justify-center py-2 text-xs font-bold text-blue-500 hover:text-blue-400 transition-colors uppercase tracking-widest no-underline border border-blue-500/20 rounded-lg hover:bg-blue-500/5"
+            >
               Xem Toàn Bộ Lịch
-            </button>
+            </Link>
           </div>
 
           <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-2xl p-6 border border-blue-500/20">

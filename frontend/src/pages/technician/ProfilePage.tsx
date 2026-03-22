@@ -20,11 +20,9 @@ export default function TechProfilePage() {
   // Form State
   const [formData, setFormData] = useState({
     fullName: '',
+    email: '',
     phone: '',
     bio: '',
-    experienceYears: 0,
-    hourlyRate: 0,
-    serviceRadiusKm: 10,
     specialties: [] as string[]
   });
 
@@ -39,11 +37,9 @@ export default function TechProfilePage() {
       setProfile(data);
       setFormData({
         fullName: data.fullName || '',
+        email: data.email || '',
         phone: data.phone || '',
         bio: data.bio || '',
-        experienceYears: data.experienceYears,
-        hourlyRate: data.hourlyRate || 0,
-        serviceRadiusKm: data.serviceRadiusKm,
         specialties: data.specialties || []
       });
     } catch (err) {
@@ -148,28 +144,7 @@ export default function TechProfilePage() {
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Hoàn Thành', value: profile.totalJobsCompleted, icon: Target, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-          { label: 'Tỷ Lệ Thành Công', value: `98%`, icon: Zap, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-          { label: 'Đánh Giá', value: profile.averageRating.toFixed(1), icon: Star, color: 'text-amber-400', bg: 'bg-amber-500/10', sub: `${profile.totalReviews} Reviews` },
-          { label: 'Hạng', value: profile.level.split(' ').pop(), icon: Award, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-        ].map((stat, idx) => (
-          <motion.div 
-            key={idx}
-            whileHover={{ y: -5 }}
-            className="bg-[#0f172a]/50 backdrop-blur-md rounded-3xl border border-white/5 p-6 shadow-xl"
-          >
-            <div className={cn("inline-flex p-3 rounded-2xl mb-4", stat.bg)}>
-              <stat.icon className={cn("w-5 h-5", stat.color)} />
-            </div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</p>
-            <p className="text-2xl font-black text-white mt-1">{stat.value}</p>
-            {stat.sub && <p className="text-[10px] text-slate-600 font-bold mt-1 uppercase">{stat.sub}</p>}
-          </motion.div>
-        ))}
-      </div>
+      {/* Stats Overview Removed */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Details */}
@@ -198,47 +173,14 @@ export default function TechProfilePage() {
                 </div>
               </div>
 
-              <div>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Kinh nghiệm</p>
-                <div className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
-                    <Briefcase size={20} className="text-blue-500" />
-                    <div>
-                        <p className="text-sm font-bold text-slate-300">{profile.experienceYears} năm kinh nghiệm</p>
-                        <p className="text-[10px] text-slate-600 uppercase font-bold">Thâm niên trong nghề</p>
-                    </div>
-                </div>
-              </div>
+              {/* Experience Subsection Removed */}
             </div>
           </div>
         </div>
 
         {/* Right Column: Work Areas & Account */}
         <div className="space-y-8">
-          <div className="bg-[#0f172a]/50 backdrop-blur-md rounded-3xl border border-white/5 p-8 shadow-xl">
-            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-6">Thông tin dịch vụ</h3>
-            <div className="space-y-6">
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/10">
-                    <MapPin size={18} className="text-emerald-500" />
-                 </div>
-                 <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Bán kính phục vụ</p>
-                    <p className="text-sm font-bold text-slate-300">{profile.serviceRadiusKm} km</p>
-                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/10">
-                    <Zap size={18} className="text-amber-500" />
-                 </div>
-                 <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase">Giá mỗi giờ</p>
-                    <p className="text-sm font-bold text-slate-300">
-                        {profile.hourlyRate ? `${profile.hourlyRate.toLocaleString()}đ` : 'Thỏa thuận'}
-                    </p>
-                 </div>
-              </div>
-            </div>
-          </div>
+          {/* Service Info Removed */}
 
           <div className="bg-[#0f172a]/50 backdrop-blur-md rounded-3xl border border-white/5 p-4 shadow-xl">
              <button 
@@ -292,6 +234,16 @@ export default function TechProfilePage() {
                       />
                    </div>
                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email (Gmail)</label>
+                      <input 
+                        required
+                        type="email"
+                        value={formData.email}
+                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
+                      />
+                   </div>
+                   <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Số điện thoại</label>
                       <input 
                         value={formData.phone}
@@ -306,33 +258,6 @@ export default function TechProfilePage() {
                         value={formData.bio}
                         onChange={e => setFormData({ ...formData, bio: e.target.value })}
                         className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all resize-none"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Số năm kinh nghiệm</label>
-                      <input 
-                        type="number"
-                        value={formData.experienceYears}
-                        onChange={e => setFormData({ ...formData, experienceYears: parseInt(e.target.value) || 0 })}
-                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bán kính phục vụ (km)</label>
-                      <input 
-                        type="number"
-                        value={formData.serviceRadiusKm}
-                        onChange={e => setFormData({ ...formData, serviceRadiusKm: parseInt(e.target.value) || 0 })}
-                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
-                      />
-                   </div>
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Giá mỗi giờ (VND)</label>
-                      <input 
-                        type="number"
-                        value={formData.hourlyRate}
-                        onChange={e => setFormData({ ...formData, hourlyRate: parseInt(e.target.value) || 0 })}
-                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-white text-sm focus:border-blue-500 outline-none transition-all"
                       />
                    </div>
                 </div>

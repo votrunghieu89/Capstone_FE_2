@@ -1,24 +1,43 @@
-import { useState } from 'react';
-import { MapPin, Clock, Star, CheckCircle, X, Filter, Info, ChevronRight, ShieldCheck, AlertCircle, Calendar } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { MapPin, CheckCircle, Navigation, Camera, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 export function NewRequests() {
-  const [selectedFilter, setSelectedFilter] = useState('all');
-  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const navigate = useNavigate();
 
   const requests = [
-    { id: 1, title: 'Sửa Chữa Điều Hòa Cấp Bách', customer: 'Công Ty John', description: 'Máy lạnh phát ra tiếng lạ, cần sự chú ý ngay lập tức. Có mùi khét nhẹ khi khởi động.', location: 'Trung Tâm, cách 2.3 km', time: 'Ngay Bây Giờ', price: '120.000đ', rating: 4.8, reviews: 142, distance: 2.3, urgency: 'urgent', fullDescription: 'Khách hàng báo cáo máy điều hòa Daikin Inverter phát ra tiếng kêu to và có mùi khét. Cần kiểm tra bảng mạch và motor quạt. Đây là văn phòng làm việc nên cần xử lý gấp trong sáng nay.' },
-    { id: 2, title: 'Lắp Đặt Bình Nước Nóng', customer: 'Sarah Martinez', description: 'Cần lắp đặt bình nước nóng 50 gallon mới. Đã có sẵn thiết bị, chỉ cần công lắp.', location: 'Giữa Thành Phố, cách 5.1 km', time: 'Hôm Nay 16:00', price: '200.000đ', rating: 4.9, reviews: 89, distance: 5.1, urgency: 'normal', fullDescription: 'Yêu cầu thợ có tay nghề lắp đặt bình nóng lạnh Ariston 50L. Vị trí lắp đặt đã có đường ống chờ sẵn. Khách hàng yêu cầu kiểm tra kỹ van một chiều và chống giật sau khi lắp.' },
-    { id: 3, title: 'Kiểm Tra Tủ Điện', customer: 'Công Ty Tech Solutions', description: 'Kiểm tra an toàn hàng năm cần thiết cho tài sản thương mại.', location: 'Khu Kinh Doanh, cách 8.4 km', time: 'Ngày Mai 09:00', price: '150.000đ', rating: 4.7, reviews: 245, distance: 8.4, urgency: 'low', fullDescription: 'Kiểm tra định kỳ hệ thống tủ điện phân phối cho tòa nhà 3 tầng. Cần đo điện trở cách điện, kiểm tra độ chặt của các tiếp điểm và vệ sinh tủ điện. Yêu cầu có biên bản xác nhận sau khi kiểm tra.' },
+    { 
+      id: 1, 
+      title: 'SỬA ĐIỀU HÒA', 
+      createdAt: '10 phút trước',
+      description: 'Máy lạnh phát ra tiếng lạ, cần sự chú ý ngay lập tức. Có mùi khét nhẹ khi khởi động. Khách hàng báo cáo máy điều hòa Daikin Inverter phát ra tiếng kêu to và có mùi khét. Cần kiểm tra bảng mạch và motor quạt.', 
+      location: '123 Đường Láng, Đống Đa, Hà Nội', 
+      distance: 2.3, 
+      image: 'https://images.unsplash.com/photo-1581094288338-2314dddb7bc3?w=800&auto=format&fit=crop'
+    },
+    { 
+      id: 2, 
+      title: 'SỬA BÌNH NÓNG LẠNH', 
+      createdAt: '25 phút trước',
+      description: 'Cần lắp đặt bình nước nóng 50 gallon mới. Đã có sẵn thiết bị. Yêu cầu thợ có tay nghề lắp đặt bình nóng lạnh Ariston 50L. Vị trí lắp đặt đã có đường ống chờ sẵn.', 
+      location: '456 Nguyễn Trãi, Thanh Xuân, Hà Nội', 
+      distance: 5.1,
+      image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&auto=format&fit=crop'
+    },
+    { 
+      id: 3, 
+      title: 'KIỂM TRA TỦ ĐIỆN', 
+      createdAt: '1 giờ trước',
+      description: 'Kiểm tra an toàn hàng năm cần thiết cho tài sản thương mại. Kiểm tra định kỳ hệ thống tủ điện phân phối cho tòa nhà 3 tầng. Cần đo điện trở cách điện, kiểm tra độ chặt của các tiếp điểm.', 
+      location: '89 Cầu Giấy, Hà Nội', 
+      distance: 8.4,
+      image: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&auto=format&fit=crop'
+    },
   ];
 
-  const filteredRequests = selectedFilter === 'all' ? requests : requests.filter((r) => r.urgency === selectedFilter);
-
-  const urgencyMap: Record<string, { label: string; bg: string; text: string; icon: any }> = {
-    urgent: { label: 'Cấp Bách', bg: 'bg-rose-500/10', text: 'text-rose-400', icon: AlertCircle },
-    normal: { label: 'Hôm Nay', bg: 'bg-amber-500/10', text: 'text-amber-400', icon: Clock },
-    low: { label: 'Đã Lên Lịch', bg: 'bg-blue-500/10', text: 'text-blue-400', icon: Calendar },
+  const handleAccept = () => {
+    // Giả lập nhận việc thành công
+    navigate('/technician/don-hang/da-tiep-nhan');
   };
 
   const container = {
@@ -35,33 +54,10 @@ export function NewRequests() {
   };
 
   return (
-    <div className="p-2 md:p-6 space-y-6 pb-20 relative">
+    <div className="p-2 md:p-6 space-y-8 pb-20 relative overflow-x-hidden">
       <div>
-        <h1 className="text-2xl font-extrabold text-foreground">Yêu Cầu Mới</h1>
-        <p className="text-muted-foreground text-sm mt-1">Khám phá các cơ hội việc làm xung quanh bạn</p>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar sm:flex-wrap">
-        {[
-          { id: 'all', label: 'Tất Cả' },
-          { id: 'urgent', label: 'Cấp Bách' },
-          { id: 'normal', label: 'Hôm Nay' },
-          { id: 'low', label: 'Đã Lên Lịch' },
-        ].map((filter) => (
-          <button
-            key={filter.id}
-            onClick={() => setSelectedFilter(filter.id)}
-            className={cn(
-              "px-5 py-2 rounded-full text-xs font-bold transition-all border whitespace-nowrap",
-              selectedFilter === filter.id
-                ? "bg-blue-500 text-white border-blue-500 shadow-lg shadow-blue-500/20"
-                : "bg-[#0f172a]/50 text-slate-400 border-white/5 hover:border-white/20"
-            )}
-          >
-            {filter.label}
-          </button>
-        ))}
+        <h1 className="text-3xl font-black text-foreground uppercase tracking-tighter">Yêu Cầu Mới</h1>
+        <p className="text-muted-foreground text-sm mt-1 font-medium">Khám phá các cơ hội việc làm xung quanh bạn</p>
       </div>
 
       {/* Requests List */}
@@ -69,157 +65,83 @@ export function NewRequests() {
         variants={container}
         initial="hidden"
         animate="show"
-        className="grid grid-cols-1 gap-4"
+        className="grid grid-cols-1 gap-6"
       >
-        {filteredRequests.map((request) => {
-          const urgency = urgencyMap[request.urgency];
-          return (
-            <motion.div 
-              key={request.id} 
-              variants={item}
-              whileHover={{ scale: 1.01 }}
-              className="group bg-[#0f172a]/50 backdrop-blur-md rounded-2xl border border-white/5 p-5 md:p-6 transition-all hover:border-blue-500/30 shadow-xl"
-            >
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
-                <div className="flex-1">
+        {requests.map((request) => (
+          <motion.div 
+            key={request.id} 
+            variants={item}
+            className="group bg-[#0f172a]/40 backdrop-blur-xl rounded-[32px] border border-white/5 p-6 md:p-8 transition-all hover:border-blue-500/30 shadow-2xl overflow-hidden relative"
+          >
+            {/* Request Time - Top Right */}
+            <div className="absolute top-6 right-8 md:top-8 md:right-10 flex flex-col items-end">
+              <div className="flex items-center gap-1.5 text-slate-500">
+                <Clock size={12} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Gửi lúc</span>
+              </div>
+              <span className="text-sm font-black text-blue-400 mt-0.5 tracking-tight">{request.createdAt}</span>
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-8">
+              {/* Image Section */}
+              <div className="w-full lg:w-48 h-48 rounded-2xl overflow-hidden bg-white/5 border border-white/10 shrink-0">
+                <img 
+                  src={request.image} 
+                  alt={request.title} 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                />
+              </div>
+
+              <div className="flex-1 space-y-6">
+                <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tighter", urgency.bg, urgency.text)}>
-                      {urgency.label}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">{request.id}</span>
+                    <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-500/10 px-2 py-0.5 rounded-md">Yêu cầu #{request.id}</span>
                   </div>
-                  <h3 className="text-lg font-bold text-foreground group-hover:text-blue-400 transition-colors">
+                  <h3 className="text-2xl font-black text-foreground group-hover:text-blue-400 transition-colors uppercase tracking-tight pr-24">
                     {request.title}
                   </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
-                      <ShieldCheck size={10} className="text-blue-400" />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-start gap-2">
+                    <Camera size={16} className="text-slate-500 shrink-0 mt-1" />
+                    <p className="text-sm text-slate-400 leading-relaxed font-medium">
+                      <span className="text-slate-500 font-black uppercase text-[10px] block mb-1">Chi tiết sự cố:</span>
+                      {request.description}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
+                      <MapPin size={14} className="text-blue-500" />
+                      <span className="text-xs font-bold text-slate-300">{request.distance} km</span>
                     </div>
-                    <p className="text-sm font-medium text-slate-400">{request.customer}</p>
+                    <a 
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(request.location)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/20 transition-all text-xs font-bold uppercase tracking-widest"
+                    >
+                      <Navigation size={14} />
+                      Google Maps
+                    </a>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xl font-black text-blue-400">{request.price}</p>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Ước tính</p>
+
+                <div className="pt-4">
+                  <button 
+                    onClick={handleAccept}
+                    className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 uppercase tracking-widest"
+                  >
+                    <CheckCircle size={18} />
+                    Nhận Công Việc
+                  </button>
                 </div>
               </div>
-
-              <p className="text-sm text-slate-500 mb-6 line-clamp-2 leading-relaxed">
-                {request.description}
-              </p>
-
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                  <MapPin size={14} className="text-blue-500/50" />
-                  <span className="truncate">{request.location}</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-                  <Clock size={14} className="text-blue-500/50" />
-                  <span>{request.time}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs font-bold">
-                  <Star size={14} className="fill-amber-400 text-amber-400" />
-                  <span className="text-slate-300">{request.rating}</span>
-                  <span className="text-slate-600 font-medium">({request.reviews})</span>
-                </div>
-                <div className="text-xs font-bold text-slate-500 lg:text-right">
-                  {request.distance.toFixed(1)} km <span className="font-medium">gần đây</span>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setSelectedRequest(request)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 text-slate-300 rounded-xl font-bold text-xs border border-white/5 hover:bg-white/10 transition-all uppercase tracking-widest"
-                >
-                  <Info size={14} />
-                  Chi Tiết
-                </button>
-                <button className="flex-[2] flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20 uppercase tracking-widest">
-                  <CheckCircle size={14} />
-                  Nhận Công Việc
-                </button>
-              </div>
-            </motion.div>
-          );
-        })}
+            </div>
+          </motion.div>
+        ))}
       </motion.div>
-
-      {/* Details Modal */}
-      <AnimatePresence>
-        {selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedRequest(null)}
-              className="absolute inset-0 bg-[#02050b]/80 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-lg bg-[#0f172a] border border-white/10 rounded-3xl overflow-hidden shadow-2xl"
-            >
-              <div className="p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <span className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-500/20">
-                    Chi Tiết Công Việc
-                  </span>
-                  <button 
-                    onClick={() => setSelectedRequest(null)}
-                    className="p-2 hover:bg-white/5 rounded-full text-slate-500"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-
-                <h2 className="text-2xl font-black text-foreground mb-2">
-                  {selectedRequest.title}
-                </h2>
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold">
-                    {selectedRequest.customer.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-foreground">{selectedRequest.customer}</p>
-                    <p className="text-xs text-slate-500">Khách hàng đáng tin cậy</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 mb-8">
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium">
-                    {selectedRequest.fullDescription}
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                      <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Thanh Toán</p>
-                      <p className="text-lg font-black text-emerald-400">{selectedRequest.price}</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                      <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Thời Gian</p>
-                      <p className="text-lg font-black text-blue-400">{selectedRequest.time}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => setSelectedRequest(null)}
-                    className="flex-1 py-4 bg-white/5 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest border border-white/5 hover:bg-white/10"
-                  >
-                    Đóng
-                  </button>
-                  <button className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-50 transition-colors shadow-xl shadow-blue-600/30">
-                    Chấp Nhận Ngay
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

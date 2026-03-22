@@ -34,10 +34,6 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="p-2 hover:bg-white/5 rounded-lg relative transition-colors">
-          <Bell className="w-5 h-5 text-slate-400" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
 
         <div className="relative" ref={dropdownRef}>
           <button

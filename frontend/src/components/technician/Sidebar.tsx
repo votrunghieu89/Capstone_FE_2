@@ -163,13 +163,9 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
 
         {/* Bottom section */}
         <div className="px-3 pb-4 space-y-2 border-t border-white/5 pt-4">
-          <div className="bg-white/5 rounded-xl px-4 py-3 border border-white/5">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Đánh Giá</p>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold text-white">4.9</span>
-              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-            </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">428 bình luận</p>
+          <div className="mx-2 px-4 py-3 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-center gap-3 group hover:bg-white/10 transition-all duration-300">
+            <span className="text-xl font-bold text-white tracking-tight">4.9</span>
+            <Star className="w-5 h-5 fill-amber-400 text-amber-400 group-hover:scale-110 transition-transform duration-300" />
           </div>
 
           <button
