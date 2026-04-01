@@ -1,0 +1,54 @@
+# =========================
+# Build folders
+# =========================
+bin/
+obj/
+
+# =========================
+# Visual Studio
+# =========================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# =========================
+# Rider / VS Code
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Publish output
+# =========================
+publish/
+*.publishsettings
+
+# =========================
+# App secrets
+# =========================
+# appsettings.Development.json
+# appsettings.Local.json
+
+# =========================
+# Node (nếu có React/Vue frontend)
+# =========================
+node_modules/
+
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.cache

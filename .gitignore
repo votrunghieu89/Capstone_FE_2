@@ -1,0 +1,57 @@
+# =============================================
+# FastFix .gitignore (Optimized)
+# =============================================
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- Backend (.NET) ----
+bin/
+obj/
+backend/**/bin/
+backend/**/obj/
+backend/**/*.user
+backend/**/*.suo
+
+# ---- Frontend (React/Vite) ----
+node_modules/
+frontend/node_modules/
+dist/
+build/
+frontend/dist/
+frontend/.vite/
+.vite/
+
+# ---- AI Service (Python) ----
+__pycache__/
+ai-service/__pycache__/
+ai-service/**/*.pyc
+ai-service/.venv/
+ai-service/venv/
+ai-service/*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
