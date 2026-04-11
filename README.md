@@ -51,14 +51,14 @@ docker compose up --build
 ### Chạy từng service riêng (Development)
 
 ```bash
-# PostgreSQL + MongoDB + Redis
-docker compose up postgres mongodb redis -d
+# PostgreSQL + MongoDB + Redis + SQL Server
+docker compose up postgres mongodb redis sqlserver -d
 
 # Backend
-cd backend && dotnet run --project src/FastFix.API
+cd Capstone_BE_2 && dotnet run
 
 # Frontend
-cd frontend && npm install && npm run dev
+cd Capstone_FE_2 && npm install && npm run dev
 
 # AI Service
 cd ai-service && pip install -r requirements.txt
@@ -69,11 +69,11 @@ uvicorn src.main:app --reload --port 8000
 
 ```
 FastFix/
-├── backend/          # ASP.NET Core 8 - Clean Architecture
-├── frontend/         # React 19 + Vite - Glassmorphism UI
+├── Capstone_BE_2/    # ASP.NET Core 8 - Backend API (CORS, Socket, Redis)
+├── Capstone_FE_2/    # React 19 + Vite - Frontend (Refactored Technician UI)
 ├── ai-service/       # Python FastAPI - Gemini AI
 ├── nginx/            # Reverse Proxy
-├── scripts/          # DB init & seed data
+├── database/         # SQL Server init scripts & migrations
 ├── docker-compose.yml
 └── .env
 ```
