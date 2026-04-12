@@ -1,5 +1,11 @@
 import api from './api';
 
+const formatDecimalForBackend = (value: number) => {
+  if (!Number.isFinite(value)) return '0';
+  // Backend hiện parse decimal theo culture có dấu phẩy
+  return value.toString().replace('.', ',');
+};
+
 export interface CreateOrderDTO {
   customerId: string;
   technicianId: string;
@@ -68,8 +74,8 @@ const technicianCatalogService = {
     formData.append('Description', data.description);
     formData.append('Address', data.address);
     formData.append('CityId', data.cityId);
-    formData.append('Latitude', data.latitude.toString());
-    formData.append('Longitude', data.longitude.toString());
+    formData.append('Latitude', formatDecimalForBackend(data.latitude));
+    formData.append('Longitude', formatDecimalForBackend(data.longitude));
 
     if (data.serviceId) {
       formData.append('ServiceId', data.serviceId);
