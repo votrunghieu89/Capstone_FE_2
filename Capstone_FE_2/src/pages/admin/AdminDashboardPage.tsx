@@ -1,20 +1,32 @@
 import { useEffect, useState } from "react"
 import { DashboardHeader } from "@/components/admin/dashboard-header"
 import { StatsCards } from "@/components/admin/stats-cards"
-import { RecentRequests } from "@/components/admin/recent-requests"
-import { TechnicianOverview } from "@/components/admin/technician-overview"
 import { DashboardCharts } from "@/components/admin/dashboard-charts"
-import { api, type AdminStats } from "@/lib/api"
+import { api, type AdminStats, type RequestItem, type UserItem } from "@/lib/api"
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [requests, setRequests] = useState<RequestItem[]>([])
+  const [users, setUsers] = useState<UserItem[]>([])
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [requestsLoading, setRequestsLoading] = useState(true)
+  const [usersLoading, setUsersLoading] = useState(true)
 
   useEffect(() => {
     api.getStats()
       .then(setStats)
       .catch(console.error)
-      .finally(() => setLoading(false))
+      .finally(() => setStatsLoading(false))
+
+    api.getRequests()
+      .then(setRequests)
+      .catch(console.error)
+      .finally(() => setRequestsLoading(false))
+
+    api.getUsers()
+      .then(setUsers)
+      .catch(console.error)
+      .finally(() => setUsersLoading(false))
   }, [])
 
   return (
@@ -24,16 +36,12 @@ export default function AdminDashboardPage() {
         description="Quản lý toàn bộ yêu cầu sửa chữa dân dụng"
       />
       <main className="flex-1 p-6 flex flex-col gap-6">
-        <StatsCards stats={stats} loading={loading} />
-        <DashboardCharts />
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2">
-            <RecentRequests />
-          </div>
-          <div>
-            <TechnicianOverview />
-          </div>
-        </div>
+        <StatsCards stats={stats} loading={statsLoading} />
+        <DashboardCharts
+          requests={requests}
+          users={users}
+          loading={requestsLoading || usersLoading}
+        />
       </main>
     </>
   )
