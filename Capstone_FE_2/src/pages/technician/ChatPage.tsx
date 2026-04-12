@@ -5,7 +5,7 @@ import {
   MoreVertical, Paperclip, Smile,
   Check, CheckCheck, XCircle, ChevronLeft
 } from 'lucide-react';
-import { chatService } from '@/services/chatService';
+import chatService from '@/services/chatService';
 import useAuthStore from '@/store/authStore';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
