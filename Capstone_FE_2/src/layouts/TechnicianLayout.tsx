@@ -56,11 +56,12 @@ export default function TechnicianLayout() {
       )}>
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+        <main className="flex-1 overflow-hidden relative flex flex-col">
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
+            className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0"
           >
             <Outlet />
           </motion.div>

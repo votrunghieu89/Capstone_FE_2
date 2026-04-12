@@ -144,37 +144,7 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <div className="bg-slate-900/50 rounded-2xl p-4 border border-slate-800/50">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 overflow-hidden">
-                {user?.avatarUrl ? (
-                  <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-500">
-                    <User size={20} />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-200 truncate">{user?.fullName || 'Kỹ thuật viên'}</p>
-                <p className={cn(
-                  "text-[10px] font-bold uppercase tracking-wider",
-                  isOnline ? "text-emerald-500" : "text-slate-500"
-                )}>
-                  {isOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
-                </p>
-              </div>
-            </div>
-            
-            <div className="pt-3 border-t border-slate-800/50 flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-[10px] text-slate-500 uppercase font-bold">Đánh giá</p>
-                <p className="text-sm font-bold text-slate-200">4.9 ⭐</p>
-              </div>
-            </div>
-          </div>
-        </div>
+
       </div>
     </aside>
   );
