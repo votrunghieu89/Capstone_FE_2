@@ -2,65 +2,71 @@ import { useEffect, useState, useRef } from 'react';
 import * as signalR from '@microsoft/signalr';
 import useAuthStore from '@/store/authStore';
 
+const resolveHubBaseUrl = () => {
+  const backend = (import.meta.env.VITE_BACKEND_URL || '').trim().replace(/\/$/, '');
+  if (backend) return backend;
+
+  const apiUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+  if (apiUrl) return apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
+
+  return `${window.location.protocol}//${window.location.hostname}:5271`;
+};
+
 export function useChatSignalR() {
   const { user } = useAuthStore();
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
-
-  const connectionRef = useRef<signalR.HubConnection | null>(null);
+  const isConnecting = useRef(false);
 
   useEffect(() => {
-    let isMounted = true;
-    if (!user?.id || connectionRef.current) return;
+    if (!user?.id || isConnecting.current || connection) return;
+
+    isConnecting.current = true;
+    const baseUrl = resolveHubBaseUrl();
+    const hubUrl = `${baseUrl}/ChatHub`;
 
     const newConnection = new signalR.HubConnectionBuilder()
-      // Make sure the base URL matches the Vite proxy or backend URL
-      .withUrl(`/hubs/chat?AccountId=${user.id}`, {
-        skipNegotiation: true,
-        transport: signalR.HttpTransportType.WebSockets
+      .withUrl(hubUrl, {
+        accessTokenFactory: () => localStorage.getItem('fastfix_token') || '',
+        withCredentials: true,
       })
-      .withAutomaticReconnect()
+      .withAutomaticReconnect([0, 2000, 5000, 10000])
+      .configureLogging(signalR.LogLevel.Warning)
       .build();
 
-    connectionRef.current = newConnection;
-
     newConnection.on('ChatMessage', (message: any) => {
-      if (isMounted) {
-        setMessages(prev => [...prev, message]);
-      }
+      setMessages(prev => [...prev, message]);
     });
 
-    const startConnection = async () => {
-      if (!connectionRef.current || connectionRef.current.state !== signalR.HubConnectionState.Disconnected) return;
-      try {
-        await newConnection.start();
-        if (isMounted) {
-          setConnection(newConnection);
-          console.log('SignalR Chat Connected');
-        } else {
-          newConnection.stop().catch(() => {});
-        }
-      } catch (err: any) {
-        if (isMounted && err.name !== 'AbortError' && !err.message?.includes('stop() was called')) {
-          console.error('SignalR Chat Connection Error: ', err);
-        }
-      }
-    };
+    newConnection.onreconnecting(() => {
+      console.warn('SignalR Chat reconnecting...');
+    });
 
-    startConnection();
+    newConnection.onreconnected(() => {
+      console.log('SignalR Chat reconnected');
+    });
+
+    newConnection.onclose((err) => {
+      if (err) console.error('SignalR Chat closed with error:', err);
+    });
+
+    newConnection.start()
+      .then(() => {
+        setConnection(newConnection);
+        isConnecting.current = false;
+        console.log('SignalR Chat Connected');
+      })
+      .catch((e) => {
+        console.error('SignalR Chat Connection Error: ', e);
+        isConnecting.current = false;
+      });
 
     return () => {
-      isMounted = false;
-      if (connectionRef.current) {
-        const conn = connectionRef.current;
-        connectionRef.current = null;
-        if (conn.state !== signalR.HubConnectionState.Disconnected) {
-          conn.stop().catch(() => {});
-        }
-        setConnection(null);
-      }
+      void newConnection.stop();
+      setConnection(null);
+      isConnecting.current = false;
     };
-  }, [user?.id]);
+  }, [user, connection]);
 
   return { connection, messages, setMessages };
 }

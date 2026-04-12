@@ -1,45 +1,33 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 
-// Layouts
+// Layouts - loaded eagerly
 import MainLayout from '@/layouts/MainLayout';
 import CustomerLayout from '@/layouts/CustomerLayout';
 import AdminLayout from '@/layouts/AdminLayout';
 import TechnicianLayout from '@/layouts/TechnicianLayout';
-import { CustomerHub } from '@/components/technician/CustomerHub';
-import { Communication } from '@/components/technician/Communication';
-import { Analytics } from '@/components/technician/Analytics';
-import { PaymentManager } from '@/components/technician/PaymentManager';
-import { Settings } from '@/components/technician/Settings';
 
-// Lazy-loaded pages — Public / Customer
+// Lazy-loaded pages
 const HomePage = lazy(() => import('@/pages/customer/HomePage'));
 const ProfilePage = lazy(() => import('@/pages/customer/ProfilePage'));
 const TechnicianListPage = lazy(() => import('@/pages/customer/TechnicianListPage'));
 const OrdersPage = lazy(() => import('@/pages/customer/OrdersPage'));
 const ContactTechnicianPage = lazy(() => import('@/pages/customer/ContactTechnicianPage'));
-const CustomerHistoryPage = lazy(() => import('@/pages/customer/HistoryPage'));
+const HistoryPage = lazy(() => import('@/pages/customer/HistoryPage'));
 const ReviewsPage = lazy(() => import('@/pages/customer/ReviewsPage'));
 
-// Lazy-loaded pages — Admin
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 const RequestsPage = lazy(() => import('@/pages/admin/RequestsPage'));
 const TechniciansPage = lazy(() => import('@/pages/admin/TechniciansPage'));
 
-// Lazy-loaded pages — Technician
 const TechDashboardPage = lazy(() => import('@/pages/technician/DashboardPage'));
-const TechProfilePage = lazy(() => import('@/pages/technician/ProfilePage'));
 const TechNewRequestsPage = lazy(() => import('@/pages/technician/NewRequestsPage'));
-const TechAcceptedRequestsPage = lazy(() => import('@/pages/technician/AcceptedRequestsPage'));
 const TechInProgressPage = lazy(() => import('@/pages/technician/InProgressPage'));
-const TechHistoryPage = lazy(() => import('@/pages/technician/HistoryPage'));
-const TechChatPage = lazy(() => import('@/pages/technician/ChatPage'));
-
-const TechCustomerHubPage = CustomerHub;
-const TechCommunicationPage = Communication;
-const TechAnalyticsPage = Analytics;
-const TechPaymentManagerPage = PaymentManager;
-const TechSettingsPage = Settings;
+const TechCustomerHubPage = lazy(() => import('@/pages/technician/CustomerHubPage'));
+const TechCommunicationPage = lazy(() => import('@/pages/technician/CommunicationPage'));
+const AnalyticsPage = lazy(() => import('@/pages/technician/AnalyticsPage'));
+const PaymentManagerPage = lazy(() => import('@/pages/technician/PaymentManagerPage'));
+const SettingsPage = lazy(() => import('@/pages/technician/SettingsPage'));
 
 function Loading() {
   return (
@@ -53,51 +41,40 @@ export default function AppRoutes() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        {/* Public */}
+        {/* ── Public Routes ── */}
         <Route path="/" element={<MainLayout />}>
           <Route index element={<HomePage />} />
         </Route>
 
-        {/* Customer */}
+        {/* ── Customer Portal Routes ── */}
         <Route path="/customer" element={<CustomerLayout />}>
           <Route index element={<TechnicianListPage />} />
           <Route path="technicians" element={<TechnicianListPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="contact" element={<ContactTechnicianPage />} />
-          <Route path="history" element={<CustomerHistoryPage />} />
+          <Route path="history" element={<HistoryPage />} />
           <Route path="reviews" element={<ReviewsPage />} />
         </Route>
 
-        {/* Admin */}
+        {/* ── Admin Routes ── */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminDashboardPage />} />
           <Route path="yeu-cau" element={<RequestsPage />} />
           <Route path="ky-thuat-vien" element={<TechniciansPage />} />
         </Route>
 
-        {/* Technician */}
+        {/* ── Technician (Worker) Routes ── */}
         <Route path="/technician" element={<TechnicianLayout />}>
           <Route index element={<TechDashboardPage />} />
-          <Route path="ho-so" element={<TechProfilePage />} />
           <Route path="yeu-cau-moi" element={<TechNewRequestsPage />} />
-          <Route path="don-hang/dang-cho" element={<TechNewRequestsPage />} />
-          <Route path="don-hang/da-tiep-nhan" element={<TechAcceptedRequestsPage />} />
           <Route path="dang-thuc-hien" element={<TechInProgressPage />} />
-          <Route path="don-hang/dang-thuc-hien" element={<TechInProgressPage />} />
-          <Route path="lich-su" element={<TechHistoryPage />} />
-          <Route path="chat" element={<TechChatPage />} />
           <Route path="khach-hang" element={<TechCustomerHubPage />} />
           <Route path="giao-tiep" element={<TechCommunicationPage />} />
-          <Route path="phan-tich" element={<TechAnalyticsPage />} />
-          <Route path="thanh-toan" element={<TechPaymentManagerPage />} />
-          <Route path="cai-dat" element={<TechSettingsPage />} />
+          <Route path="phan-tich" element={<AnalyticsPage />} />
+          <Route path="thanh-toan" element={<PaymentManagerPage />} />
+          <Route path="cai-dat" element={<SettingsPage />} />
         </Route>
-
-        {/* Legacy redirects */}
-        <Route path="/admin/*" element={<Navigate to="/" replace />} />
-        <Route path="/customer/*" element={<Navigate to="/" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
   );

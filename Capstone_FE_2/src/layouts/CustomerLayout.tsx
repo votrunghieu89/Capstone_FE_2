@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/customer/Sidebar';
 import { Header } from '@/components/customer/Header';
 import useAuthStore from '@/store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChatWidget from '@/components/shared/ChatWidget';
 
 export default function CustomerLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -20,13 +21,16 @@ export default function CustomerLayout() {
     }, []);
 
     useEffect(() => {
-        const checkAuth = () => {
-            // Temporarily bypass auth check so we can view the UI
-            // if (!token || !isAuthenticated) {
-            //    navigate('/?login=true');
-            // } else {
+        const checkAuth = async () => {
+            if (isAuthenticated && !user) {
+                try {
+                    // Rehydrate user state if authenticated but missing user data (e.g. after refresh)
+                    await useAuthStore.getState().fetchMe();
+                } catch {
+                    // Handled inside fetchMe (removes token and logs out)
+                }
+            }
             setIsAuthorized(true);
-            // }
         };
         checkAuth();
     }, [user, isAuthenticated, navigate]);
@@ -54,6 +58,9 @@ export default function CustomerLayout() {
                         </motion.div>
                     </AnimatePresence>
                 </main>
+                
+                {/* Floating Chat Widget */}
+                <ChatWidget />
             </div>
         </div>
     );

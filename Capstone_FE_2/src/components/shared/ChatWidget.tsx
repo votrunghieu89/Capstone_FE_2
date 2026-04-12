@@ -19,7 +19,7 @@ export default function ChatWidget() {
     if (isOpen && user?.id) {
       chatService.getAllRooms(user.id, 1, 20).then(res => {
         // Backend returns either an array or an object with paginated items
-        const rawRooms = Array.isArray(res) ? res : ((res as any).items || (res as any).data || []);
+        const rawRooms = Array.isArray(res) ? res : (res.items || res.data || []);
         setRooms(rawRooms);
       }).catch(err => console.error('Lỗi tải phòng chat:', err));
     }
@@ -28,8 +28,10 @@ export default function ChatWidget() {
   // Fetch Messages when a room is active
   useEffect(() => {
     if (activeRoom) {
-      chatService.getAllMessages(activeRoom.id, 1, 50).then(res => {
-        const rawMsgs = Array.isArray(res) ? res : ((res as any).items || (res as any).data || []);
+      const roomId = activeRoom.roomId || activeRoom.RoomId || activeRoom.id;
+      if (!roomId) return;
+      chatService.getAllMessages(roomId, 1, 50).then(res => {
+        const rawMsgs = Array.isArray(res) ? res : (res.items || res.data || []);
         setMessages(rawMsgs.reverse()); // Assume older messages first
       }).catch(err => console.error('Lỗi tải tin nhắn:', err));
     }
@@ -45,11 +47,16 @@ export default function ChatWidget() {
     if (!text.trim() || !activeRoom || !user) return;
     
     try {
+      const receiverId = activeRoom.otherId || activeRoom.OtherId;
+      if (!receiverId) {
+        console.error('Không xác định được người nhận trong phòng chat');
+        return;
+      }
+
       await chatService.insertMessage({
-        roomId: activeRoom.id,
         senderId: user.id,
-        content: text,
-        type: 'text'
+        receiverId,
+        content: text
       });
       // The backend should broadcast via SignalR causing useChatSignalR to append to messages
       // Alternatively, optimistically append:
@@ -93,21 +100,27 @@ export default function ChatWidget() {
               {!activeRoom ? (
                 // Room List
                 rooms.length > 0 ? (
-                  rooms.map(room => (
-                    <div 
-                      key={room.id} 
-                      onClick={() => setActiveRoom(room)}
-                      className="p-3 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer border border-white/5 transition flex items-center gap-3"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary-light">
-                        <User size={18} />
+                  rooms.map(room => {
+                    const roomId = room.roomId || room.RoomId || room.id;
+                    const userName = room.userName || room.UserName || `Phòng Chat #${String(roomId || '').substring(0, 6)}`;
+                    const lastMessage = room.lastMessage || room.LastMessage || 'Chưa có tin nhắn';
+
+                    return (
+                      <div 
+                        key={roomId} 
+                        onClick={() => setActiveRoom(room)}
+                        className="p-3 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer border border-white/5 transition flex items-center gap-3"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary-light">
+                          <User size={18} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate">{userName}</p>
+                          <p className="text-xs text-text-secondary truncate">{lastMessage}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate">Phòng Chat #{room.id.substring(0,6)}</p>
-                        <p className="text-xs text-text-secondary truncate">{room.lastMessage || 'Chưa có tin nhắn'}</p>
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <p className="text-xs text-center text-text-secondary my-auto">Chưa có cuộc hội thoại nào.</p>
                 )

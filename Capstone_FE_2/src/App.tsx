@@ -1,36 +1,7 @@
-import { useEffect } from 'react';
-import { Toaster, toast } from 'react-hot-toast';
+import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes/AppRoutes';
-import { notificationService } from './services/notificationService';
-import { chatService } from './services/chatService';
 
 function App() {
-  useEffect(() => {
-    // Initialize Real-time services
-    const initRealTime = async () => {
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        await notificationService.startConnection();
-        await chatService.startConnection();
-
-        // Listen for global notifications
-        notificationService.onNotificationReceived((message) => {
-          toast.success(message, {
-            duration: 5000,
-            icon: '🔔',
-          });
-        });
-      }
-    };
-
-    initRealTime();
-
-    return () => {
-      notificationService.stopConnection();
-      chatService.stopConnection();
-    };
-  }, []);
-
   return (
     <>
       <AppRoutes />

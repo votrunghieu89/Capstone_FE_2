@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { Search, ArrowRight, MapPin, Zap, Shield } from "lucide-react";
 
-export function HeroSection({ onDiagnose }: { onDiagnose: (query: string) => void }) {
+export function HeroSection() {
   const [query, setQuery] = useState("");
-
-  const handleAction = () => {
-    if (query.trim()) {
-      onDiagnose(query);
-    }
-  };
 
   return (
     <section className="relative min-h-screen overflow-hidden bg-ff-primary">
@@ -60,14 +54,10 @@ export function HeroSection({ onDiagnose }: { onDiagnose: (query: string) => voi
                 placeholder="Mô tả sự cố của bạn..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAction()}
                 className="h-14 w-full rounded-xl border border-white/10 bg-white/5 pl-12 pr-4 text-base text-white placeholder:text-white/30 transition-all duration-200 focus:border-ff-accent-blue/50 focus:outline-none focus:ring-2 focus:ring-ff-accent-blue/20"
               />
             </div>
-            <button 
-              onClick={handleAction}
-              className="h-14 gap-2 rounded-xl bg-ff-cta-orange px-8 text-base font-semibold text-white hover:bg-ff-cta-orange/90 transition-colors duration-200 flex items-center justify-center"
-            >
+            <button className="h-14 gap-2 rounded-xl bg-ff-cta-orange px-8 text-base font-semibold text-white hover:bg-ff-cta-orange/90 transition-colors duration-200 flex items-center justify-center">
               Đăng yêu cầu
               <ArrowRight className="h-4 w-4 ml-2" />
             </button>

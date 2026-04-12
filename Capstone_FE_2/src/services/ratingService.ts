@@ -20,6 +20,16 @@ const ratingService = {
     return res.data;
   },
 
+  getCustomerRatings: async (customerId: string) => {
+    const res = await api.get(`/customer/rating/view/${customerId}`);
+    return res.data;
+  },
+
+  isFeedback: async (orderId: string) => {
+    const res = await api.get(`/customer/rating/is-feedback/${orderId}`);
+    return res.data;
+  },
+
   viewRatings: async (customerId: string) => {
     const res = await api.get(`/customer/rating/view/${customerId}`);
     return res.data;
