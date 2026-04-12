@@ -277,8 +277,8 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
     const [desc, setDesc] = useState('');
     const [address, setAddress] = useState('');
     const [cityId, setCityId] = useState('');
-    const [latitude, setLatitude] = useState<number>(16.047079);
-    const [longitude, setLongitude] = useState<number>(108.20623);
+    const [latitude, setLatitude] = useState<string>("16.047079");
+    const [longitude, setLongitude] = useState<string>("108.20623");
     const [imageFiles, setImageFiles] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
     const [videoFiles, setVideoFiles] = useState<File[]>([]);
@@ -364,8 +364,8 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 const { latitude: currentLatitude, longitude: currentLongitude } = pos.coords;
-                setLatitude(currentLatitude);
-                setLongitude(currentLongitude);
+                setLatitude(currentLatitude.toString());
+                setLongitude(currentLongitude.toString());
                 setAddress(`${currentLatitude.toFixed(5)}, ${currentLongitude.toFixed(5)}`);
                 toast.success('📍 Đã lấy vị trí hiện tại!');
             },
@@ -648,8 +648,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const [title, setTitle] = useState('');
     const [desc, setDesc] = useState('');
     const [address, setAddress] = useState('');
-    const [latitude, setLatitude] = useState<number>(16.047079);
-    const [longitude, setLongitude] = useState<number>(108.206230);
+    const [latitude, setLatitude] = useState<string>("16.047079");
+    const [longitude, setLongitude] = useState<string>("108.206230");
     const [isSearching, setIsSearching] = useState(false);
     const [foundTech, setFoundTech] = useState<any>(null);
     const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
@@ -968,11 +968,11 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                     <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1.5">
                             <Label>Latitude</Label>
-                            <Input type="number" value={latitude} onChange={e => setLatitude(Number(e.target.value || 0))} className="bg-white/5 border-white/10" />
+                            <Input type="text" value={latitude} onChange={e => setLatitude(e.target.value)} className="bg-white/5 border-white/10" />
                         </div>
                         <div className="space-y-1.5">
                             <Label>Longitude</Label>
-                            <Input type="number" value={longitude} onChange={e => setLongitude(Number(e.target.value || 0))} className="bg-white/5 border-white/10" />
+                            <Input type="text" value={longitude} onChange={e => setLongitude(e.target.value)} className="bg-white/5 border-white/10" />
                         </div>
                     </div>
 

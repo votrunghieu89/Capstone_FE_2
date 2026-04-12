@@ -14,8 +14,8 @@ export interface CreateOrderDTO {
   description: string;
   address: string;
   cityId: string;
-  latitude: number;
-  longitude: number;
+  latitude: string;
+  longitude: string;
   videoFile?: File;
   imageFiles?: File[];
 }
@@ -74,8 +74,8 @@ const technicianCatalogService = {
     formData.append('Description', data.description);
     formData.append('Address', data.address);
     formData.append('CityId', data.cityId);
-    formData.append('Latitude', formatDecimalForBackend(data.latitude));
-    formData.append('Longitude', formatDecimalForBackend(data.longitude));
+    formData.append('Latitude', data.latitude.toString());
+    formData.append('Longitude', data.longitude.toString());
 
     if (data.serviceId) {
       formData.append('ServiceId', data.serviceId);

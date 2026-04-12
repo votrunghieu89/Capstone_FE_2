@@ -4,8 +4,8 @@ export interface AutoFindRequest {
     customerId: string;
     serviceId: string;
     cityId: string;
-    latitude: number;
-    longitude: number;
+    latitude: string;
+    longitude: string;
     description: string;
 }
 
@@ -17,8 +17,8 @@ export interface PlaceAutoOrderDTO {
     title: string;
     description: string;
     address: string;
-    latitude: number;
-    longitude: number;
+    latitude: string;
+    longitude: string;
     status?: string;
     imageFiles?: File[];
     videoFile?: File;
@@ -59,8 +59,8 @@ const autoFindService = {
         formData.append('Title', data.title);
         formData.append('Description', data.description);
         formData.append('Address', data.address);
-        formData.append('Latitude', formatDecimalForBackend(data.latitude));
-        formData.append('Longitude', formatDecimalForBackend(data.longitude));
+        formData.append('Latitude', data.latitude.toString());
+        formData.append('Longitude', data.longitude.toString());
         if (data.status) formData.append('Status', data.status);
 
         if (data.videoFile) formData.append('VideoFile', data.videoFile);
