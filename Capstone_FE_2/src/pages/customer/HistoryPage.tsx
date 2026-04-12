@@ -51,8 +51,59 @@ export default function HistoryPage() {
         ratingService.viewRatings(user.id)
       ]);
 
-      const historyData = Array.isArray(historyRes) ? historyRes : (historyRes.items || historyRes.data || []);
-      const ratings = Array.isArray(ratingsRes) ? ratingsRes : (ratingsRes.items || ratingsRes.data || []);
+      const historyDataRemote = Array.isArray(historyRes) ? historyRes : (historyRes.items || historyRes.data || []);
+
+      const localCompletedOrders = (() => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem('ff_customer_local_orders') || '[]');
+          const arr = Array.isArray(parsed) ? parsed : [];
+          return arr
+            .filter((o: any) => String(o.customerId || '') === String(user.id || ''))
+            .filter((o: any) => {
+              const s = normalizeStatus(String(o.status || ''));
+              return s === 'completed' || s === 'done';
+            })
+            .map((o: any) => ({
+              id: o.id,
+              Id: o.id,
+              orderId: o.id,
+              OrderId: o.id,
+              technicianId: o.technicianId,
+              TechnicianId: o.technicianId,
+              technicianName: o.technicianName,
+              TechnicianName: o.technicianName,
+              serviceName: o.serviceName,
+              ServiceName: o.serviceName,
+              title: o.title,
+              Title: o.title,
+              description: o.description,
+              Description: o.description,
+              address: o.address,
+              Address: o.address,
+              status: o.status,
+              Status: o.status,
+              orderDate: o.createdAt,
+              OrderDate: o.createdAt,
+              source: o.source || 'local'
+            }));
+        } catch {
+          return [];
+        }
+      })();
+
+      const historyData = [...historyDataRemote, ...localCompletedOrders];
+      const remoteRatings = Array.isArray(ratingsRes) ? ratingsRes : (ratingsRes.items || ratingsRes.data || []);
+      const localRatings = (() => {
+        try {
+          const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
+          const arr = Array.isArray(parsed) ? parsed : [];
+          return arr.filter((r: any) => String(r.customerId || '') === String(user.id || ''));
+        } catch {
+          return [];
+        }
+      })();
+
+      const ratings = [...remoteRatings, ...localRatings];
 
       const map: Record<string, { hasFeedback: boolean; score?: number; feedback?: string }> = {};
       ratings.forEach((r: any) => {
@@ -180,7 +231,6 @@ export default function HistoryPage() {
             order={selectedOrder}
             ratingInfo={ratingMap[String(pick(selectedOrder, ['orderId', 'OrderId', 'id', 'Id']))]}
             onClose={() => setSelectedOrder(null)}
-            onRated={loadData}
           />
         )}
       </AnimatePresence>
@@ -188,39 +238,27 @@ export default function HistoryPage() {
   );
 }
 
-function HistoryDetailModal({ order, ratingInfo, onClose, onRated }: { order: any; ratingInfo?: { hasFeedback: boolean; score?: number }; onClose: () => void; onRated: () => void }) {
-  const { user } = useAuthStore();
-  const [score, setScore] = useState(5);
-  const [feedback, setFeedback] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+function HistoryDetailModal({ order, ratingInfo, onClose }: { order: any; ratingInfo?: { hasFeedback: boolean; score?: number; feedback?: string }; onClose: () => void }) {
+  const [detail, setDetail] = useState<any>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(true);
 
   const orderId = String(pick(order, ['orderId', 'OrderId', 'id', 'Id']));
-  const techId = String(pick(order, ['technicianId', 'TechnicianId']));
-  const hasRated = Boolean(ratingInfo?.hasFeedback);
 
-  const submitRating = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user?.id) return;
-    if (!techId) return toast.error('Không tìm thấy kỹ thuật viên của đơn này');
+  useEffect(() => {
+    const loadDetail = async () => {
+      setIsLoadingDetail(true);
+      try {
+        const res = await orderService.getOrderDetail(orderId);
+        setDetail(res?.data || res || order);
+      } catch {
+        setDetail(order);
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    };
 
-    setIsSubmitting(true);
-    try {
-      await ratingService.createRating({
-        customerId: user.id,
-        technicianId: techId,
-        orderId,
-        score,
-        feedback
-      });
-      toast.success('Đánh giá thành công');
-      onRated();
-      onClose();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Không thể đánh giá');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    if (orderId) loadDetail();
+  }, [orderId]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={onClose}>
@@ -236,43 +274,41 @@ function HistoryDetailModal({ order, ratingInfo, onClose, onRated }: { order: an
         <h3 className="text-xl font-bold text-white mb-1">Chi tiết lịch sử đơn hàng</h3>
         <p className="text-sm text-zinc-400 mb-5">Đơn #{orderId.slice(0, 8)} · {pick(order, ['serviceName', 'ServiceName']) || '—'}</p>
 
-        {hasRated ? (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 space-y-2">
-            <p className="text-green-400 font-semibold">Đã đánh giá</p>
-            <div className="flex items-center gap-2 text-white">
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>Bạn đã đánh giá: <b>{ratingInfo?.score || '—'}</b> sao</span>
-            </div>
-            {!!ratingInfo?.feedback && (
-              <div className="bg-black/20 border border-white/10 rounded-lg p-3 text-sm text-zinc-200">
-                "{ratingInfo.feedback}"
-              </div>
-            )}
+        {isLoadingDetail ? (
+          <div className="py-10 flex justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
         ) : (
-          <form onSubmit={submitRating} className="space-y-4">
-            <p className="text-amber-400 font-semibold">Chưa đánh giá. Bạn có thể đánh giá ngay:</p>
-            <div className="flex items-center gap-2">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <button key={s} type="button" onClick={() => setScore(s)} className="p-1">
-                  <Star className={`w-7 h-7 ${s <= score ? 'text-amber-400 fill-amber-400' : 'text-zinc-600'}`} />
-                </button>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 md:col-span-2">
+              <p className="text-zinc-500 mb-1">Tiêu đề</p>
+              <p className="text-white">{pick(detail || order, ['title', 'Title']) || '—'}</p>
             </div>
-            <textarea
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              rows={3}
-              placeholder="Chia sẻ trải nghiệm của bạn..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
-            />
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
-              <Button type="submit" className="bg-primary hover:bg-primary-dark text-white" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Gửi đánh giá'}
-              </Button>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+              <p className="text-zinc-500 mb-1">Dịch vụ</p>
+              <p className="text-white">{pick(detail || order, ['serviceName', 'ServiceName']) || '—'}</p>
             </div>
-          </form>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+              <p className="text-zinc-500 mb-1">Trạng thái</p>
+              <p className="text-white">{pick(detail || order, ['status', 'Status']) || '—'}</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 md:col-span-2">
+              <p className="text-zinc-500 mb-1">Mô tả</p>
+              <p className="text-white whitespace-pre-wrap">{pick(detail || order, ['description', 'Description']) || '—'}</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 md:col-span-2">
+              <p className="text-zinc-500 mb-1">Địa chỉ</p>
+              <p className="text-white">{pick(detail || order, ['address', 'Address']) || '—'}</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+              <p className="text-zinc-500 mb-1">Kỹ thuật viên</p>
+              <p className="text-white">{pick(detail || order, ['technicianName', 'TechnicianName']) || '—'}</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+              <p className="text-zinc-500 mb-1">Đánh giá</p>
+              <p className="text-white">{ratingInfo?.hasFeedback ? `Đã đánh giá (${ratingInfo?.score || '—'} sao)` : 'Chưa đánh giá'}</p>
+            </div>
+          </div>
         )}
       </motion.div>
     </motion.div>
