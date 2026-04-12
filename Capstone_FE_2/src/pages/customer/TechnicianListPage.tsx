@@ -477,7 +477,7 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                     Đặt Thợ: {tech.technicianName || tech.TechnicianName}
                 </DialogTitle>
                 <p className="text-sm text-zinc-400">
-                    {tech.serviceName || tech.ServiceName} · ⭐ {tech.averageRating || tech.AverageRating || 5.0}
+                    {tech.serviceName || tech.ServiceName} · ⭐ {tech.avgScore || tech.AvgScore || 5.0}
                 </p>
             </DialogHeader>
 
@@ -603,7 +603,7 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                         <Button type="button" variant="outline" size="sm"
                             className="flex-shrink-0 bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30 px-3"
                             onClick={handleGetLocation}
-                            title="Lấy vị trí hiện tại">
+                            title="Lấy vị trí hiện tạii">
                             <Navigation size={15} />
                         </Button>
                     </div>
@@ -796,6 +796,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const handleRejectTechnician = async () => {
         if (!user?.id || !foundTech) return;
         setIsSearching(true);
+
 
         const rejectedTechId = foundTech.id || foundTech.technicianId || foundTech.TechnicianId;
 
