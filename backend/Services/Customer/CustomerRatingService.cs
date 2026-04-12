@@ -1,4 +1,4 @@
-using Capstone_2_BE.DTOs.Customer.Rating;
+Ôªøusing Capstone_2_BE.DTOs.Customer.Rating;
 using Capstone_2_BE.Repositories.Customer;
 using Capstone_2_BE.Settings;
 
@@ -22,14 +22,31 @@ namespace Capstone_2_BE.Services.Customer
                 var result = await _customerRatingRepo.CreateFeedBack(createFeedback);
                 if (result)
                 {
-                    return Result<string>.Success("?·nh gi· k? thu?t viÍn th‡nh cÙng", 200);
+                    return Result<string>.Success("?√°nh gi√° k? thu?t vi√™n th√†nh c√¥ng", 200);
                 }
-                return Result<string>.Failure("KhÙng th? t?o ?·nh gi·", 400);
+                return Result<string>.Failure("Kh√¥ng th? t?o ?√°nh gi√°", 400);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating feedback in service.");
-                return Result<string>.Failure("L?i h? th?ng khi t?o ?·nh gi·", 500);
+                return Result<string>.Failure("L?i h? th?ng khi t?o ?√°nh gi√°", 500);
+            }
+        }
+        public async Task<Result<bool>> IsFeedback(Guid orderId)
+        {
+            try
+            {
+                if (orderId == Guid.Empty)
+                    return Result<bool>.Failure("OrderId kh√¥ng h·ª£p l·ªá", 400);
+
+                var isFeedback = await _customerRatingRepo.IsFeedback(orderId);
+
+                return Result<bool>.Success(isFeedback, 200);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in IsFeedback Service");
+                return Result<bool>.Failure("L·ªói h·ªá th·ªëng", 500);
             }
         }
 
@@ -47,7 +64,7 @@ namespace Capstone_2_BE.Services.Customer
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting feedbacks in service for CustomerId: {CustomerId}", customerId);
-                return Result<List<ViewFeedBackDTO>>.Failure("L?i h? th?ng khi l?y danh s·ch ?·nh gi·", 500);
+                return Result<List<ViewFeedBackDTO>>.Failure("L?i h? th?ng khi l?y danh s√°ch ?√°nh gi√°", 500);
             }
         }
 
@@ -58,14 +75,14 @@ namespace Capstone_2_BE.Services.Customer
                 var result = await _customerRatingRepo.UpdateFeedBack(updateFeedback);
                 if (result)
                 {
-                    return Result<string>.Success("C?p nh?t ?·nh gi· th‡nh cÙng", 200);
+                    return Result<string>.Success("C?p nh?t ?√°nh gi√° th√†nh c√¥ng", 200);
                 }
-                return Result<string>.Failure("KhÙng th? c?p nh?t ?·nh gi·", 400);
+                return Result<string>.Failure("Kh√¥ng th? c?p nh?t ?√°nh gi√°", 400);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error updating feedback in service for FeedbackId: {FeedbackId}", updateFeedback.FeedbackId);
-                return Result<string>.Failure("L?i h? th?ng khi c?p nh?t ?·nh gi·", 500);
+                return Result<string>.Failure("L?i h? th?ng khi c?p nh?t ?√°nh gi√°", 500);
             }
         }
 
@@ -76,14 +93,14 @@ namespace Capstone_2_BE.Services.Customer
                 var result = await _customerRatingRepo.DeleteFeedBack(feedbackId);
                 if (result)
                 {
-                    return Result<string>.Success("XÛa ?·nh gi· th‡nh cÙng", 200);
+                    return Result<string>.Success("X√≥a ?√°nh gi√° th√†nh c√¥ng", 200);
                 }
-                return Result<string>.Failure("KhÙng th? xÛa ?·nh gi·", 400);
+                return Result<string>.Failure("Kh√¥ng th? x√≥a ?√°nh gi√°", 400);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error deleting feedback in service for FeedbackId: {FeedbackId}", feedbackId);
-                return Result<string>.Failure("L?i h? th?ng khi xÛa ?·nh gi·", 500);
+                return Result<string>.Failure("L?i h? th?ng khi x√≥a ?√°nh gi√°", 500);
             }
         }
     }

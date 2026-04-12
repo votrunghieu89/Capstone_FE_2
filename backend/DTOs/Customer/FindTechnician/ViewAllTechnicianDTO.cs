@@ -1,4 +1,4 @@
-namespace Capstone_2_BE.DTOs.Customer.FindTechnician
+﻿namespace Capstone_2_BE.DTOs.Customer.FindTechnician
 {
     public class ViewAllTechnicianDTO
     {
@@ -10,9 +10,5 @@ namespace Capstone_2_BE.DTOs.Customer.FindTechnician
         public int OrderCount { get; set; }
         public int RatingCount { get; set; }
         public decimal AverageRating { get; set; }  
-        public Guid CityId { get; set; }
-        public string? Address { get; set; }
-        public decimal Latitude { get; set; }
-        public decimal Longitude { get; set; }
     }
 }

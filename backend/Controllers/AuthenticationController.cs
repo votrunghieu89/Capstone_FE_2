@@ -2,7 +2,9 @@ using Capstone_2_BE.DTOs;
 using Capstone_2_BE.DTOs.Authentication;
 using Capstone_2_BE.DTOs.Authentication.Google;
 using Capstone_2_BE.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Capstone_2_BE.Controllers
 {
@@ -65,17 +67,16 @@ namespace Capstone_2_BE.Controllers
             return StatusCode(result.StatusCode, new { message = result.Data });
         }
 
-        [HttpPost("register/customer")]
-        public async Task<IActionResult> RegisterCustomer([FromBody] RegisterCustomerDTO registerDTO)
-        {
-            var saved = await _authenticationService.saveRegisterInformation(registerDTO);
-            if (!saved) return BadRequest(new { message = "Lưu thông tin đăng ký thất bại" });
-
-            var result = await _authenticationService.RegisterCustomer(registerDTO.Email);
-            if (!result.IsSuccess) return StatusCode(result.StatusCode, new { message = result.Error });
-
-            return StatusCode(result.StatusCode, new { message = result.Data });
-        }
+        //[HttpPost("register/customer")]
+        //public async Task<IActionResult> RegisterCustomer([FromBody] RegisterCustomerDTO registerDTO)
+        //{
+        //    var result = await _authenticationService.RegisterCustomer(registerDTO);
+        //    if (!result.IsSuccess)
+        //    {
+        //        return StatusCode(result.StatusCode, new { message = result.Error });
+        //    }
+        //    return StatusCode(result.StatusCode, new { message = result.Data });
+        //}
 
         [HttpPost("register/technician")]
         public async Task<IActionResult> RegisterTechnician([FromBody] RegisterFixerDTO registerDTO)
@@ -180,6 +181,35 @@ namespace Capstone_2_BE.Controllers
                 return StatusCode(result.StatusCode, new { message = result.Error });
             }
             return StatusCode(result.StatusCode, new { message = result.Data });
+        }
+
+        [Authorize]
+        [HttpGet("me")]
+        public IActionResult Me()
+        {
+            var accountId = User.FindFirst("AccountId")?.Value
+                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                ?? string.Empty;
+
+            var email = User.FindFirst(ClaimTypes.Email)?.Value
+                ?? User.FindFirst("email")?.Value
+                ?? string.Empty;
+
+            var role = User.FindFirst(ClaimTypes.Role)?.Value
+                ?? User.FindFirst("role")?.Value
+                ?? "customer";
+
+            var fullName = User.FindFirst("FullName")?.Value
+                ?? User.FindFirst("fullName")?.Value
+                ?? email;
+
+            return Ok(new
+            {
+                id = accountId,
+                email,
+                fullName,
+                role
+            });
         }
 
         // New endpoint for Google login (customer)

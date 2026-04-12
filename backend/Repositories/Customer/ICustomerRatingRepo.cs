@@ -13,5 +13,6 @@ namespace Capstone_2_BE.Repositories.Customer
         Task<bool> UpdateFeedBack(UpdateFeedbackDTO updateFeedback);
         // Xoá đánh giá ( chỉ được xoá khi đơn hàng đã hoàn thành và đã đánh giá)
         Task<bool> DeleteFeedBack(Guid FeedbackId);
+        Task<bool> IsFeedback(Guid orderId);
     }
 }

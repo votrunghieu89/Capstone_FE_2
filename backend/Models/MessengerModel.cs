@@ -25,5 +25,6 @@ namespace Capstone_2_BE.Models
 
         public RoomsModel Rooms { get; set; }
         public AccountsModel Sender { get; set; }
+        public List<MessAttachmentModel> MessAttachments { get; set; }
     }
 }

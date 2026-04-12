@@ -78,6 +78,17 @@ namespace Capstone_2_BE.Services
                     {
                         message.AvatarUrl = await _aws.ReadImage(message.AvatarUrl);
                     }
+                    if(message.ImageUrls != null && message.ImageUrls.Count > 0)
+                    {
+                        for (int i = 0; i < message.ImageUrls.Count; i++)
+                        {
+                            message.ImageUrls[i] = await _aws.ReadImage(message.ImageUrls[i]);
+                        }
+                    }
+                    if(message.videoUrl != null)
+                    {
+                        message.videoUrl = await _aws.ReadImage(message.videoUrl);
+                    }
                 }
                 if (messages == null || messages.Count == 0)
                 {
@@ -121,26 +132,41 @@ namespace Capstone_2_BE.Services
                 {
                     RoomId = roomId,
                     SenderId = createMessageFormDTO.SenderId,
-                    Content = createMessageFormDTO.Content
+                    Content = createMessageFormDTO.Content,
+                    ImageUrls = new List<string>(),
+                    VideoUrl = null
                 };
-                string avatarURL = await _chatRealTimeRepository.InsertMessage(createMessageDTO);
-                if (avatarURL != null)
+                if (createMessageFormDTO.ImageUrls != null && createMessageFormDTO.ImageUrls.Count > 0)
                 {
-                    await _chatHubContext.Clients.Group(roomId.ToString())
+                    foreach (var image in createMessageFormDTO.ImageUrls)
+                    {
+                        string imageUrl = await _aws.UploadImageOrder(image);
+                        createMessageDTO.ImageUrls.Add(imageUrl);
+                    }
+                }
+                if(createMessageFormDTO.VideoUrl != null)
+                {
+                    string videoUrl = await _aws.UploadVideoOrder(createMessageFormDTO.VideoUrl);
+                    createMessageDTO.VideoUrl = videoUrl;
+                }
+                
+                var Response = await _chatRealTimeRepository.InsertMessage(createMessageDTO);
+                string avatarUrl = await _aws.ReadImage(Response.AvatarUrl);    
+                await _chatHubContext.Clients.Group(roomId.ToString())
                                                 .SendAsync("ChatMessage", new
                                                 {
+                                                    MessId = Response.MessengerId,
                                                     RoomId = roomId,
                                                     SenderId = createMessageFormDTO.SenderId,
                                                     Content = createMessageFormDTO.Content,
-                                                    avatarURL = await _aws.ReadImage(avatarURL),
+                                                    AvatarUrl = avatarUrl,
+                                                    ImageUrls = createMessageDTO.ImageUrls.Count > 0 ? createMessageDTO.ImageUrls : null,
+                                                    VideoUrl = createMessageDTO.VideoUrl,
                                                     CreatedAt = DateTime.Now
                                                 });
-                    return Result<string>.Success("Message sent successfully.", 200);
-                }
-                else
-                {
-                    return Result<string>.Failure("Failed to send message.", 400);
-                }
+               return Result<string>.Success("Message sent successfully.", 200);
+                
+              
             }
             catch (Exception ex)
             {

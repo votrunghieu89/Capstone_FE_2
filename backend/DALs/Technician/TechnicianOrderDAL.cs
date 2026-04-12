@@ -77,9 +77,13 @@ namespace Capstone_2_BE.DALs.Technician
                 {
                     try
                     {
-                        int isUpdated = await _context.OrderrModel.Where(o => o.Id == orderId && o.Status == "Confirmed").ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, "In Progress"));
-                        if (isUpdated > 0)
+                        int isUpdated = await _context.OrderrModel.Where(o => o.Id == orderId&& o.Status == "Confirmed"&& o.TechnicianId == technicianId&& !_context.OrderrModel.Any(x => x.TechnicianId == technicianId
+                                                    && x.Status == "In Progress")).ExecuteUpdateAsync(s => s.SetProperty(o => o.Status, "In Progress"));
+                        if (isUpdated == 0)
                         {
+                            return null;
+                        }
+                        
                             OrderStatusHistoryModel orderStatusHistory = new OrderStatusHistoryModel
                             {
                                 OrderId = orderId,
@@ -91,7 +95,7 @@ namespace Capstone_2_BE.DALs.Technician
                             await _context.SaveChangesAsync();
                             await transaction.CommitAsync();
                             
-                        }
+                        
                         var OrderRes = await (from o in _context.OrderrModel
                                               join h in _context.OrderStatusHistoryModel on o.Id equals h.OrderId
                                               join c in _context.CustomerProfileModel on o.CustomerId equals c.Id
@@ -318,11 +322,6 @@ namespace Capstone_2_BE.DALs.Technician
             {
                 return null;
             }
-        }
-
-        public Task<ViewOrderDetailDTO> GetOrderDetails(Guid orderId, Guid technicianId)
-        {
-            throw new NotImplementedException();
         }
         public async Task<OrderActionResDTO> CompletedOrder(Guid orderId)
         {

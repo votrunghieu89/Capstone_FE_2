@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
 
 namespace Capstone_2_BE.Socket
 {
@@ -6,9 +7,21 @@ namespace Capstone_2_BE.Socket
     {
         public string? GetUserId(HubConnectionContext connection)
         {
-            // Lấy AccountId từ query string
-            var accountId = connection.GetHttpContext()?.Request.Query["AccountId"].ToString();
-            return string.IsNullOrEmpty(accountId) ? connection.ConnectionId : accountId;
+            var httpContext = connection.GetHttpContext();
+            var accountId = httpContext?.Request.Query["AccountId"].ToString();
+            if (!string.IsNullOrWhiteSpace(accountId))
+            {
+                return accountId;
+            }
+
+            var userIdFromClaims = connection.User?.FindFirst("AccountId")?.Value
+                                   ?? connection.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                                   ?? connection.User?.FindFirst("sub")?.Value
+                                   ?? connection.User?.FindFirst("id")?.Value;
+
+            return !string.IsNullOrWhiteSpace(userIdFromClaims)
+                ? userIdFromClaims
+                : connection.ConnectionId;
         }
     }
 }

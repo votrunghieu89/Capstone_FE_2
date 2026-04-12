@@ -57,6 +57,24 @@ namespace Capstone_2_BE.DALs.Customer
             }
         }
 
+        public async Task<bool> IsFeedback(Guid orderId)
+        {
+            try
+            {
+                var isFeedback = await _context.RatingModel.AnyAsync(r => r.OrderId == orderId);
+                if(isFeedback)
+                {
+                    return true;
+                }
+                return false;
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while checking feedback for Order ID: {OrderId}", orderId);
+                return false;
+            }
+        }
+
         public async Task<bool> UpdateFeedBack(UpdateFeedbackDTO updateFeedback)
         {
             try

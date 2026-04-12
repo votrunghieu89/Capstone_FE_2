@@ -24,7 +24,7 @@ namespace Capstone_2_BE.Services.Customer
             {
                 var list = await _repo.ViewALLTechnician();
                 if (list == null)
-                    return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?y danh sách k? thu?t viên", 500);
+                    return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?y danh sï¿½ch k? thu?t vi?n", 500);
 
                 // convert avatar keys to public urls
                 foreach (var t in list)
@@ -40,7 +40,7 @@ namespace Capstone_2_BE.Services.Customer
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in ViewAllTechnician");
-                return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?y danh sách k? thu?t viên", 500);
+                return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?y danh sï¿½ch k? thu?t vi?n", 500);
             }
         }
 
@@ -60,6 +60,60 @@ namespace Capstone_2_BE.Services.Customer
             }
         }
 
+        public async Task<Result<List<ViewAllTechnicianDTO>>> FilterTechnicianCombination(TechnicianFilterRequestDTO filter)
+        {
+            try
+            {
+                // 1. Validation
+                if (filter == null)
+                    return Result<List<ViewAllTechnicianDTO>>.Failure("D? li?u l?c khï¿½ng h?p l?", 400);
+
+                if (filter.startRate.HasValue && (filter.startRate < 0 || filter.startRate > 5))
+                    return Result<List<ViewAllTechnicianDTO>>.Failure("Rating ph?i t? 0 ï¿½?n 5", 400);
+
+                if (filter.endRate.HasValue && (filter.endRate < 0 || filter.endRate > 5))
+                    return Result<List<ViewAllTechnicianDTO>>.Failure("Rating ph?i t? 0 ï¿½?n 5", 400);
+
+                if (filter.startRate.HasValue && filter.endRate.HasValue && filter.startRate > filter.endRate)
+                    return Result<List<ViewAllTechnicianDTO>>.Failure("startRate khï¿½ng ï¿½??c l?n h?n endRate", 400);
+
+                // 2. Call repo (?? ï¿½ï¿½NG TH? T?)
+                var list = await _repo.FilterTechnicians(
+                    filter.startRate,
+                    filter.endRate,
+                    filter.CityId,
+                    filter.ServiceId
+                );
+
+                if (list == null)
+                    return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?c k? thu?t vi?n", 500);
+
+                // 3. X? lï¿½ avatar (song song)
+                var imageTasks = list
+                    .Where(t => !string.IsNullOrEmpty(t.AvatarUrl))
+                    .Select(async t =>
+                    {
+                        try
+                        {
+                            t.AvatarUrl = await _aws.ReadImage(t.AvatarUrl);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning("Khï¿½ng th? ï¿½?c ?nh cho k? thu?t vi?n {Id}: {Msg}", t.TechnicianId, ex.Message);
+                            t.AvatarUrl = "default-avatar-url";
+                        }
+                    });
+
+                await Task.WhenAll(imageTasks);
+
+                return Result<List<ViewAllTechnicianDTO>>.Success(list, 200);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in FilterTechnicianCombination with criteria: {@Filter}", filter);
+                return Result<List<ViewAllTechnicianDTO>>.Failure("H? th?ng g?p l?i khi x? lï¿½ l?c", 500);
+            }
+        }
         public async Task<Result<List<ViewAllTechnicianDTO>>> FilterByService(Guid serviceId)
         {
             try
@@ -81,14 +135,14 @@ namespace Capstone_2_BE.Services.Customer
             try
             {
                 var list = await _repo.FilterTechnicianbyRate(startRate, endRate);
-                if (list == null) return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?c theo ?ánh giá", 500);
+                if (list == null) return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?c theo ?ï¿½nh giï¿½", 500);
                 foreach (var t in list) if (!string.IsNullOrEmpty(t.AvatarUrl)) { try { t.AvatarUrl = await _aws.ReadImage(t.AvatarUrl); } catch { } }
                 return Result<List<ViewAllTechnicianDTO>>.Success(list, 200);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in FilterByRate {Start}-{End}", startRate, endRate);
-                return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?c theo ?ánh giá", 500);
+                return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi l?c theo ?ï¿½nh giï¿½", 500);
             }
         }
 
@@ -97,14 +151,14 @@ namespace Capstone_2_BE.Services.Customer
             try
             {
                 var list = await _repo.SearchTechnicianbyName(name);
-                if (list == null) return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi tìm ki?m theo tên", 500);
+                if (list == null) return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi t?m ki?m theo t?n", 500);
                 foreach (var t in list) if (!string.IsNullOrEmpty(t.AvatarUrl)) { try { t.AvatarUrl = await _aws.ReadImage(t.AvatarUrl); } catch { } }
                 return Result<List<ViewAllTechnicianDTO>>.Success(list, 200);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in SearchByName {Name}", name);
-                return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi tìm ki?m theo tên", 500);
+                return Result<List<ViewAllTechnicianDTO>>.Failure("L?i khi t?m ki?m theo t?n", 500);
             }
         }
 
@@ -112,6 +166,30 @@ namespace Capstone_2_BE.Services.Customer
         {
             try
             {
+                decimal NormalizeCoordinate(decimal value, decimal maxAbs)
+                {
+                    if (value == 0) return value;
+
+                    var normalized = value;
+                    var safeGuard = 0;
+                    while (Math.Abs(normalized) > maxAbs && safeGuard < 12)
+                    {
+                        normalized /= 10;
+                        safeGuard++;
+                    }
+
+                    if (normalized > maxAbs) normalized = maxAbs;
+                    if (normalized < -maxAbs) normalized = -maxAbs;
+
+                    return normalized;
+                }
+
+                var resolvedLatitude = NormalizeCoordinate(form.Latitude, 90m);
+                var resolvedLongitude = NormalizeCoordinate(form.Longitude, 180m);
+
+                _logger.LogInformation("PlaceOrder normalized coordinates: rawLat={RawLat}, rawLng={RawLng}, normalizedLat={Lat}, normalizedLng={Lng}",
+                    form.Latitude, form.Longitude, resolvedLatitude, resolvedLongitude);
+
                 var dalDto = new CreateOrderDALDTO
                 {
                     CustomerId = form.CustomerId,
@@ -121,8 +199,8 @@ namespace Capstone_2_BE.Services.Customer
                     Description = form.Description,
                     Address = form.Address,
                     CityId = form.CityId,
-                    Latitude = form.Latitude,
-                    Longitude = form.Longitude,
+                    Latitude = resolvedLatitude,
+                    Longitude = resolvedLongitude,
                     ImageOrderUrl = new List<string>(),
                     videoUrl = string.Empty
                 };
@@ -145,7 +223,7 @@ namespace Capstone_2_BE.Services.Customer
 
                 var ok = await _repo.PlaceOrderForTechnician(dalDto);
                 if (ok) return Result<bool>.Success(true, 200);
-                return Result<bool>.Failure("??t ??n cho k? thu?t viên th?t b?i", 400);
+                return Result<bool>.Failure("??t ??n cho k? thu?t vi?n th?t b?i", 400);
             }
             catch (Exception ex)
             {

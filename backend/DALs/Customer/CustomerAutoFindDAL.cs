@@ -1,4 +1,4 @@
-﻿using Capstone_2_BE.DTOs.Customer.AutoFind;
+using Capstone_2_BE.DTOs.Customer.AutoFind;
 using Capstone_2_BE.DTOs.Customer.Order;
 using Capstone_2_BE.Models;
 using Capstone_2_BE.Repositories.Customer;
@@ -82,14 +82,16 @@ namespace Capstone_2_BE.DALs.Customer
                             Latitude = placeOrderDALDTO.Latitude,
                             Longitude = placeOrderDALDTO.Longitude,
                             CreateAt = DateTime.Now,
-                            Status = "Pending Confirmation",
+                            Status = string.IsNullOrWhiteSpace(placeOrderDALDTO.Status)
+                                ? "Pending Confirmation"
+                                : placeOrderDALDTO.Status.Trim(),
                         };
                         await _context.OrderrModel.AddAsync(newOrder);
                         await _context.SaveChangesAsync();
                         OrderStatusHistoryModel orderStatusHistory = new OrderStatusHistoryModel
                         {
                             OrderId = newOrder.Id,
-                            Status = "Pending Confirmation",
+                            Status = newOrder.Status,
                             ChangeBy = placeOrderDALDTO.CustomerId,
                             ChangeAt = DateTime.Now,
                         };

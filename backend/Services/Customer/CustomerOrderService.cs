@@ -1,4 +1,4 @@
-﻿using Capstone_2_BE.DTOs.Customer.Order;
+using Capstone_2_BE.DTOs.Customer.Order;
 using Capstone_2_BE.DTOs.Technician.Orders;
 using Capstone_2_BE.DTOs.Notification;
 using Capstone_2_BE.Repositories.Customer;
@@ -44,6 +44,23 @@ namespace Capstone_2_BE.Services.Customer
             }
         }
 
+        public async Task<Result<List<OrderOverviewDTO>>> GetInProgressOrders(Guid customerId)
+        {
+            try
+            {
+                var orders = await _customerOrderRepo.GetInProgressOrders(customerId);
+                if (orders == null || orders.Count == 0)
+                {
+                    return Result<List<OrderOverviewDTO>>.Success(new List<OrderOverviewDTO>(), 200);
+                }
+                return Result<List<OrderOverviewDTO>>.Success(orders, 200);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting in-progress orders for customer {CustomerId}", customerId);
+                return Result<List<OrderOverviewDTO>>.Failure("L?i khi l?y danh sách ??n đang x? lý", 500);
+            }
+        }
         public async Task<Result<List<OrderOverviewDTO>>> GetOrderHistory(Guid customerId)
         {
             try
@@ -105,23 +122,43 @@ namespace Capstone_2_BE.Services.Customer
                 var result = await _customerOrderRepo.CancelOrder(orderActionDTO);
                 if (result != null)
                 {
-                    // send notification to technician
-                    var newNotification = new InsertNewNotificationDTO
+                    // Notify technician
+                    var technicianNotification = new InsertNewNotificationDTO
                     {
                         SenderId = result.SenderId,
                         ReceiverId = result.ReceiverId,
-                        Message = "Khách hàng ?ã h?y ??n hàng c?a b?n.",
+                        Message = "Khách hàng đã hủy đơn hàng của bạn.",
                         CratedAt = result.CreatedAt
                     };
 
-                    var isInsert = await _notificationRepo.InsertNewNotification(newNotification);
-                    if (isInsert)
+                    // Notify customer (self confirmation)
+                    var customerNotification = new InsertNewNotificationDTO
                     {
-                        await _hubContext.Clients.User(result.ReceiverId.ToString()).SendAsync("ReceiveNotification", newNotification);
-                        return Result<string>.Success("H?y ??n hàng thành công", 200);
+                        SenderId = result.SenderId,
+                        ReceiverId = result.SenderId,
+                        Message = "Bạn đã hủy đơn hàng thành công.",
+                        CratedAt = result.CreatedAt
+                    };
+
+                    var isInsertTechnician = await _notificationRepo.InsertNewNotification(technicianNotification);
+                    var isInsertCustomer = await _notificationRepo.InsertNewNotification(customerNotification);
+
+                    if (isInsertTechnician)
+                    {
+                        await _hubContext.Clients.User(result.ReceiverId.ToString()).SendAsync("ReceiveNotification", technicianNotification);
                     }
 
-                    return Result<string>.Failure("Không th? h?y ??n hàng. L?i h? th?ng", 400);
+                    if (isInsertCustomer)
+                    {
+                        await _hubContext.Clients.User(result.SenderId.ToString()).SendAsync("ReceiveNotification", customerNotification);
+                    }
+
+                    if (isInsertTechnician || isInsertCustomer)
+                    {
+                        return Result<string>.Success("Hủy đơn hàng thành công", 200);
+                    }
+
+                    return Result<string>.Failure("Không thể hủy đơn hàng. Lỗi hệ thống", 400);
                 }
                 return Result<string>.Failure("Không th? h?y ??n hàng", 400);
             }
@@ -139,22 +176,41 @@ namespace Capstone_2_BE.Services.Customer
                 var result = await _customerOrderRepo.ConfirmCompletedOrder(orderActionDTO);
                 if (result != null)
                 {
-                    var newNotification = new InsertNewNotificationDTO
+                    var technicianNotification = new InsertNewNotificationDTO
                     {
                         SenderId = result.SenderId,
                         ReceiverId = result.ReceiverId,
-                        Message = "Khách hàng ?ã xác nh?n hoàn thành ??n hàng.",
+                        Message = "Khách hàng đã xác nhận hoàn thành đơn hàng.",
                         CratedAt = result.CreatedAt
                     };
 
-                    var isInsert = await _notificationRepo.InsertNewNotification(newNotification);
-                    if (isInsert)
+                    var customerNotification = new InsertNewNotificationDTO
                     {
-                        await _hubContext.Clients.User(result.ReceiverId.ToString()).SendAsync("ReceiveNotification", newNotification);
-                        return Result<string>.Success("Xác nh?n hoàn thành ??n hàng thành công", 200);
+                        SenderId = result.SenderId,
+                        ReceiverId = result.SenderId,
+                        Message = "Bạn đã xác nhận hoàn thành đơn hàng.",
+                        CratedAt = result.CreatedAt
+                    };
+
+                    var isInsertTechnician = await _notificationRepo.InsertNewNotification(technicianNotification);
+                    var isInsertCustomer = await _notificationRepo.InsertNewNotification(customerNotification);
+
+                    if (isInsertTechnician)
+                    {
+                        await _hubContext.Clients.User(result.ReceiverId.ToString()).SendAsync("ReceiveNotification", technicianNotification);
                     }
 
-                    return Result<string>.Failure("Không th? xác nh?n ??n hàng. L?i h? th?ng", 400);
+                    if (isInsertCustomer)
+                    {
+                        await _hubContext.Clients.User(result.SenderId.ToString()).SendAsync("ReceiveNotification", customerNotification);
+                    }
+
+                    if (isInsertTechnician || isInsertCustomer)
+                    {
+                        return Result<string>.Success("Xác nhận hoàn thành đơn hàng thành công", 200);
+                    }
+
+                    return Result<string>.Failure("Không thể xác nhận đơn hàng. Lỗi hệ thống", 400);
                 }
                 return Result<string>.Failure("Không th? xác nh?n ??n hàng", 400);
             }
@@ -254,6 +310,11 @@ namespace Capstone_2_BE.Services.Customer
             try
             {
                 var order = await _customerOrderRepo.GetOrderDetail(orderId);
+                if (order == null)
+                {
+                    return Result<OrderDetailDTO>.Failure("Không tìm thấy đơn hàng", 404);
+                }
+
                 if (order.videoUrl != null)
                 {
                     order.videoUrl = await _aws.ReadImage(order.videoUrl);
@@ -270,10 +331,6 @@ namespace Capstone_2_BE.Services.Customer
                         }
                     }
                     order.ImageUrls = imageUrls;
-                }
-                if (order == null)
-                {
-                    return Result<OrderDetailDTO>.Failure("Không tìm thấy đơn hàng", 404);
                 }
                 return Result<OrderDetailDTO>.Success(order, 200);
             }

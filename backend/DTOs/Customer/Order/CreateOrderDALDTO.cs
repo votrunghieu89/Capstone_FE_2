@@ -11,7 +11,8 @@ namespace Capstone_2_BE.DTOs.Customer.Order
         public Guid CityId { get; set; } 
         public decimal Latitude { get; set; }
         public decimal Longitude { get; set; }
+        public string Status { get; set; } = "Pending Confirmation";
         public string videoUrl { get; set; } = string.Empty;
-        public List<string> ImageOrderUrl { get; set; } = new List<string>();
+        public List<string> ImageOrderUrl { get; set; }
     }
 }

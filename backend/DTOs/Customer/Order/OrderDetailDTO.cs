@@ -1,4 +1,4 @@
-﻿namespace Capstone_2_BE.DTOs.Customer.Order
+namespace Capstone_2_BE.DTOs.Customer.Order
 {
     public class OrderDetailDTO
     {
@@ -13,6 +13,7 @@
         public string? videoUrl { get; set; } = string.Empty;
         public List<string> ImageUrls { get; set; } = new List<string>();
         public DateTime CreateAt { get; set; }
+        public DateTime? LastUpdateAt { get; set; }
 
 
     }

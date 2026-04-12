@@ -49,11 +49,7 @@ namespace Capstone_2_BE.DALs.Customer
                                           AverageRating = _context.RatingModel
                                               .Where(r => r.TechnicianId == tp.Id)
                                               .Select(r => (decimal?)r.Score)
-                                              .Average() ?? 0,
-                                          CityId = tp.CityId,
-                                          Address = tp.Address,
-                                          Latitude = tp.Latitude,
-                                          Longitude = tp.Longitude
+                                              .Average() ?? 0
                                       }
                                   ).ToListAsync();
 
@@ -81,18 +77,13 @@ namespace Capstone_2_BE.DALs.Customer
                                         s.Id AS ServiceId,
                                         s.ServiceName,
                                         tp.OrderCount,
-                                        tp.AvatarURl,
-                                        tp.CityId,
-                                        tp.Address,
-                                        tp.Latitude,
-                                        tp.Longtitude,
                                         COUNT(r.Id) AS RatingCount,
                                         AVG(r.Score) AS AverageRating
                                     FROM TechnicianProfile tp
                                     JOIN Service_Profile sp ON tp.Id = sp.TechnicianId
                                     JOIN ServiceCategories s ON sp.ServiceId = s.Id
                                     LEFT JOIN Rating r ON tp.Id = r.TechnicianId
-                                    GROUP BY tp.Id, tp.FullName, s.Id, s.ServiceName, tp.OrderCount, tp.AvatarURl, tp.CityId, tp.Address, tp.Latitude, tp.Longtitude
+                                    GROUP BY tp.Id, tp.FullName, s.Id, s.ServiceName, tp.OrderCount, tp.AvatarURl
                                     HAVING AVG(r.Score) BETWEEN @startRate AND @endRate
                                 ";
                     using (var command = new SqlCommand(query, connection))
@@ -121,11 +112,7 @@ namespace Capstone_2_BE.DALs.Customer
 
                                     AvatarUrl = reader.IsDBNull(reader.GetOrdinal("AvatarURl"))
                                                      ? null
-                                                     : reader.GetString(reader.GetOrdinal("AvatarURl")),
-                                    CityId = reader.GetGuid(reader.GetOrdinal("CityId")),
-                                    Address = reader.IsDBNull(reader.GetOrdinal("Address")) ? null : reader.GetString(reader.GetOrdinal("Address")),
-                                    Latitude = reader.GetDecimal(reader.GetOrdinal("Latitude")),
-                                    Longitude = reader.GetDecimal(reader.GetOrdinal("Longtitude"))
+                                                     : reader.GetString(reader.GetOrdinal("AvatarURl"))
                                 });
                             }
                         }
@@ -168,11 +155,7 @@ namespace Capstone_2_BE.DALs.Customer
                                          AverageRating = _context.RatingModel
                                              .Where(r => r.TechnicianId == tp.Id)
                                              .Select(r => (decimal?)r.Score)
-                                             .Average() ?? 0,
-                                         CityId = tp.CityId,
-                                         Address = tp.Address,
-                                         Latitude = tp.Latitude,
-                                         Longitude = tp.Longitude
+                                             .Average() ?? 0
                                      }
                                  ).ToListAsync();
 
@@ -183,6 +166,68 @@ namespace Capstone_2_BE.DALs.Customer
                 return new List<ViewAllTechnicianDTO>();
             }
         }
+
+        public async Task<List<ViewAllTechnicianDTO>> FilterTechnicians(
+      decimal? startRate,
+      decimal? endRate,
+      Guid? cityId,
+      Guid? serviceId)
+        {
+            try
+            {
+                var baseQuery =
+                    from tp in _context.TechnicianProfileModel
+                    join sp in _context.Service_ProfileModel on tp.Id equals sp.TechnicianId
+                    join s in _context.ServiceCategoriesModel on sp.ServiceId equals s.Id
+                    select new
+                    {
+                        tp,
+                        sp,
+                        s
+                    };
+
+                if (cityId.HasValue)
+                {
+                    baseQuery = baseQuery.Where(x => x.tp.CityId == cityId.Value);
+                }
+
+                if (serviceId.HasValue)
+                {
+                    baseQuery = baseQuery.Where(x => x.sp.ServiceId == serviceId.Value);
+                }
+
+                var resultQuery = baseQuery
+                    .Select(x => new ViewAllTechnicianDTO
+                    {
+                        TechnicianId = x.tp.Id,
+                        TechnicianName = x.tp.FullName,
+                        AvatarUrl = x.tp.AvatarURl,
+                        ServiceId = x.s.Id,
+                        ServiceName = x.s.ServiceName,
+                        OrderCount = x.tp.OrderCount,
+                        RatingCount = _context.RatingModel.Count(r => r.TechnicianId == x.tp.Id),
+                        AverageRating = _context.RatingModel
+                            .Where(r => r.TechnicianId == x.tp.Id)
+                            .Select(r => (decimal?)r.Score)
+                            .Average() ?? 0
+                    });
+
+                if (startRate.HasValue && endRate.HasValue)
+                {
+                    resultQuery = resultQuery.Where(x =>
+                        x.AverageRating >= startRate.Value &&
+                        x.AverageRating <= endRate.Value);
+                }
+
+                return await resultQuery.ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in FilterTechnicians");
+                return new List<ViewAllTechnicianDTO>();
+            }
+        }
+
         public async Task<bool> PlaceOrderForTechnician(CreateOrderDALDTO placeOrderDALDTO)
         {
             try
@@ -286,11 +331,7 @@ namespace Capstone_2_BE.DALs.Customer
                                          AverageRating = _context.RatingModel
                                              .Where(r => r.TechnicianId == tp.Id)
                                              .Select(r => (decimal?)r.Score)
-                                             .Average() ?? 0,
-                                         CityId = tp.CityId,
-                                         Address = tp.Address,
-                                         Latitude = tp.Latitude,
-                                         Longitude = tp.Longitude
+                                             .Average() ?? 0
                                      }
                                  ).ToListAsync();
 
@@ -329,11 +370,7 @@ namespace Capstone_2_BE.DALs.Customer
                                          AverageRating = _context.RatingModel
                                              .Where(r => r.TechnicianId == tp.Id)
                                              .Select(r => (decimal?)r.Score)
-                                             .Average() ?? 0,
-                                          CityId = tp.CityId,
-                                          Address = tp.Address,
-                                          Latitude = tp.Latitude,
-                                          Longitude = tp.Longitude
+                                             .Average() ?? 0
                                      }
                                  ).ToListAsync();
 

@@ -28,7 +28,16 @@ namespace Capstone_2_BE.Controllers.Customer
             }
             return StatusCode(result.StatusCode, result.Data);
         }
-
+        [HttpGet("in-progress/{customerId}")]
+        public async Task<IActionResult> GetInProgressOrders(Guid customerId)
+        {
+            var result = await _customerOrderService.GetInProgressOrders(customerId);
+            if (!result.IsSuccess)
+            {
+                return StatusCode(result.StatusCode, new { message = result.Error });
+            }
+            return StatusCode(result.StatusCode, result.Data);
+        }
         [HttpGet("history/{customerId}")]
         public async Task<IActionResult> GetOrderHistory(Guid customerId)
         {
@@ -93,8 +102,9 @@ namespace Capstone_2_BE.Controllers.Customer
         //    {
         //        return StatusCode(result.StatusCode, new { message = result.Error });
         //    }
-        //    return StatusCode(result.StatusCode, new { message = "??t ??n hàng thành công" });
+        //    return StatusCode(result.StatusCode, new { message = "??t ??n hï¿½ng thï¿½nh cï¿½ng" });
         //}
+        
 
         [HttpGet("detail/{orderId}")]
         public async Task<IActionResult> GetOrderDetail(Guid orderId)
@@ -109,7 +119,7 @@ namespace Capstone_2_BE.Controllers.Customer
 
         [HttpPut("update")]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UpdateOrder([FromBody] OrderUpdateFormDTO updateOrderDTO)
+        public async Task<IActionResult> UpdateOrder([FromForm] OrderUpdateFormDTO updateOrderDTO)
         {
             var result = await _customerOrderService.UpdateOrder(updateOrderDTO);
             if (!result.IsSuccess)

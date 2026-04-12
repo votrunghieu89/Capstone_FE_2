@@ -2,6 +2,7 @@
 {
     public class AutoFindFixerResSuccessDTO
     {
+        public Guid TechnicianId    { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string avatarURL { get; set; } = string.Empty;
         public string ServiceName { get; set; } = string.Empty;

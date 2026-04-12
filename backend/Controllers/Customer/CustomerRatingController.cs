@@ -58,5 +58,19 @@ namespace Capstone_2_BE.Controllers.Customer
             }
             return StatusCode(result.StatusCode, new { message = result.Data });
         }
+
+        [HttpGet("is-feedback/{orderId}")]
+        public async Task<IActionResult> IsFeedback(Guid orderId)
+        {
+            var result = await _customerRatingService.IsFeedback(orderId);
+
+            if (!result.IsSuccess)
+                return StatusCode(result.StatusCode, new { message = result.Error });
+
+            return StatusCode(result.StatusCode, new
+            {
+                isFeedback = result.Data
+            });
+        }
     }
 }

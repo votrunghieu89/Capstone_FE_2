@@ -28,18 +28,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers();
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll",
-        builder =>
-        {
-            builder.AllowAnyOrigin()
-                   .AllowAnyMethod()
-                   .AllowAnyHeader();
-        });
-});
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    });
 
 builder.Services.AddSwaggerGen(option =>
 {
@@ -70,6 +64,7 @@ builder.Services.AddSwaggerGen(option =>
 });
 
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, QueryStringUserIdProvider>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -88,8 +83,32 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
     };
-});
 
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) &&
+                (path.StartsWithSegments("/NotificationHub") || path.StartsWithSegments("/ChatHub")))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
+});
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+        policy.WithOrigins("http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials());
+});
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -168,6 +187,105 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<IAdminRepo, AdminDAL>();
 builder.Services.AddScoped<AdminService>();
 
+// Seed 34 tỉnh/thành VN (idempotent)
+using (var scope = builder.Services.BuildServiceProvider().CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    if (db.Database.CanConnect())
+    {
+        var vnCities = new[]
+        {
+            "Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Huế", "Cần Thơ", "Hải Phòng", "An Giang", "Bắc Ninh", "Cà Mau", "Cao Bằng",
+            "Đắk Lắk", "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Tĩnh", "Hưng Yên", "Khánh Hòa", "Lai Châu", "Lâm Đồng",
+            "Lạng Sơn", "Lào Cai", "Nghệ An", "Ninh Bình", "Phú Thọ", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị", "Sóc Trăng", "Sơn La",
+            "Tây Ninh", "Thái Nguyên", "Tuyên Quang", "Vĩnh Long"
+        };
+
+        var existing = db.CitiesModel.Select(c => c.CityName.Trim().ToLower()).ToHashSet();
+        var toInsert = vnCities
+            .Where(name => !existing.Contains(name.Trim().ToLower()))
+            .Select(name => new Capstone_2_BE.Models.CitiesModel
+            {
+                Id = Guid.NewGuid(),
+                CityName = name
+            })
+            .ToList();
+
+        if (toInsert.Count > 0)
+        {
+            db.CitiesModel.AddRange(toInsert);
+            db.SaveChanges();
+        }
+
+        // Seed nhiều đơn test In Progress để verify nút "Xác nhận hoàn thành" (idempotent)
+        var testTitles = new[]
+        {
+            "__TEST_INPROGRESS_ORDER_1__",
+            "__TEST_INPROGRESS_ORDER_2__",
+            "__TEST_INPROGRESS_ORDER_3__"
+        };
+
+        var customerId = db.CustomerProfileModel.Select(c => c.Id).FirstOrDefault();
+        var technicianId = db.TechnicianProfileModel.Select(t => t.Id).FirstOrDefault();
+        var serviceId = db.ServiceCategoriesModel.Select(s => s.Id).FirstOrDefault();
+        var cityId = db.CitiesModel.Select(c => c.Id).FirstOrDefault();
+
+        if (customerId != Guid.Empty && technicianId != Guid.Empty && serviceId != Guid.Empty && cityId != Guid.Empty)
+        {
+            var existedTitles = db.OrderrModel
+                .Where(o => testTitles.Contains(o.Title))
+                .Select(o => o.Title)
+                .ToHashSet();
+
+            var now = DateTime.UtcNow;
+            var newOrders = new List<Capstone_2_BE.Models.OrderrModel>();
+            var newHistories = new List<Capstone_2_BE.Models.OrderStatusHistoryModel>();
+
+            for (int i = 0; i < testTitles.Length; i++)
+            {
+                var title = testTitles[i];
+                if (existedTitles.Contains(title)) continue;
+
+                var orderId = Guid.NewGuid();
+                var createAt = now.AddMinutes(-(i * 7));
+
+                newOrders.Add(new Capstone_2_BE.Models.OrderrModel
+                {
+                    Id = orderId,
+                    CustomerId = customerId,
+                    TechnicianId = technicianId,
+                    ServiceId = serviceId,
+                    Title = title,
+                    Description = "Đơn test để kiểm tra confirm-complete",
+                    Address = "Địa chỉ test",
+                    CityId = cityId,
+                    Latitude = 16.047079m,
+                    Longitude = 108.206230m,
+                    Status = "In Progress",
+                    CreateAt = createAt,
+                    CompleteAt = createAt
+                });
+
+                newHistories.Add(new Capstone_2_BE.Models.OrderStatusHistoryModel
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = orderId,
+                    Status = "In Progress",
+                    ChangeBy = customerId,
+                    ChangeAt = createAt
+                });
+            }
+
+            if (newOrders.Count > 0)
+            {
+                db.OrderrModel.AddRange(newOrders);
+                db.OrderStatusHistoryModel.AddRange(newHistories);
+                db.SaveChanges();
+            }
+        }
+    }
+}
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -179,11 +297,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseCors("AllowAll");
-
+//app.UseRouting();
+app.UseCors("AllowFrontend");
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<NotificationHub>("/hubs/notification");
-app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<NotificationHub>("/NotificationHub");
+app.MapHub<ChatHub>("/ChatHub");
 app.Run();

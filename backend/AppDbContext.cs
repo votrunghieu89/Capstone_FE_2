@@ -253,6 +253,12 @@ namespace Capstone_2_BE
                     .WithMany()
                     .HasForeignKey(e => e.SenderId)
                     .OnDelete(DeleteBehavior.Restrict);
+
+                // Attachments relationship (Message -> MessAttachments)
+                entity.HasMany(e => e.MessAttachments)
+                    .WithOne(a => a.Messenger)
+                    .HasForeignKey(a => a.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
         public DbSet<AccountsModel> AccountsModel { get; set; }
@@ -268,6 +274,7 @@ namespace Capstone_2_BE
         public DbSet<NotificationsModel> NotificationsModel { get; set; }
         public DbSet<RoomsModel> RoomsModel { get; set; }
         public DbSet<MessengerModel> MessengerModel { get; set; }
+        public DbSet<MessAttachmentModel> MessAttachmentModel { get; set; }
 
     }
 }

@@ -13,6 +13,7 @@ namespace Capstone_2_BE.DTOs.Customer.Order
         public Guid CityId { get; set; }
         public decimal Latitude { get; set; }
         public decimal Longitude { get; set; }
+        public string? Status { get; set; }
 
         public IFormFile? VideoFile { get; set; }
         public List<IFormFile>? ImageFiles { get; set; }

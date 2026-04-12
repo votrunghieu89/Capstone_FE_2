@@ -9,6 +9,7 @@ namespace Capstone_2_BE.Repositories.Customer
         Task<bool> InsertOrder(CreateOrderDALDTO placeOrderDALDTO);
         // Xem đơn hàng hiện tại ( bao gồm cả trang thái đơn hàng: đang chờ, đang xử lý, đang giao hàng)
         Task<List<OrderOverviewDTO>> GetCurrentOrders(Guid customerId);
+        Task<List<OrderOverviewDTO>> GetInProgressOrders(Guid customerId);
         // Xem lịch sử đơn hàng
         Task<List<OrderOverviewDTO>> GetOrderHistory(Guid customerId);
         // Xem đơn dàng đã huỷ

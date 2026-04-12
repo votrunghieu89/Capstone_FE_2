@@ -13,6 +13,14 @@ namespace Capstone_2_BE.Repositories.Customer
         Task<List<ViewAllTechnicianDTO>> FilterTechnicianbyRate(decimal startRate, decimal endRate);
         Task<List<ViewAllTechnicianDTO>> FilterTechnicianbyArea(Guid CityId);
         Task<List<ViewAllTechnicianDTO>> FilterTechnicianbyService(Guid ServiceId);
+
+        Task<List<ViewAllTechnicianDTO>> FilterTechnicians(
+            decimal? startRate,
+            decimal? endRate,
+            Guid? cityId,
+            Guid? serviceId
+        );
+
         // Tìm kiếm theo họ và tên
         Task<List<ViewAllTechnicianDTO>> SearchTechnicianbyName(string FullName);
     }
