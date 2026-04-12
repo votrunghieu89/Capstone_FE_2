@@ -1,4 +1,15 @@
 import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr';
+import api from './api';
+
+export interface AppNotification {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  action: string;
+  message: string;
+  isRead: boolean;
+  createAt: string;
+}
 
 const HUB_URL = import.meta.env.VITE_SIGNALR_URL || '';
 
@@ -35,6 +46,21 @@ class NotificationService {
     }
   }
 
+  public async getAll(accountId: string): Promise<any> {
+    const res = await api.get(`/notification/${accountId}`);
+    return res.data;
+  }
+
+  public async markAsRead(notificationId: string): Promise<any> {
+    const res = await api.post(`/notification/mark/${notificationId}`);
+    return res.data;
+  }
+
+  public async markAllAsRead(accountId: string): Promise<any> {
+    const res = await api.post(`/notification/mark-all/${accountId}`);
+    return res.data;
+  }
+
   public stopConnection(): void {
     if (this.connection) {
       this.connection.stop();
@@ -43,3 +69,5 @@ class NotificationService {
 }
 
 export const notificationService = new NotificationService();
+
+export default notificationService;

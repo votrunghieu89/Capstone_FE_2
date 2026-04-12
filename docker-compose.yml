@@ -1,8 +1,0 @@
-# File docker-compose da duoc luoc bo vi SQL Server va Redis chay ben ngoai
-# Frontend va Backend chay thu cong bang:
-# FE: npm run dev
-# BE: dotnet run
-
-services:
-  # Hien tai khong co service nao can chay qua Docker trong cum FastFix
-  # Moi thu duoc chay doc lap de toi uu phat trien

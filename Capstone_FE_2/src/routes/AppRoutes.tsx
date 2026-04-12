@@ -3,10 +3,28 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 
 // Layouts
 import MainLayout from '@/layouts/MainLayout';
+import CustomerLayout from '@/layouts/CustomerLayout';
+import AdminLayout from '@/layouts/AdminLayout';
 import TechnicianLayout from '@/layouts/TechnicianLayout';
+import { CustomerHub } from '@/components/technician/CustomerHub';
+import { Communication } from '@/components/technician/Communication';
+import { Analytics } from '@/components/technician/Analytics';
+import { PaymentManager } from '@/components/technician/PaymentManager';
+import { Settings } from '@/components/technician/Settings';
 
-// Lazy-loaded pages — Home
+// Lazy-loaded pages — Public / Customer
 const HomePage = lazy(() => import('@/pages/customer/HomePage'));
+const ProfilePage = lazy(() => import('@/pages/customer/ProfilePage'));
+const TechnicianListPage = lazy(() => import('@/pages/customer/TechnicianListPage'));
+const OrdersPage = lazy(() => import('@/pages/customer/OrdersPage'));
+const ContactTechnicianPage = lazy(() => import('@/pages/customer/ContactTechnicianPage'));
+const CustomerHistoryPage = lazy(() => import('@/pages/customer/HistoryPage'));
+const ReviewsPage = lazy(() => import('@/pages/customer/ReviewsPage'));
+
+// Lazy-loaded pages — Admin
+const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
+const RequestsPage = lazy(() => import('@/pages/admin/RequestsPage'));
+const TechniciansPage = lazy(() => import('@/pages/admin/TechniciansPage'));
 
 // Lazy-loaded pages — Technician
 const TechDashboardPage = lazy(() => import('@/pages/technician/DashboardPage'));
@@ -16,6 +34,12 @@ const TechAcceptedRequestsPage = lazy(() => import('@/pages/technician/AcceptedR
 const TechInProgressPage = lazy(() => import('@/pages/technician/InProgressPage'));
 const TechHistoryPage = lazy(() => import('@/pages/technician/HistoryPage'));
 const TechChatPage = lazy(() => import('@/pages/technician/ChatPage'));
+
+const TechCustomerHubPage = CustomerHub;
+const TechCommunicationPage = Communication;
+const TechAnalyticsPage = Analytics;
+const TechPaymentManagerPage = PaymentManager;
+const TechSettingsPage = Settings;
 
 function Loading() {
   return (
@@ -29,23 +53,48 @@ export default function AppRoutes() {
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
-        {/* Trang chủ - Public */}
+        {/* Public */}
         <Route path="/" element={<MainLayout />}>
           <Route index element={<HomePage />} />
         </Route>
 
-        {/* Technician Portal - Chế độ tập trung chính */}
+        {/* Customer */}
+        <Route path="/customer" element={<CustomerLayout />}>
+          <Route index element={<TechnicianListPage />} />
+          <Route path="technicians" element={<TechnicianListPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="contact" element={<ContactTechnicianPage />} />
+          <Route path="history" element={<CustomerHistoryPage />} />
+          <Route path="reviews" element={<ReviewsPage />} />
+        </Route>
+
+        {/* Admin */}
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminDashboardPage />} />
+          <Route path="yeu-cau" element={<RequestsPage />} />
+          <Route path="ky-thuat-vien" element={<TechniciansPage />} />
+        </Route>
+
+        {/* Technician */}
         <Route path="/technician" element={<TechnicianLayout />}>
           <Route index element={<TechDashboardPage />} />
           <Route path="ho-so" element={<TechProfilePage />} />
+          <Route path="yeu-cau-moi" element={<TechNewRequestsPage />} />
           <Route path="don-hang/dang-cho" element={<TechNewRequestsPage />} />
           <Route path="don-hang/da-tiep-nhan" element={<TechAcceptedRequestsPage />} />
+          <Route path="dang-thuc-hien" element={<TechInProgressPage />} />
           <Route path="don-hang/dang-thuc-hien" element={<TechInProgressPage />} />
           <Route path="lich-su" element={<TechHistoryPage />} />
           <Route path="chat" element={<TechChatPage />} />
+          <Route path="khach-hang" element={<TechCustomerHubPage />} />
+          <Route path="giao-tiep" element={<TechCommunicationPage />} />
+          <Route path="phan-tich" element={<TechAnalyticsPage />} />
+          <Route path="thanh-toan" element={<TechPaymentManagerPage />} />
+          <Route path="cai-dat" element={<TechSettingsPage />} />
         </Route>
 
-        {/* Chuyển hướng các trang cũ về Home */}
+        {/* Legacy redirects */}
         <Route path="/admin/*" element={<Navigate to="/" replace />} />
         <Route path="/customer/*" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
