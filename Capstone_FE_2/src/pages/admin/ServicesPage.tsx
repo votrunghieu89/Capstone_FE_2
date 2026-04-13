@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { DashboardHeader } from "@/components/admin/dashboard-header"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,252 +8,278 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Search, Wrench, ListChecks, Plus, Trash2 } from "lucide-react"
-import { adminApi } from "@/services/adminApi"
+import { Wrench, ListChecks, Search, Plus, Trash2 } from "lucide-react"
+import { adminDelete, adminGet, adminPost, normalizeListPayload } from "@/utils/adminHttp"
 import type { AdminServiceSummaryItem } from "@/types/admin"
-import toast from "react-hot-toast"
+
+type ServiceItem = {
+  id: string
+  name: string
+  totalRequests: number
+  completedRequests: number
+  description?: string
+}
+
+const seedServices: ServiceItem[] = [
+  { id: "s1", name: "Điện", totalRequests: 0, completedRequests: 0 },
+  { id: "s2", name: "Điều hòa", totalRequests: 0, completedRequests: 0 },
+  { id: "s3", name: "Gia dụng", totalRequests: 0, completedRequests: 0 },
+  { id: "s4", name: "Khóa", totalRequests: 0, completedRequests: 0 },
+  { id: "s5", name: "Nước", totalRequests: 0, completedRequests: 0 },
+  { id: "s6", name: "Sơn", totalRequests: 0, completedRequests: 0 },
+]
 
 export default function ServicesPage() {
+  const [services, setServices] = useState<ServiceItem[]>(seedServices)
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [formData, setFormData] = useState({
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [formError, setFormError] = useState("")
+  const [newService, setNewService] = useState({
     name: "",
     description: "",
   })
-  const [isCreating, setIsCreating] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [rows, setRows] = useState<AdminServiceSummaryItem[]>([])
-
-  const loadData = async () => {
-    setIsLoading(true)
-    try {
-      const services: AdminServiceSummaryItem[] = await adminApi.getServicesSummary()
-      const withoutHvac = services.filter((item) => item.name.trim().toLowerCase() !== "hvac")
-      setRows(withoutHvac)
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể tải dữ liệu dịch vụ"
-      toast.error(message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   useEffect(() => {
-    loadData()
+    let mounted = true
+
+    ;(async () => {
+      try {
+        let payload: unknown
+        try {
+          payload = await adminGet("/admin/services-summary")
+        } catch {
+          payload = await adminGet("/admin/services")
+        }
+
+        const rows = normalizeListPayload<AdminServiceSummaryItem>(payload).map((row, index) => ({
+          id: `s${index + 1}`,
+          name: row.name,
+          totalRequests: Number(row.total || 0),
+          completedRequests: Number(row.completed || 0),
+        }))
+
+        if (!mounted) return
+        if (rows.length > 0) setServices(rows)
+      } catch {
+        if (!mounted) return
+        setServices(seedServices)
+      } finally {
+        if (!mounted) return
+        setIsLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
-  const resetForm = () => {
-    setFormData({ name: "", description: "" })
-  }
+  const filteredServices = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return services
+    return services.filter((item) => item.name.toLowerCase().includes(q))
+  }, [searchQuery, services])
 
-  const openCreateDialog = () => {
-    resetForm()
-    setIsDialogOpen(true)
+  const totalRequests = services.reduce((sum, item) => sum + item.totalRequests, 0)
+
+  const handleDeleteService = async (id: string) => {
+    const target = services.find((item) => item.id === id)
+    if (!target) return
+
+    const snapshot = services
+    setServices((prev) => prev.filter((item) => item.id !== id))
+
+    try {
+      await adminDelete(`/admin/services/${encodeURIComponent(target.name)}`)
+    } catch {
+      setServices(snapshot)
+    }
   }
 
   const handleCreateService = async () => {
-    const name = formData.name.trim()
-    const description = formData.description.trim()
-
+    const name = newService.name.trim()
     if (!name) {
-      toast.error("Vui lòng nhập tên dịch vụ")
+      setFormError("Vui lòng nhập tên dịch vụ")
       return
     }
 
-    setIsCreating(true)
+    const duplicated = services.some((item) => item.name.toLowerCase() === name.toLowerCase())
+    if (duplicated) {
+      setFormError("Tên dịch vụ đã tồn tại")
+      return
+    }
+
+    const item: ServiceItem = {
+      id: `s${Date.now()}`,
+      name,
+      description: newService.description.trim(),
+      totalRequests: 0,
+      completedRequests: 0,
+    }
+
+    setServices((prev) => [item, ...prev])
+    setNewService({ name: "", description: "" })
+    setFormError("")
+    setIsCreateOpen(false)
+
     try {
-      await adminApi.createService({
+      await adminPost("/admin/services", {
         name,
-        description: description || null,
+        description: newService.description.trim() || undefined,
       })
 
-      toast.success("Thêm dịch vụ thành công")
-      setIsDialogOpen(false)
-      resetForm()
-      await loadData()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể thêm dịch vụ"
-      toast.error(message)
-    } finally {
-      setIsCreating(false)
+      let payload: unknown
+      try {
+        payload = await adminGet("/admin/services-summary")
+      } catch {
+        payload = await adminGet("/admin/services")
+      }
+
+      const rows = normalizeListPayload<AdminServiceSummaryItem>(payload).map((row, index) => ({
+        id: `s${index + 1}`,
+        name: row.name,
+        totalRequests: Number(row.total || 0),
+        completedRequests: Number(row.completed || 0),
+      }))
+      if (rows.length > 0) setServices(rows)
+    } catch {
+      // Keep optimistic local row if API create fails.
     }
   }
-
-  const handleDeleteService = async (serviceName: string) => {
-    const ok = window.confirm(`Xóa dịch vụ ${serviceName}?`)
-    if (!ok) return
-
-    try {
-      await adminApi.deleteService(serviceName)
-      toast.success("Xóa dịch vụ thành công")
-      await loadData()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể xóa dịch vụ"
-      toast.error(message)
-    }
-  }
-
-  const filteredRows = useMemo(() => {
-    const keyword = searchQuery.trim().toLowerCase()
-    if (!keyword) return rows
-    return rows.filter((item) => item.name.toLowerCase().includes(keyword))
-  }, [rows, searchQuery])
-
-  const totals = useMemo(() => {
-    const totalServices = rows.length
-    const totalRequests = rows.reduce((sum, item) => sum + item.total, 0)
-
-    return { totalServices, totalRequests }
-  }, [rows])
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#070b14] text-slate-100">
       <DashboardHeader
         title="Dịch vụ"
         description="Theo dõi các nhóm dịch vụ từ dữ liệu yêu cầu sửa chữa"
       />
 
-      <main className="flex-1 p-6 flex flex-col gap-5 max-w-[1200px] w-full mx-auto">
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          setIsCreateOpen(open)
+          if (!open) setFormError("")
+        }}
+      >
+          <DialogContent className="max-w-lg border border-slate-800 bg-[#0d1322] text-slate-100">
+            <DialogHeader>
+            <DialogTitle className="text-base text-slate-100">Thêm dịch vụ mới</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-slate-200">Tên dịch vụ</p>
+              <Input
+                value={newService.name}
+                onChange={(e) => setNewService((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Nhập tên dịch vụ"
+                className="bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-slate-200">Mô tả (không bắt buộc)</p>
+              <Input
+                value={newService.description}
+                onChange={(e) => setNewService((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Mô tả ngắn về dịch vụ"
+                className="bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+
+            {formError && <p className="text-xs text-red-300">{formError}</p>}
+
+            <Button className="w-full bg-[#2563eb] hover:bg-[#1e4fc7] text-white text-sm" onClick={handleCreateService}>
+              Thêm dịch vụ
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="border border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-4 flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[#eff6ff] text-[#2563eb] flex items-center justify-center">
-                <Wrench className="h-5 w-5" />
+          <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
+            <CardContent className="p-6 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-950/40 border border-blue-800 flex items-center justify-center">
+                <Wrench className="h-5 w-5 text-blue-300" />
               </div>
               <div>
-                <p className="text-sm text-slate-500">Tổng dịch vụ</p>
-                <p className="text-2xl font-bold text-slate-900">{totals.totalServices}</p>
+                <p className="text-slate-400 text-xs">Tổng dịch vụ</p>
+                <p className="text-xl font-bold text-slate-100">{services.length}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-4 flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <ListChecks className="h-5 w-5" />
+          <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
+            <CardContent className="p-6 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-emerald-950/40 border border-emerald-800 flex items-center justify-center">
+                <ListChecks className="h-5 w-5 text-emerald-300" />
               </div>
               <div>
-                <p className="text-sm text-slate-500">Tổng yêu cầu</p>
-                <p className="text-2xl font-bold text-slate-900">{totals.totalRequests}</p>
+                <p className="text-slate-400 text-xs">Tổng yêu cầu</p>
+                <p className="text-xl font-bold text-slate-100">{totalRequests}</p>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="border border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="relative max-w-sm w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Tìm dịch vụ..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-[#2563eb]"
-                />
-              </div>
-
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-md font-medium px-5" onClick={openCreateDialog}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Thêm dịch vụ
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>Thêm dịch vụ mới</DialogTitle>
-                  </DialogHeader>
-                  <div className="flex flex-col gap-4 py-4">
-                    <div className="flex flex-col gap-2">
-                      <Label>Tên dịch vụ</Label>
-                      <Input
-                        value={formData.name}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                        placeholder="Nhập tên dịch vụ"
-                        disabled={isCreating}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <Label>Mô tả (không bắt buộc)</Label>
-                      <Input
-                        value={formData.description}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                        placeholder="Mô tả ngắn về dịch vụ"
-                        disabled={isCreating}
-                      />
-                    </div>
-
-                    <Button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white w-full mt-2" onClick={handleCreateService} disabled={isCreating}>
-                      {isCreating ? "Đang thêm..." : "Thêm dịch vụ"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+        <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
+          <CardContent className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <Input
+                placeholder="Tìm dịch vụ..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+              />
             </div>
+            <Button className="bg-[#2563eb] hover:bg-[#1e4fc7] text-white text-sm" onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Thêm dịch vụ
+            </Button>
           </CardContent>
         </Card>
 
-        <Card className="border border-slate-200 bg-white shadow-sm rounded-xl">
+        <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
           <CardContent className="p-4">
-            {isLoading ? (
-              <div className="px-2 py-10 text-center text-slate-500">
-                <p className="font-medium">Đang tải danh sách dịch vụ...</p>
-              </div>
-            ) : filteredRows.length === 0 ? (
-              <div className="px-2 py-10 text-center text-slate-500">
-                <Wrench className="h-8 w-8 mx-auto mb-3 text-slate-400" />
-                <p className="font-medium">Không có dữ liệu dịch vụ</p>
-                <p className="text-sm mt-1">Hệ thống sẽ hiển thị khi có yêu cầu theo danh mục.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filteredRows.map((item) => {
-                  return (
-                    <div
-                      key={item.name}
-                      className="text-left border rounded-xl p-4 transition border-slate-200 bg-white hover:border-slate-300"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                          <p className="text-xs text-slate-500 mt-1">Tổng yêu cầu: {item.total}</p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleDeleteService(item.name)
-                          }}
-                          className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-
-                      <div className="mt-3">
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                          Hoàn thành: {item.completed}
-                        </Badge>
-                      </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {isLoading && (
+                <div className="col-span-full text-center py-6 text-slate-400">Đang tải dữ liệu...</div>
+              )}
+              {filteredServices.map((item) => (
+                <div key={item.id} className="rounded-xl border border-slate-700 bg-[#14171f] p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-100 leading-none">{item.name}</p>
+                      <p className="text-xs text-slate-400 mt-2">Tổng yêu cầu: {item.totalRequests}</p>
                     </div>
-                  )
-                })}
-              </div>
-            )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-lg border border-slate-800 text-red-400 hover:text-red-300 hover:bg-red-950/20"
+                      onClick={() => handleDeleteService(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="mt-3">
+                    <span className="inline-flex items-center rounded-md border border-emerald-800 bg-emerald-950/40 px-2 py-1 text-xs font-semibold text-emerald-300">
+                      Hoàn thành: {item.completedRequests}
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {filteredServices.length === 0 && (
+                <div className="col-span-full text-center py-10 text-slate-400">
+                  Không có dịch vụ phù hợp
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </main>

@@ -1,12 +1,11 @@
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import {
   LayoutDashboard,
   ClipboardList,
   Users,
   Wrench,
-  Settings,
+  MapPin,
   Bell,
-  BarChart3,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -14,7 +13,6 @@ import {
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import Cookies from "js-cookie"
 
@@ -25,10 +23,9 @@ const mainNav = [
     icon: LayoutDashboard,
   },
   {
-    title: "Yêu cầu sửa chữa",
+    title: "Quản lý tài khoản",
     href: "/admin/yeu-cau",
     icon: ClipboardList,
-    badge: 12,
   },
   {
     title: "Kỹ thuật viên",
@@ -41,9 +38,9 @@ const mainNav = [
     icon: Wrench,
   },
   {
-    title: "Báo cáo",
-    href: "/admin/bao-cao",
-    icon: BarChart3,
+    title: "Thành phố",
+    href: "/admin/thanh-pho",
+    icon: MapPin,
   },
 ]
 
@@ -53,16 +50,10 @@ const secondaryNav = [
     href: "/admin/thong-bao",
     icon: Bell,
   },
-  {
-    title: "Cài đặt",
-    href: "/admin/cai-dat",
-    icon: Settings,
-  },
 ]
 
 export function AppSidebar() {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false)
   const [adminUser, setAdminUser] = useState<any>(null)
 
@@ -77,7 +68,8 @@ export function AppSidebar() {
   const handleLogout = () => {
     Cookies.remove("token")
     localStorage.removeItem("adminUser")
-    localStorage.removeItem("fastfix_token")
+    localStorage.removeItem("accessToken")
+    localStorage.removeItem("refreshToken")
     window.location.href = "/"
   }
 
@@ -166,6 +158,7 @@ export function AppSidebar() {
             </Link>
           )
         })}
+
       </nav>
 
       {/* User & Collapse */}

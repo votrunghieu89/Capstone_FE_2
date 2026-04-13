@@ -1,9 +1,8 @@
 import {
   ClipboardList,
-  Clock,
+  Users,
   CheckCircle2,
   AlertTriangle,
-  TrendingUp
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { AdminStats } from "@/lib/api"
@@ -20,29 +19,21 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
       title: "Tổng yêu cầu",
       value: stats?.totalRequests ?? 0,
       icon: ClipboardList,
-      metric: "+12.5% So với tháng trước",
-      metricColor: "text-emerald-500",
     },
     {
-      title: "Đang xử lý",
-      value: stats?.pendingRequests ?? 0,
-      icon: Clock,
-      metric: "-3.2% So với tháng trước",
-      metricColor: "text-emerald-500",
+      title: "Tổng tài khoản",
+      value: (stats?.totalUsers ?? 0) + (stats?.totalTechnicians ?? 0),
+      icon: Users,
     },
     {
       title: "Hoàn thành",
       value: stats?.completedRequests ?? 0,
       icon: CheckCircle2,
-      metric: "+8.7% So với tháng trước",
-      metricColor: "text-emerald-500",
     },
     {
-      title: "Cần xử lý gấp",
-      value: stats?.cancelledRequests || 6, // Fallback to 6 to match mockup if 0
+      title: "Đã hủy",
+      value: stats?.cancelledRequests ?? 0,
       icon: AlertTriangle,
-      metric: "+2 Yêu cầu khẩn cấp",
-      metricColor: "text-emerald-500",
     },
   ]
 
@@ -80,9 +71,6 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
                 <card.icon className="h-5 w-5 text-blue-500" />
               </div>
             </div>
-            <p className={`text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 ${card.metricColor}`}>
-              <TrendingUp className="w-3 h-3" /> {card.metric}
-            </p>
           </CardContent>
         </Card>
       ))}

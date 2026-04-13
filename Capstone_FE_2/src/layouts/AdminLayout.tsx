@@ -1,20 +1,52 @@
 import { Outlet } from "react-router-dom"
 import { AppSidebar } from "@/components/admin/app-sidebar"
 import { useEffect, useState } from "react"
+import {
+  getAnyAccessToken,
+  getRoleFromAccessToken,
+  getRoleFromPersistedStore,
+  isTokenExpired,
+} from "@/utils/authToken"
+
+function isExplicitNonAdmin(role?: string): boolean {
+  if (!role) return false
+  const normalized = role.trim().toLowerCase()
+  return !(normalized === "admin" || normalized === "administrator" || normalized.includes("admin"))
+}
 
 export default function AdminLayout() {
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('fastfix_token');
-    if (!token) {
-      window.location.href = '/?login=admin';
-    } else {
-      setIsAuthorized(true);
-    }
-  }, []);
+    const accessToken = getAnyAccessToken()
+    const tokenRole = getRoleFromAccessToken(accessToken)
+    const persistedRole = getRoleFromPersistedStore()
 
-  if (isAuthorized === null) return null;
+    if (!accessToken || isTokenExpired(accessToken)) {
+      window.location.href = '/?login=admin'
+      return
+    }
+
+    // Only block when role is explicitly non-admin.
+    if (isExplicitNonAdmin(tokenRole)) {
+      window.location.href = '/?login=admin'
+      return
+    }
+
+    // Fallback to persisted role only when token has no role claim.
+    if (!tokenRole && isExplicitNonAdmin(persistedRole)) {
+      window.location.href = '/?login=admin'
+      return
+    }
+
+    if (localStorage.getItem('accessToken') !== accessToken) {
+      localStorage.setItem('accessToken', accessToken)
+    }
+
+    setIsAuthorized(true)
+  }, [])
+
+  if (isAuthorized === null) return null
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">

@@ -8,9 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import {
   Table,
   TableBody,
@@ -19,200 +17,230 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { MapPin, Plus, Search, Trash2 } from "lucide-react"
-import toast from "react-hot-toast"
+import { MapPin, Search, Plus, Trash2 } from "lucide-react"
+import { adminDelete, adminGet, adminPost, normalizeListPayload } from "@/utils/adminHttp"
 
 type CityItem = {
   id: string
   name: string
-  createdAt: string
 }
 
-const STORAGE_KEY = "fastfix_admin_cities"
-
-function buildDefaultCities(): CityItem[] {
-  const now = new Date().toISOString()
-  return [
-    { id: "hcm", name: "TP. Ho Chi Minh", createdAt: now },
-    { id: "hn", name: "Ha Noi", createdAt: now },
-    { id: "dn", name: "Da Nang", createdAt: now },
-  ]
+type ApiCityItem = {
+  id?: string
+  cityId?: string
+  name?: string
+  cityName?: string
 }
 
-function loadCities(): CityItem[] {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return buildDefaultCities()
-
-  try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return buildDefaultCities()
-    return parsed
-      .filter((x) => x && typeof x.name === "string")
-      .map((x) => ({
-        id: String(x.id || crypto.randomUUID()),
-        name: String(x.name),
-        createdAt: String(x.createdAt || new Date().toISOString()),
-      }))
-  } catch {
-    return buildDefaultCities()
-  }
-}
+const seedCities: CityItem[] = [
+  { id: "c1", name: "TP. Cần Thơ" },
+  { id: "c2", name: "TP. Vinh" },
+  { id: "c3", name: "TP. Hồ Chí Minh" },
+  { id: "c4", name: "Ha Noi" },
+  { id: "c5", name: "Da Nang" },
+]
 
 export default function CitiesPage() {
-  const [cities, setCities] = useState<CityItem[]>([])
+  const [cities, setCities] = useState<CityItem[]>(seedCities)
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [cityName, setCityName] = useState("")
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [newCity, setNewCity] = useState("")
+  const [formError, setFormError] = useState("")
 
   useEffect(() => {
-    setCities(loadCities())
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const payload = await adminGet("/admin/cities")
+        const rows = normalizeListPayload<ApiCityItem>(payload)
+          .map((row, index) => ({
+            id: row.cityId || row.id || `c${index + 1}`,
+            name: row.name || row.cityName || "",
+          }))
+          .filter((row) => row.name)
+
+        if (!mounted) return
+        if (rows.length > 0) setCities(rows)
+      } catch {
+        if (!mounted) return
+        setCities(seedCities)
+      } finally {
+        if (!mounted) return
+        setIsLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
-  useEffect(() => {
-    if (cities.length === 0) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cities))
-  }, [cities])
-
   const filteredCities = useMemo(() => {
-    const keyword = searchQuery.trim().toLowerCase()
-    if (!keyword) return cities
-    return cities.filter((c) => c.name.toLowerCase().includes(keyword))
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return cities
+    return cities.filter((item) => item.name.toLowerCase().includes(q))
   }, [cities, searchQuery])
 
-  const handleAddCity = () => {
-    const name = cityName.trim()
-    if (!name) {
-      toast.error("Vui lòng nhập tên thành phố")
-      return
-    }
+  const handleDeleteCity = async (id: string) => {
+    const snapshot = cities
+    setCities((prev) => prev.filter((item) => item.id !== id))
 
-    const exists = cities.some((c) => c.name.trim().toLowerCase() === name.toLowerCase())
-    if (exists) {
-      toast.error("Thành phố đã tồn tại")
-      return
+    try {
+      await adminDelete(`/admin/cities/${id}`)
+    } catch {
+      setCities(snapshot)
     }
-
-    const next: CityItem = {
-      id: crypto.randomUUID(),
-      name,
-      createdAt: new Date().toISOString(),
-    }
-
-    setCities((prev) => [next, ...prev])
-    setCityName("")
-    setIsDialogOpen(false)
-    toast.success("Thêm thành phố thành công")
   }
 
-  const handleDeleteCity = (city: CityItem) => {
-    const ok = window.confirm(`Xóa thành phố ${city.name}?`)
-    if (!ok) return
+  const handleCreateCity = async () => {
+    const name = newCity.trim()
+    if (!name) {
+      setFormError("Vui lòng nhập tên thành phố")
+      return
+    }
 
-    const next = cities.filter((c) => c.id !== city.id)
-    setCities(next)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    toast.success("Xóa thành phố thành công")
+    const exists = cities.some((item) => item.name.toLowerCase() === name.toLowerCase())
+    if (exists) {
+      setFormError("Thành phố đã tồn tại")
+      return
+    }
+
+    setCities((prev) => [{ id: `c${Date.now()}`, name }, ...prev])
+    setNewCity("")
+    setFormError("")
+    setIsCreateOpen(false)
+
+    try {
+      await adminPost("/admin/cities", { name })
+      const payload = await adminGet("/admin/cities")
+      const rows = normalizeListPayload<ApiCityItem>(payload)
+        .map((row, index) => ({
+          id: row.cityId || row.id || `c${index + 1}`,
+          name: row.name || row.cityName || "",
+        }))
+        .filter((row) => row.name)
+      if (rows.length > 0) setCities(rows)
+    } catch {
+      // Keep optimistic local row if API create fails.
+    }
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#070b14] text-slate-100">
       <DashboardHeader
         title="Thành phố"
         description="Quản lý danh sách thành phố hỗ trợ dịch vụ"
       />
 
-      <main className="flex-1 p-6 flex flex-col gap-5 max-w-[1200px] w-full mx-auto">
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          setIsCreateOpen(open)
+          if (!open) setFormError("")
+        }}
+      >
+        <DialogContent className="max-w-lg border border-slate-800 bg-[#0d1322] text-slate-100">
+          <DialogHeader>
+            <DialogTitle className="text-base text-slate-100">Thêm thành phố mới</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-slate-200">Tên thành phố</p>
+              <Input
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
+                placeholder="Nhập tên thành phố"
+                className="bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+              />
+            </div>
+
+            {formError && <p className="text-xs text-red-300">{formError}</p>}
+
+            <Button className="w-full bg-[#2563eb] hover:bg-[#1e4fc7] text-white text-sm" onClick={handleCreateCity}>
+              Thêm thành phố
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card className="border border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-4 flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[#eff6ff] text-[#2563eb] flex items-center justify-center">
-                <MapPin className="h-5 w-5" />
+          <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
+            <CardContent className="p-6 flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-950/40 border border-blue-800 flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-blue-300" />
               </div>
               <div>
-                <p className="text-sm text-slate-500">Tổng thành phố</p>
-                <p className="text-2xl font-bold text-slate-900">{cities.length}</p>
+                <p className="text-slate-400 text-xs">Tổng thành phố</p>
+                <p className="text-xl font-bold text-slate-100">{cities.length}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-4 flex items-center justify-between gap-3">
-              <div className="relative max-w-sm w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
+            <CardContent className="p-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <Input
                   placeholder="Tìm thành phố..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-[#2563eb]"
+                  className="pl-9 bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
                 />
               </div>
-
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-md font-medium px-5">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Thêm thành phố
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>Thêm thành phố mới</DialogTitle>
-                  </DialogHeader>
-                  <div className="flex flex-col gap-4 py-4">
-                    <div className="flex flex-col gap-2">
-                      <Label>Tên thành phố</Label>
-                      <Input
-                        value={cityName}
-                        onChange={(e) => setCityName(e.target.value)}
-                        placeholder="Nhập tên thành phố"
-                      />
-                    </div>
-
-                    <Button className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white w-full mt-2" onClick={handleAddCity}>
-                      Thêm thành phố
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button className="bg-[#2563eb] hover:bg-[#1e4fc7] text-white text-sm" onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Thêm thành phố
+              </Button>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="border border-slate-200 bg-white shadow-sm overflow-hidden rounded-xl">
+        <Card className="border border-slate-800 bg-[#0b111f] rounded-xl overflow-hidden">
           <CardContent className="p-0">
-            {filteredCities.length === 0 ? (
-              <div className="px-6 py-12 text-center text-slate-500">
-                <MapPin className="h-8 w-8 mx-auto mb-3 text-slate-400" />
-                <p className="font-medium">Không có thành phố</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
+            <Table>
+              <TableHeader className="bg-[#101a2f] border-b border-slate-800">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs font-bold text-slate-300 h-12">Thành phố</TableHead>
+                  <TableHead className="text-xs font-bold text-slate-300 h-12 text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading && (
                   <TableRow>
-                    <TableHead>Thành phố</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
+                    <TableCell colSpan={2} className="text-center text-slate-400 py-8">
+                      Đang tải dữ liệu...
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCities.map((city) => (
-                    <TableRow key={city.id}>
-                      <TableCell className="font-medium text-slate-900">{city.name}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteCity(city)}
-                          className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Xóa
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                )}
+                {filteredCities.map((item) => (
+                  <TableRow key={item.id} className="border-b border-slate-800/80 hover:bg-[#111b32]">
+                    <TableCell className="text-sm text-slate-100">{item.name}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-3 rounded-lg border border-slate-800 text-red-400 hover:text-red-300 hover:bg-red-950/20"
+                        onClick={() => handleDeleteCity(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Xóa
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!isLoading && filteredCities.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center text-slate-400 py-8">
+                      Không có thành phố phù hợp
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </main>

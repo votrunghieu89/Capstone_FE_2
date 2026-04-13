@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { DashboardHeader } from "@/components/admin/dashboard-header"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -11,482 +11,299 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Separator } from "@/components/ui/separator"
-import {
-  Bell,
-  CheckCheck,
-  Search,
-  ShieldAlert,
-  MessageSquare,
-  UserPlus,
-  UserCog,
-  Trash2,
-} from "lucide-react"
-import { adminApi } from "@/services/adminApi"
-import type { AdminNotificationItem, UserDetailItem } from "@/types/admin"
-import toast from "react-hot-toast"
+import { Search, CheckCheck, Trash2, Bell, UserRound } from "lucide-react"
+import type { AdminNotificationItem } from "@/types/admin"
+import { adminDelete, adminGet, adminPost, adminPut, normalizeListPayload } from "@/utils/adminHttp"
 
-type NotificationType = "system" | "account" | "security" | "feedback"
+type NotificationType = "phan-hoi" | "dang-ky" | "bao-mat"
 
 type NotificationItem = {
   id: string
   title: string
   message: string
-  createdAt: string
   type: NotificationType
-  referenceId: string | null
-  referenceType: string | null
-  read: boolean
+  sourceLabel: string
+  isRead: boolean
+  createdAgo: string
 }
 
-const typeMeta: Record<
-  NotificationType,
+const seedNotifications: NotificationItem[] = [
   {
-    label: string
-    icon: ComponentType<{ className?: string }>
-    badgeClass: string
-  }
-> = {
-  system: {
-    label: "Hệ thống",
-    icon: Bell,
-    badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+    id: "n1",
+    title: "Tài khoản kỹ thuật viên mới được tạo",
+    message: "Đã tạo tài khoản kỹ thuật viên p@gmail.com thành công.",
+    type: "dang-ky",
+    sourceLabel: "Tài khoản",
+    isRead: false,
+    createdAgo: "3 giờ trước",
   },
-  account: {
-    label: "Tài khoản",
-    icon: UserPlus,
-    badgeClass: "bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]",
+  {
+    id: "n2",
+    title: "Khôi phục dịch vụ",
+    message: "Đã khôi phục dịch vụ Điện.",
+    type: "bao-mat",
+    sourceLabel: "Hệ thống",
+    isRead: false,
+    createdAgo: "3 giờ trước",
   },
-  security: {
-    label: "Bảo mật",
-    icon: ShieldAlert,
-    badgeClass: "bg-red-50 text-red-600 border-red-200",
+  {
+    id: "n3",
+    title: "Xóa dịch vụ",
+    message: "Đã xóa dịch vụ Điện.",
+    type: "bao-mat",
+    sourceLabel: "Hệ thống",
+    isRead: false,
+    createdAgo: "3 giờ trước",
   },
-  feedback: {
-    label: "Phản hồi KH",
-    icon: MessageSquare,
-    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  {
+    id: "n4",
+    title: "Đã mở khóa kỹ thuật viên",
+    message: "Tài khoản kỹ thuật viên a@gmail.com đã được mở khóa.",
+    type: "dang-ky",
+    sourceLabel: "Tài khoản",
+    isRead: false,
+    createdAgo: "5 giờ trước",
   },
+]
+
+const typeBadgeMap: Record<NotificationType, string> = {
+  "phan-hoi": "bg-emerald-950/40 text-emerald-300 border-emerald-800",
+  "dang-ky": "bg-blue-950/40 text-blue-300 border-blue-800",
+  "bao-mat": "bg-red-950/40 text-red-300 border-red-800",
 }
 
-function toRelativeTime(isoDate: string) {
-  const date = new Date(isoDate)
-  if (Number.isNaN(date.getTime())) return isoDate
-
-  const diffMs = date.getTime() - Date.now()
-  const minute = 60 * 1000
-  const hour = 60 * minute
-  const day = 24 * hour
-  const rtf = new Intl.RelativeTimeFormat("vi", { numeric: "auto" })
-
-  if (Math.abs(diffMs) < hour) {
-    return rtf.format(Math.round(diffMs / minute), "minute")
-  }
-  if (Math.abs(diffMs) < day) {
-    return rtf.format(Math.round(diffMs / hour), "hour")
-  }
-
-  return rtf.format(Math.round(diffMs / day), "day")
+function toRelativeTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "Vừa xong"
+  const diffHours = Math.max(1, Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60)))
+  return `${diffHours} giờ trước`
 }
 
-function normalizeType(type: string | null): NotificationType {
-  const value = (type || "").trim().toLowerCase()
-  if (value === "account") return "account"
-  if (value === "security") return "security"
-  if (value === "feedback") return "feedback"
-  return "system"
-}
-
-function mapApiItem(item: AdminNotificationItem): NotificationItem {
-  return {
-    id: item.id,
-    title: item.title,
-    message: item.message,
-    createdAt: toRelativeTime(item.createdAt),
-    type: normalizeType(item.notificationType),
-    referenceId: item.referenceId,
-    referenceType: item.referenceType,
-    read: item.isRead,
+function mapType(input?: string): NotificationType {
+  const normalized = (input || "").toLowerCase()
+  if (normalized.includes("feedback") || normalized.includes("phan_hoi") || normalized.includes("review")) {
+    return "phan-hoi"
   }
+  if (normalized.includes("security") || normalized.includes("bao_mat") || normalized.includes("system")) {
+    return "bao-mat"
+  }
+  return "dang-ky"
 }
 
-function mapRoleLabel(role: string) {
-  const normalized = role.toLowerCase()
-  if (normalized === "customer") return "Người dùng"
-  if (normalized === "technician") return "Kỹ thuật viên"
-  if (normalized === "admin") return "Quản trị viên"
-  return role
+function getPersistedAccountId(): string {
+  try {
+    const raw = localStorage.getItem("fastfix-auth-storage")
+    if (!raw) return ""
+    const parsed = JSON.parse(raw) as { state?: { user?: { id?: string } } }
+    return parsed?.state?.user?.id || ""
+  } catch {
+    return ""
+  }
 }
 
 export default function NotificationsPage() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>(seedNotifications)
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [filter, setFilter] = useState<"all" | "unread" | NotificationType>("all")
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [actionLoading, setActionLoading] = useState(false)
-  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [registrationDetail, setRegistrationDetail] = useState<UserDetailItem | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [approving, setApproving] = useState(false)
-
-  const loadNotifications = async () => {
-    setLoading(true)
-    try {
-      const params = {
-        search: searchQuery || undefined,
-        type:
-          filter === "account" || filter === "security" || filter === "system" || filter === "feedback"
-            ? filter
-            : undefined,
-        unreadOnly: filter === "unread" ? true : undefined,
-      }
-
-      const data: AdminNotificationItem[] = await adminApi.getNotifications(params)
-      setNotifications(data.map(mapApiItem))
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể tải thông báo"
-      toast.error(message)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [typeFilter, setTypeFilter] = useState("all")
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadNotifications()
-    }, 250)
+    let mounted = true
 
-    return () => clearTimeout(timer)
-  }, [searchQuery, filter])
+    ;(async () => {
+      try {
+        const payload = await adminGet("/admin/notifications")
+        const rows = normalizeListPayload<AdminNotificationItem>(payload).map((item) => ({
+          id: item.id,
+          title: item.title,
+          message: item.message,
+          type: mapType(item.notificationType || item.referenceType || undefined),
+          sourceLabel: item.referenceType || "Hệ thống",
+          isRead: !!item.isRead,
+          createdAgo: toRelativeTime(item.createdAt),
+        }))
 
-  const filteredNotifications = useMemo(() => notifications, [notifications])
+        if (!mounted) return
+        if (rows.length > 0) setNotifications(rows)
+      } catch {
+        if (!mounted) return
+        setNotifications(seedNotifications)
+      } finally {
+        if (!mounted) return
+        setIsLoading(false)
+      }
+    })()
 
-  const unreadCount = notifications.filter((item) => !item.read).length
+    return () => {
+      mounted = false
+    }
+  }, [])
 
-  const markAllAsRead = async () => {
-    setActionLoading(true)
+  const filteredNotifications = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return notifications.filter((item) => {
+      const matchesSearch =
+        q.length === 0 ||
+        item.title.toLowerCase().includes(q) ||
+        item.message.toLowerCase().includes(q)
+      const matchesType = typeFilter === "all" || item.type === typeFilter
+      return matchesSearch && matchesType
+    })
+  }, [notifications, searchQuery, typeFilter])
+
+  const totalCount = notifications.length
+  const unreadCount = notifications.filter((item) => !item.isRead).length
+  const feedbackCount = notifications.filter((item) => item.type === "phan-hoi").length
+  const registerCount = notifications.filter((item) => item.type === "dang-ky").length
+  const securityCount = notifications.filter((item) => item.type === "bao-mat").length
+
+  const markAllRead = async () => {
+    setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
+
+    const accountId = getPersistedAccountId()
     try {
-      await adminApi.markAllNotificationsRead()
-      await loadNotifications()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể cập nhật thông báo"
-      toast.error(message)
-    } finally {
-      setActionLoading(false)
+      await adminPut("/admin/notifications/read-all", {})
+    } catch {
+      try {
+        if (accountId) await adminPost(`/notification/mark-all/${accountId}`, {})
+      } catch {
+        // Keep local state if backend mark-all endpoint is unavailable.
+      }
     }
   }
 
-  const clearReadNotifications = async () => {
-    setActionLoading(true)
+  const clearRead = async () => {
+    const snapshot = notifications
+    setNotifications((prev) => prev.filter((item) => !item.isRead))
+
     try {
-      await adminApi.deleteReadNotifications()
-      await loadNotifications()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể xóa thông báo đã đọc"
-      toast.error(message)
-    } finally {
-      setActionLoading(false)
+      await adminDelete("/admin/notifications/read")
+    } catch {
+      try {
+        await adminDelete("/admin/notifications/delete-read")
+      } catch {
+        setNotifications(snapshot)
+      }
     }
   }
 
-  const toggleReadState = async (item: NotificationItem) => {
-    setActionLoading(true)
+  const markRead = async (id: string) => {
+    setNotifications((prev) => prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)))
+
     try {
-      await adminApi.updateNotificationRead(item.id, !item.read)
-      await loadNotifications()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể cập nhật trạng thái thông báo"
-      toast.error(message)
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const openNotificationDetail = async (item: NotificationItem) => {
-    setSelectedNotification(item)
-    setRegistrationDetail(null)
-    setIsDetailOpen(true)
-
-    if (item.type !== "account" || item.referenceType !== "user_registration" || !item.referenceId) {
-      return
-    }
-
-    setDetailLoading(true)
-    try {
-      const userDetail: UserDetailItem = await adminApi.getUserDetail(item.referenceId)
-      setRegistrationDetail(userDetail)
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể tải thông tin tài khoản đăng ký"
-      toast.error(message)
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-
-  const approveRegistrationAccount = async () => {
-    if (!registrationDetail) return
-
-    setApproving(true)
-    try {
-      await adminApi.approveUserAccount(registrationDetail.id, true)
-      toast.success("Duyệt tài khoản thành công")
-
-      const refreshed = await adminApi.getUserDetail(registrationDetail.id)
-      setRegistrationDetail(refreshed)
-      await loadNotifications()
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Không thể duyệt tài khoản"
-      toast.error(message)
-    } finally {
-      setApproving(false)
+      await adminPut(`/admin/notifications/${id}/read`, { isRead: true })
+    } catch {
+      try {
+        await adminPost(`/notification/read/${id}`, {})
+      } catch {
+        // Keep local state if backend read endpoint is unavailable.
+      }
     }
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#f8fafc]">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#070b14] text-slate-100">
       <DashboardHeader
         title="Thông báo"
         description="Theo dõi yêu cầu đăng ký tài khoản và phản hồi của khách hàng"
       />
 
-      <main className="flex-1 p-6 flex flex-col gap-5 max-w-[1200px] w-full mx-auto">
-        <Card className="border border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Tìm kiếm thông báo..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-slate-50 border-slate-200 focus-visible:ring-[#2563eb]"
-                />
+      <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
+        <Card className="border border-slate-800 bg-[#0b111f] rounded-xl">
+          <CardContent className="p-4 flex flex-col gap-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                  <Input
+                    placeholder="Tìm kiếm thông báo..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+                  />
+                </div>
+
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-[160px] bg-[#101a2f] border-slate-700 text-slate-100">
+                    <SelectValue placeholder="Tất cả" />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-700 bg-[#101a2f] text-slate-100">
+                    <SelectItem value="all">Tất cả</SelectItem>
+                    <SelectItem value="phan-hoi">Phản hồi KH</SelectItem>
+                    <SelectItem value="dang-ky">Yêu cầu đăng ký</SelectItem>
+                    <SelectItem value="bao-mat">Bảo mật</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <Select value={filter} onValueChange={(value) => setFilter(value as "all" | "unread" | NotificationType)}>
-                <SelectTrigger className="w-[170px] bg-slate-50 border-slate-200 focus:ring-[#2563eb]">
-                  <SelectValue placeholder="Lọc thông báo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả</SelectItem>
-                  <SelectItem value="unread">Chưa đọc</SelectItem>
-                  <SelectItem value="feedback">Phản hồi KH</SelectItem>
-                  <SelectItem value="account">Tài khoản</SelectItem>
-                  <SelectItem value="security">Bảo mật</SelectItem>
-                  <SelectItem value="system">Hệ thống</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Button className="bg-[#101a2f] hover:bg-[#172340] border border-slate-700 text-slate-100 text-sm" onClick={markAllRead}>
+                  <CheckCheck className="h-4 w-4 mr-2" />
+                  Đánh dấu tất cả đã đọc
+                </Button>
+                <Button className="bg-[#101a2f] hover:bg-red-950/30 border border-slate-700 text-red-300 text-sm" onClick={clearRead}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Xóa đã đọc
+                </Button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={markAllAsRead}
-                className="border-slate-200 hover:bg-transparent"
-                disabled={unreadCount === 0 || actionLoading}
-              >
-                <CheckCheck className="h-4 w-4 mr-2" />
-                Đánh dấu tất cả đã đọc
-              </Button>
-              <Button
-                variant="outline"
-                onClick={clearReadNotifications}
-                className="border-slate-200 text-red-600 hover:text-red-700 hover:bg-transparent"
-                disabled={actionLoading}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Xóa đã đọc
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="bg-[#101a2f] border-slate-700 text-slate-200 text-xs">Tất cả: {totalCount}</Badge>
+              <Badge variant="outline" className="bg-blue-950/40 border-blue-800 text-blue-300 text-xs">Chưa đọc: {unreadCount}</Badge>
+              <Badge variant="outline" className="bg-emerald-950/40 border-emerald-800 text-emerald-300 text-xs">Phản hồi KH: {feedbackCount}</Badge>
+              <Badge variant="outline" className="bg-blue-950/40 border-blue-800 text-blue-300 text-xs">Yêu cầu đăng ký: {registerCount}</Badge>
+              <Badge variant="outline" className="bg-red-950/40 border-red-800 text-red-300 text-xs">Bảo mật: {securityCount}</Badge>
             </div>
           </CardContent>
         </Card>
 
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="bg-white text-slate-700 border-slate-200 px-3 py-1.5 text-xs font-semibold">
-            Tất cả: {notifications.length}
-          </Badge>
-          <Badge variant="outline" className="bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe] px-3 py-1.5 text-xs font-semibold">
-            Chưa đọc: {unreadCount}
-          </Badge>
-          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1.5 text-xs font-semibold">
-            Phản hồi KH: {notifications.filter((item) => item.type === "feedback").length}
-          </Badge>
-          <Badge variant="outline" className="bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe] px-3 py-1.5 text-xs font-semibold">
-            Yêu cầu đăng ký: {notifications.filter((item) => item.type === "account").length}
-          </Badge>
-          <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 px-3 py-1.5 text-xs font-semibold">
-            Bảo mật: {notifications.filter((item) => item.type === "security").length}
-          </Badge>
-        </div>
-
-        <Card className="border border-slate-200 bg-white shadow-sm overflow-hidden rounded-xl">
+        <Card className="border border-slate-800 bg-[#0b111f] rounded-xl overflow-hidden">
           <CardContent className="p-0">
-            {loading ? (
-              <div className="px-6 py-12 text-center text-slate-500">
-                <p className="font-medium">Đang tải thông báo...</p>
-              </div>
-            ) : filteredNotifications.length === 0 ? (
-              <div className="px-6 py-12 text-center text-slate-500">
-                <Bell className="h-8 w-8 mx-auto mb-3 text-slate-400" />
-                <p className="font-medium">Không có thông báo phù hợp</p>
-                <p className="text-sm mt-1">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-200">
-                {filteredNotifications.map((item) => {
-                  const meta = typeMeta[item.type]
-                  const Icon = meta.icon
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="px-5 py-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between cursor-pointer hover:bg-slate-50/60 transition-colors"
-                      onClick={() => openNotificationDetail(item)}
-                    >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="mt-0.5 w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                          <Icon className="h-4 w-4 text-slate-600" />
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <h3 className="text-sm font-semibold text-slate-900">{item.title}</h3>
-                            <Badge variant="outline" className={meta.badgeClass}>
-                              {meta.label}
-                            </Badge>
-                            {!item.read && (
-                              <Badge variant="outline" className="bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]">
-                                Mới
-                              </Badge>
-                            )}
-                          </div>
-
-                          <p className="text-sm text-slate-600 leading-relaxed">{item.message}</p>
-
-                          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                            <UserCog className="h-3.5 w-3.5" />
-                            <span>{item.createdAt}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleReadState(item)
-                          }}
-                          className="border-slate-200 hover:bg-transparent"
-                          disabled={actionLoading}
-                        >
-                          {item.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+            {isLoading && (
+              <div className="text-center py-6 text-slate-400 text-sm">Đang tải dữ liệu...</div>
             )}
-          </CardContent>
-        </Card>
-
-        <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>Chi tiết thông báo</DialogTitle>
-            </DialogHeader>
-
-            {selectedNotification && (
-              <div className="flex flex-col gap-4 pt-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className={typeMeta[selectedNotification.type].badgeClass}>
-                    {typeMeta[selectedNotification.type].label}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={selectedNotification.read
-                      ? "bg-slate-100 text-slate-700 border-slate-200"
-                      : "bg-[#eff6ff] text-[#2563eb] border-[#bfdbfe]"}
-                  >
-                    {selectedNotification.read ? "Đã đọc" : "Chưa đọc"}
-                  </Badge>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-sm text-slate-500">Tiêu đề</p>
-                  <p className="text-base font-semibold text-slate-900">{selectedNotification.title}</p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-sm text-slate-500">Nội dung</p>
-                  <p className="text-sm leading-relaxed text-slate-700">{selectedNotification.message}</p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-sm text-slate-500">Thời gian</p>
-                  <p className="text-sm text-slate-700">{selectedNotification.createdAt}</p>
-                </div>
-
-                {selectedNotification.type === "account" && selectedNotification.referenceType === "user_registration" && (
-                  <div className="rounded-lg border border-slate-200 p-4 bg-slate-50">
-                    <p className="text-sm font-semibold text-slate-800 mb-3">Thông tin tài khoản đăng ký</p>
-
-                    {detailLoading ? (
-                      <p className="text-sm text-slate-500">Đang tải thông tin tài khoản...</p>
-                    ) : registrationDetail ? (
-                      <div className="space-y-2 text-sm text-slate-700">
-                        <p><span className="text-slate-500">Họ tên:</span> {registrationDetail.fullName}</p>
-                        <p><span className="text-slate-500">Email:</span> {registrationDetail.email}</p>
-                        <p><span className="text-slate-500">Số điện thoại:</span> {registrationDetail.phone || "--"}</p>
-                        <p><span className="text-slate-500">Vai trò:</span> {mapRoleLabel(registrationDetail.role)}</p>
-                        <p>
-                          <span className="text-slate-500">Trạng thái duyệt:</span>{" "}
-                          {registrationDetail.isVerified ? "Đã duyệt" : "Chờ duyệt"}
-                        </p>
-
-                        {!registrationDetail.isVerified && (
-                          <div className="pt-2">
-                            <Button
-                              onClick={approveRegistrationAccount}
-                              disabled={approving}
-                              className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white"
-                            >
-                              {approving ? "Đang duyệt..." : "Duyệt tài khoản"}
-                            </Button>
-                          </div>
-                        )}
+            {filteredNotifications.map((item) => (
+              <div key={item.id} className="px-5 py-4 border-b border-slate-800/80 hover:bg-[#111b32] transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-full border border-slate-800 bg-[#111827] flex items-center justify-center shrink-0">
+                      {item.type === "dang-ky" ? (
+                        <UserRound className="h-4 w-4 text-slate-400" />
+                      ) : (
+                        <Bell className="h-4 w-4 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{item.title}</p>
+                        <Badge variant="outline" className="text-xs bg-[#111b32] border-slate-700 text-slate-300">
+                          {item.sourceLabel}
+                        </Badge>
+                        <Badge variant="outline" className={`text-xs ${typeBadgeMap[item.type]}`}>
+                          Mới
+                        </Badge>
                       </div>
-                    ) : (
-                      <p className="text-sm text-slate-500">Không tìm thấy thông tin tài khoản.</p>
-                    )}
+                      <p className="text-sm text-slate-300 mt-1">{item.message}</p>
+                      <p className="text-xs text-slate-500 mt-1">{item.createdAgo}</p>
+                    </div>
                   </div>
-                )}
 
-                <div className="pt-1">
                   <Button
-                    variant="outline"
-                    className="border-slate-200 hover:bg-transparent"
-                    disabled={actionLoading}
-                    onClick={() => toggleReadState(selectedNotification)}
+                    className="bg-[#101a2f] hover:bg-[#172340] border border-slate-700 text-slate-100 text-sm shrink-0"
+                    onClick={() => markRead(item.id)}
                   >
-                    {selectedNotification.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
+                    Đánh dấu đã đọc
                   </Button>
                 </div>
               </div>
-            )}
-          </DialogContent>
-        </Dialog>
+            ))}
 
-        <Separator className="bg-slate-200" />
+            {!isLoading && filteredNotifications.length === 0 && (
+              <div className="text-center py-10 text-slate-400 text-sm">Không có thông báo phù hợp</div>
+            )}
+          </CardContent>
+        </Card>
       </main>
     </div>
   )

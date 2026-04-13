@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { getAnyAccessToken, isAdminAccessToken } from '@/utils/authToken';
 
 // Layouts - loaded eagerly
 import MainLayout from '@/layouts/MainLayout';
@@ -23,7 +24,9 @@ const ReviewsPage = lazy(() => import('@/pages/customer/ReviewsPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
 const RequestsPage = lazy(() => import('@/pages/admin/RequestsPage'));
 const TechniciansPage = lazy(() => import('@/pages/admin/TechniciansPage'));
-
+const ServicesPage = lazy(() => import('@/pages/admin/ServicesPage'));
+const CitiesPage = lazy(() => import('@/pages/admin/CitiesPage'));
+const NotificationsPage = lazy(() => import('@/pages/admin/NotificationsPage'));
 const TechDashboardPage = lazy(() => import('@/pages/technician/DashboardPage'));
 const TechProfilePage = lazy(() => import('@/pages/technician/ProfilePage'));
 const TechNewRequestsPage = lazy(() => import('@/pages/technician/NewRequestsPage'));
@@ -47,6 +50,15 @@ function Loading() {
 }
 
 export default function AppRoutes() {
+  const location = useLocation();
+  const accessToken = getAnyAccessToken();
+  const isAdmin = isAdminAccessToken(accessToken);
+  const isOnAdminPath = location.pathname.startsWith('/admin');
+
+  if (isAdmin && !isOnAdminPath) {
+    return <Navigate to="/admin" replace />;
+  }
+
   return (
     <Suspense fallback={<Loading />}>
       <Routes>
@@ -70,6 +82,9 @@ export default function AppRoutes() {
           <Route index element={<AdminDashboardPage />} />
           <Route path="yeu-cau" element={<RequestsPage />} />
           <Route path="ky-thuat-vien" element={<TechniciansPage />} />
+          <Route path="dich-vu" element={<ServicesPage />} />
+          <Route path="thanh-pho" element={<CitiesPage />} />
+          <Route path="thong-bao" element={<NotificationsPage />} />
         </Route>
 
         {/* Technician */}
