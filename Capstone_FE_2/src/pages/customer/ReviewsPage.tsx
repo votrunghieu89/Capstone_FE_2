@@ -1,29 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Star, MessageCircle, Info, Loader2, ClipboardList } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Star, MessageCircle, Info, Loader2, ClipboardList, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '@/store/authStore';
 import ratingService from '@/services/ratingService';
-import orderService from '@/services/orderService';
 import { Button } from '@/components/ui/button';
 
 export default function ReviewsPage() {
     const { user } = useAuthStore();
-    const location = useLocation();
-    const queryParams = new URLSearchParams(location.search);
-    const focusOrderId = queryParams.get('orderId') || '';
-
     const [reviews, setReviews] = useState<any[]>([]);
-    const [pendingReviewOrders, setPendingReviewOrders] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [averageRating, setAverageRating] = useState(0);
-
-    const [activeOrder, setActiveOrder] = useState<any>(null);
-    const [score, setScore] = useState(5);
-    const [feedback, setFeedback] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [realCompletedOrderIds, setRealCompletedOrderIds] = useState<Set<string>>(new Set());
 
     const [editingReviewId, setEditingReviewId] = useState<string>('');
     const [editScore, setEditScore] = useState(5);
@@ -37,76 +24,47 @@ export default function ReviewsPage() {
 
         setIsLoading(true);
         try {
-            const [reviewRes, historyRes] = await Promise.all([
-                ratingService.getCustomerRatings(user.id),
-                orderService.getOrderHistory(user.id)
-            ]);
+            const reviewRes = await ratingService.getCustomerRatings(user.id);
+            const unpack = (payload: any): any[] => {
+                if (Array.isArray(payload)) return payload;
+                if (Array.isArray(payload?.data)) return payload.data;
+                if (Array.isArray(payload?.items)) return payload.items;
+                if (Array.isArray(payload?.result)) return payload.result;
+                if (Array.isArray(payload?.result?.data)) return payload.result.data;
+                return [];
+            };
 
-            const reviewDataRemote = Array.isArray(reviewRes) ? reviewRes : (reviewRes.items || reviewRes.data || []);
-            const historyOrders = Array.isArray(historyRes) ? historyRes : (historyRes.items || historyRes.data || []);
+            let reviewDataRemote = unpack(reviewRes);
+            if (reviewDataRemote.length === 0) {
+                // fallback endpoint alias
+                const altRes = await ratingService.viewRatings(user.id);
+                reviewDataRemote = unpack(altRes);
+            }
 
-            const completedIds = new Set(
-                historyOrders
-                    .map((o: any) => String(o.orderId || o.OrderId || o.id || o.Id || ''))
-                    .filter((id: string) => !!id)
-            );
-            setRealCompletedOrderIds(completedIds);
-
-            const localReviews = (() => {
-                try {
-                    const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
-                    const arr = Array.isArray(parsed) ? parsed : [];
-                    return arr.filter((r: any) => (r.customerId || '') === user.id);
-                } catch {
-                    return [];
-                }
-            })();
-
-            const reviewData = [...reviewDataRemote, ...localReviews];
+            const reviewData = reviewDataRemote.map((r: any) => ({
+                ...r,
+                orderId: String(r.orderId || r.OrderId || r.id || r.Id || ''),
+                feedbackId: String(r.feedbackId || r.FeedbackId || r.id || r.Id || ''),
+                score: Number(r.score || r.Score || r.rating || r.Rating || 0),
+                feedback: String(r.feedback || r.Feedback || r.reviewText || r.content || ''),
+                createdAt: r.createdAt || r.CreateAt || r.updatedAt || r.UpdateAt || null,
+                technicianId: String(r.technicianId || r.TechnicianId || ''),
+                technicianName: r.technicianName || r.TechnicianName || r.tech || 'Thợ FastFix'
+            }));
 
             const sortedReviews = [...reviewData].sort((a: any, b: any) => {
-                const ta = new Date(a.createdAt || a.CreateAt || a.updatedAt || a.UpdateAt || 0).getTime();
-                const tb = new Date(b.createdAt || b.CreateAt || b.updatedAt || b.UpdateAt || 0).getTime();
+                const ta = new Date(a.createdAt || 0).getTime();
+                const tb = new Date(b.createdAt || 0).getTime();
                 return tb - ta;
             });
 
             setReviews(sortedReviews);
 
-            const reviewedOrderIds = new Set(
-                reviewData
-                    .map((r: any) => String(r.orderId || r.OrderId || r.id || r.Id || ''))
-                    .filter((id: string) => !!id)
-            );
-
-            const toReview = historyOrders.filter((o: any) => {
-                const oid = String(o.orderId || o.OrderId || o.id || o.Id || '');
-                return oid && !reviewedOrderIds.has(oid);
-            });
-
-            const sortedToReview = toReview.sort((a: any, b: any) => {
-                const ta = new Date(a.orderDate || a.OrderDate || 0).getTime();
-                const tb = new Date(b.orderDate || b.OrderDate || 0).getTime();
-                return tb - ta;
-            });
-
-            setPendingReviewOrders(sortedToReview);
-
             if (reviewData.length > 0) {
-                const total = reviewData.reduce((sum: number, r: any) => sum + (r.score || r.rating || 0), 0);
+                const total = reviewData.reduce((sum: number, r: any) => sum + (Number(r.score) || 0), 0);
                 setAverageRating(Number((total / reviewData.length).toFixed(1)));
             } else {
                 setAverageRating(0);
-            }
-
-            if (sortedToReview.length > 0) {
-                const focus = sortedToReview.find((o: any) => String(o.orderId || o.OrderId || o.id || o.Id || '') === focusOrderId);
-                if (focus) {
-                    setActiveOrder(focus);
-                } else if (!activeOrder) {
-                    setActiveOrder(sortedToReview[0]);
-                }
-            } else {
-                setActiveOrder(null);
             }
         } catch (error) {
             console.error('Failed to fetch reviews:', error);
@@ -118,90 +76,6 @@ export default function ReviewsPage() {
     useEffect(() => {
         reloadData();
     }, [user?.id]);
-
-    const submitRating = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!user?.id || !activeOrder) return;
-
-        const orderId = String(activeOrder.orderId || activeOrder.OrderId || activeOrder.id || activeOrder.Id || '');
-        const technicianId = String(activeOrder.technicianId || activeOrder.TechnicianId || '');
-
-        if (!orderId || !technicianId) {
-            toast.error('Thiếu dữ liệu đơn hàng để đánh giá');
-            return;
-        }
-
-        const saveLocalReview = async () => {
-            const current = (() => {
-                try {
-                    const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
-                    return Array.isArray(parsed) ? parsed : [];
-                } catch {
-                    return [];
-                }
-            })();
-
-            current.unshift({
-                id: `local-review-${Date.now()}`,
-                orderId,
-                technicianId,
-                technicianName: activeOrder.technicianName || activeOrder.TechnicianName || 'Kỹ thuật viên',
-                customerId: user.id,
-                score,
-                feedback,
-                createdAt: new Date().toISOString(),
-                source: 'local-fallback'
-            });
-            localStorage.setItem('ff_customer_local_reviews', JSON.stringify(current));
-            setScore(5);
-            setFeedback('');
-            setActiveOrder(null);
-            await reloadData();
-        };
-
-        const isMockOrder = /^2{8}-2{4}-2{4}-2{4}-2{12}$/.test(orderId)
-            || /^5{8}-5{4}-5{4}-5{4}-5{12}$/.test(orderId)
-            || /^6{8}-6{4}-6{4}-6{4}-6{12}$/.test(orderId)
-            || String(activeOrder?.source || '').includes('local');
-
-        // Nếu orderId không thuộc danh sách completed thực tế từ backend,
-        // bắt buộc dùng local để tránh 400 FK (order không tồn tại trong DB Orders).
-        const isOrderMissingOnBackend = !realCompletedOrderIds.has(orderId);
-
-        // Frontend-only testing mode qua biến môi trường.
-        // true: lưu local, không gọi API create rating
-        // false: gọi API backend như bình thường
-        const forceLocalReview = String(import.meta.env.VITE_FORCE_LOCAL_REVIEW || '').toLowerCase() === 'true';
-
-        setIsSubmitting(true);
-        try {
-            if (forceLocalReview || isMockOrder || isOrderMissingOnBackend) {
-                await saveLocalReview();
-                toast.success('Đã lưu đánh giá (chế độ test frontend).');
-                return;
-            }
-
-            await ratingService.createRating({
-                customerId: user.id,
-                technicianId,
-                orderId,
-                score,
-                feedback
-            });
-
-            toast.success('Gửi đánh giá thành công');
-            setScore(5);
-            setFeedback('');
-            setActiveOrder(null);
-            await reloadData();
-        } catch (err: any) {
-            // Frontend-only fallback cho dữ liệu test/mock: lưu local review để vẫn test flow đánh giá
-            await saveLocalReview();
-            toast.success('Đã lưu đánh giá (chế độ test frontend).');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
 
     const handleStartEdit = (review: any) => {
         const rid = String(review.id || review.Id || review.feedbackId || review.FeedbackId || '');
@@ -215,37 +89,7 @@ export default function ReviewsPage() {
         const rid = String(review.id || review.Id || review.feedbackId || review.FeedbackId || '');
         if (!rid) return;
 
-        const isLocalReview = String(review?.source || '').includes('local') || rid.startsWith('local-review-');
-
         try {
-            if (isLocalReview) {
-                const current = (() => {
-                    try {
-                        const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
-                        return Array.isArray(parsed) ? parsed : [];
-                    } catch {
-                        return [];
-                    }
-                })();
-
-                const updated = current.map((r: any) => {
-                    const id = String(r.id || r.Id || '');
-                    if (id !== rid) return r;
-                    return {
-                        ...r,
-                        score: editScore,
-                        feedback: editFeedback,
-                        updatedAt: new Date().toISOString()
-                    };
-                });
-
-                localStorage.setItem('ff_customer_local_reviews', JSON.stringify(updated));
-                toast.success('Cập nhật đánh giá thành công (local test)');
-                setEditingReviewId('');
-                await reloadData();
-                return;
-            }
-
             await ratingService.updateRating({
                 feedbackId: rid,
                 score: editScore,
@@ -263,25 +107,6 @@ export default function ReviewsPage() {
         const rid = String(review.id || review.Id || review.feedbackId || review.FeedbackId || '');
         if (!rid) return;
         if (!window.confirm('Bạn có chắc muốn xóa đánh giá này?')) return;
-
-        const isLocalReview = String(review?.source || '').includes('local') || rid.startsWith('local-review-');
-
-        if (isLocalReview) {
-            const current = (() => {
-                try {
-                    const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
-                    return Array.isArray(parsed) ? parsed : [];
-                } catch {
-                    return [];
-                }
-            })();
-
-            const next = current.filter((r: any) => String(r.id || r.Id || '') !== rid);
-            localStorage.setItem('ff_customer_local_reviews', JSON.stringify(next));
-            toast.success('Đã xóa đánh giá');
-            await reloadData();
-            return;
-        }
 
         try {
             await ratingService.deleteRating(rid);
@@ -305,13 +130,8 @@ export default function ReviewsPage() {
                         Đánh giá Dịch vụ
                     </h1>
                     <p className="text-muted-foreground mt-2">
-                        Xác nhận hoàn thành xong, bạn có thể đánh giá ngay tại trang này.
+                        Danh sách đánh giá bạn đã gửi.
                     </p>
-                    {focusOrderId && (
-                        <p className="text-xs text-amber-300 mt-2">
-                            Đơn vừa hoàn thành: #{focusOrderId.slice(0, 8)} — hãy thêm đánh giá cho đơn này.
-                        </p>
-                    )}
                 </div>
                 {reviews.length > 0 && (
                     <div className="bg-primary/10 border border-primary/20 text-primary-light px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold">
@@ -326,57 +146,6 @@ export default function ReviewsPage() {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {pendingReviewOrders.length > 0 && (
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5 space-y-4">
-                            <h3 className="text-amber-300 font-bold">Đơn hàng chờ bạn đánh giá</h3>
-
-                            <div className="space-y-3">
-                                {pendingReviewOrders.map((o: any, idx: number) => {
-                                    const oid = String(o.orderId || o.OrderId || o.id || o.Id || '');
-                                    const isActive = String(activeOrder?.orderId || activeOrder?.OrderId || activeOrder?.id || activeOrder?.Id || '') === oid;
-                                    const isFocus = !!focusOrderId && oid === focusOrderId;
-                                    return (
-                                        <div key={oid || idx} className={`rounded-xl border p-4 ${isActive ? 'border-primary bg-primary/10' : isFocus ? 'border-amber-300 bg-amber-400/10' : 'border-white/10 bg-white/5'}`}>
-                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                                <div>
-                                                    <p className="text-white font-semibold">#{oid.slice(0, 8)} · {o.title || o.Title || 'Đơn dịch vụ'}</p>
-                                                    <p className="text-sm text-zinc-400">Thợ: {o.technicianName || o.TechnicianName || 'Kỹ thuật viên'} · {o.serviceName || o.ServiceName || 'Dịch vụ'}</p>
-                                                </div>
-                                            </div>
-
-                                            {isActive && (
-                                                <form onSubmit={submitRating} className="mt-4 border-t border-white/10 pt-4 space-y-4">
-                                                    <div className="flex items-center gap-2">
-                                                        {[1, 2, 3, 4, 5].map((s) => (
-                                                            <button key={s} type="button" onClick={() => setScore(s)} className="p-1">
-                                                                <Star className={`w-7 h-7 ${s <= score ? 'text-amber-400 fill-amber-400' : 'text-zinc-600'}`} />
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <textarea
-                                                        value={feedback}
-                                                        onChange={(e) => setFeedback(e.target.value)}
-                                                        rows={4}
-                                                        placeholder="Chia sẻ trải nghiệm của bạn với đơn hàng này..."
-                                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
-                                                    />
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button type="button" variant="ghost" onClick={() => setActiveOrder(null)}>
-                                                            Hủy
-                                                        </Button>
-                                                        <Button type="submit" className="bg-primary hover:bg-primary-dark text-white" disabled={isSubmitting}>
-                                                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Gửi đánh giá'}
-                                                        </Button>
-                                                    </div>
-                                                </form>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
                     {reviews.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {reviews.map((review, idx) => (
@@ -430,11 +199,21 @@ export default function ReviewsPage() {
                                     )}
 
                                     <div className="flex gap-2 justify-end">
-                                        <Button variant="outline" className="border-white/20 text-zinc-300" onClick={() => handleStartEdit(review)}>
-                                            Sửa
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-9 px-3 rounded-lg border border-sky-500/35 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20"
+                                            onClick={() => handleStartEdit(review)}
+                                        >
+                                            <Pencil className="w-4 h-4 mr-1.5" /> Sửa
                                         </Button>
-                                        <Button variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={() => handleDeleteReview(review)}>
-                                            Xóa
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-9 px-3 rounded-lg border border-rose-500/35 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20"
+                                            onClick={() => handleDeleteReview(review)}
+                                        >
+                                            <Trash2 className="w-4 h-4 mr-1.5" /> Xóa
                                         </Button>
                                     </div>
                                 </motion.div>

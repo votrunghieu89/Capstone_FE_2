@@ -10,12 +10,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Star } from 'lucide-react';
 
-const TEST_TECHNICIAN = {
-    id: '838b6487-73f9-4dd3-7775-08de959244aa',
-    name: 'Thợ Test SignalR',
-    email: 'tech.signalr.test+20260409@example.com'
-};
-
 const MOCK_ORDERS = [
     {
         OrderId: '11111111-1111-1111-1111-111111111111',
@@ -99,6 +93,7 @@ export default function OrdersPage() {
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
     
     // Listen to real-time notifications (from SignalR)
     const { notifications } = useNotificationSignalR();
@@ -147,20 +142,7 @@ export default function OrdersPage() {
                 if (!uniqueMap.has(id)) uniqueMap.set(id, item);
             });
 
-            const merged = Array.from(uniqueMap.values()).map((item: any) => {
-                const status = normalizeStatus(item?.status || item?.Status || '');
-                if (status === 'pending-confirmation' || status === 'pending') {
-                    // Force technician test account for end-to-end chat verification
-                    return {
-                        ...item,
-                        TechnicianId: TEST_TECHNICIAN.id,
-                        technicianId: TEST_TECHNICIAN.id,
-                        TechnicianName: TEST_TECHNICIAN.name,
-                        technicianName: TEST_TECHNICIAN.name,
-                    };
-                }
-                return item;
-            });
+            const merged = Array.from(uniqueMap.values());
 
             // Merge local fallback orders (frontend-only when autofind/place fails)
             const localOrdersRaw = (() => {
@@ -173,6 +155,15 @@ export default function OrdersPage() {
             })();
             const localOrders = localOrdersRaw
                 .filter((o: any) => (o?.customerId || '') === user.id)
+                .filter((o: any) => {
+                    const s = normalizeStatus(String(o?.status || ''));
+                    if (statusParam === 'pending') return s === 'pending' || s === 'pending-confirmation';
+                    if (statusParam === 'in-progress') return s === 'in-progress' || s === 'inprogress';
+                    if (statusParam === 'completed') return s === 'completed' || s === 'done';
+                    if (statusParam === 'cancelled') return s === 'cancelled' || s === 'canceled';
+                    if (statusParam === 'rejected') return s === 'rejected';
+                    return true;
+                })
                 .map((o: any) => ({
                     Id: o.id,
                     id: o.id,
@@ -209,17 +200,20 @@ export default function OrdersPage() {
                     return true;
                 });
 
-            const remoteAndLocal = [...merged, ...localOrders];
-
-            // Luôn bơm dữ liệu ảo cho tab "đang thực hiện" khi chưa có dữ liệu thật,
-            // để QA/test chức năng trang không phụ thuộc backend.
-            const inProgressMock = MOCK_ORDERS.filter(m => {
-                const ms = normalizeStatus(m.Status || '');
-                return ms === 'in-progress' || ms === 'inprogress';
+            const byId = new Map<string, any>();
+            merged.forEach((item: any) => {
+                const id = String(item?.id || item?.Id || item?.orderId || item?.OrderId || '');
+                if (id) byId.set(id, item);
             });
+            localOrders.forEach((item: any) => {
+                const id = String(item?.id || item?.Id || item?.orderId || item?.OrderId || '');
+                if (id && !byId.has(id)) byId.set(id, item);
+            });
+            const remoteAndLocal = Array.from(byId.values());
 
-            const dataToShow = statusParam === 'in-progress' && remoteAndLocal.length === 0
-                ? inProgressMock
+            // Với tab pending / in-progress: luôn ưu tiên dữ liệu từ API tương ứng, không bơm mock.
+            const dataToShow = (statusParam === 'pending' || statusParam === 'in-progress')
+                ? remoteAndLocal
                 : (useMock && remoteAndLocal.length === 0 ? filteredMock : remoteAndLocal);
             const sortedByNewest = [...dataToShow].sort((a: any, b: any) => {
                 const sa = normalizeStatus(a?.status || a?.Status || '');
@@ -245,6 +239,21 @@ export default function OrdersPage() {
             });
 
             setOrders(sortedByNewest);
+
+            try {
+                const ratingRes = await ratingService.viewRatings(user.id);
+                const ratingRaw = Array.isArray(ratingRes)
+                    ? ratingRes
+                    : (ratingRes?.data || ratingRes?.items || ratingRes?.result || []);
+                const reviewed = new Set(
+                    (Array.isArray(ratingRaw) ? ratingRaw : [])
+                        .map((r: any) => String(r.orderId || r.OrderId || ''))
+                        .filter((x: string) => !!x)
+                );
+                setReviewedOrderIds(reviewed);
+            } catch {
+                setReviewedOrderIds(new Set());
+            }
         } catch {
             if (!silent) setOrders([]);
         } finally {
@@ -364,16 +373,15 @@ export default function OrdersPage() {
             }));
             upsertLocalCompletedOrder();
             toast.success('Đơn hàng đã chuyển sang trạng thái hoàn thành.');
-            navigate('/customer/orders?status=all');
+            navigate('/customer/history');
             return;
         }
 
         try {
             await orderService.confirmCompletedOrder({ orderId, technicianId: technicianId || undefined });
-            upsertLocalCompletedOrder();
             await fetchOrders(true);
             toast.success("Đơn hàng đã chuyển sang trạng thái hoàn thành.");
-            navigate('/customer/orders?status=all');
+            navigate('/customer/history');
         } catch (err: any) {
             toast.error(err?.response?.data?.message || "Xác nhận thất bại");
         }
@@ -383,7 +391,29 @@ export default function OrdersPage() {
         navigate(`/customer/contact?techId=${techId}`);
     };
 
-    const handleOpenRating = (order: any) => {
+    const handleOpenRating = async (order: any) => {
+        const orderId = String(order.id || order.Id || order.orderId || order.OrderId || '');
+        const source = String(order.source || '').toLowerCase();
+
+        if (!orderId || source.includes('local') || source.includes('mock')) {
+            toast.error('Đơn này không phải dữ liệu DB nên không thể gửi đánh giá.');
+            return;
+        }
+
+        try {
+            const check = await ratingService.isFeedback(orderId);
+            const isRated = Boolean(check?.isFeedback ?? check?.data?.isFeedback ?? check?.data ?? false);
+            if (isRated) {
+                setReviewedOrderIds(prev => new Set(prev).add(orderId));
+                toast('Đơn này đã được đánh giá trước đó.');
+                navigate('/customer/reviews');
+                return;
+            }
+        } catch {
+            toast.error('Không thể xác minh trạng thái đánh giá của đơn này.');
+            return;
+        }
+
         setSelectedOrder(order);
         setShowRatingModal(true);
     };
@@ -411,13 +441,15 @@ export default function OrdersPage() {
     const normalizeStatus = (raw: string) => (raw || '').toLowerCase().replace(/\s+/g, '-');
 
     const filteredOrdersBase = orders.filter(o => {
-        if (statusParam === 'all') return true;
         const s = normalizeStatus(o.status || o.Status || '');
+        const isCompleted = s === 'completed' || s === 'done';
+
+        if (statusParam === 'all') return !isCompleted;
 
         if (statusParam === 'pending') return s === 'pending' || s === 'pending-confirmation';
 
         if (statusParam === 'in-progress') return s === 'in-progress' || s === 'inprogress';
-        if (statusParam === 'completed') return s === 'completed' || s === 'done';
+        if (statusParam === 'completed') return false;
         if (statusParam === 'cancelled') return s === 'cancelled' || s === 'canceled';
         if (statusParam === 'rejected') return s === 'rejected';
 
@@ -530,39 +562,46 @@ export default function OrdersPage() {
                                     {pick(order, ['title', 'Title']) || 'Yêu cầu sửa chữa'}
                                 </h3>
 
-                                <div className="space-y-2 text-sm text-zinc-300">
-                                    <div className="text-zinc-400">
-                                        <span className="text-zinc-500">Dịch vụ:</span> {pick(order, ['serviceName', 'ServiceName']) || '—'}
-                                    </div>
-                                    <div className="text-zinc-400 line-clamp-2">
-                                        <span className="text-zinc-500">Mô tả:</span> {pick(order, ['description', 'Description']) || '—'}
-                                    </div>
-                                    <div className="text-zinc-400">
-                                        <span className="text-zinc-500">Địa chỉ:</span> {pick(order, ['address', 'Address']) || '—'}
+                                <div className="space-y-3 text-sm text-zinc-300">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+                                            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Dịch vụ</p>
+                                            <p className="text-zinc-200 mt-0.5 truncate">{pick(order, ['serviceName', 'ServiceName']) || '—'}</p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+                                            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Kỹ thuật viên</p>
+                                            <p className="text-primary-light mt-0.5 truncate">{pick(order, ['technicianName', 'TechnicianName']) || 'Chưa gán thợ'}</p>
+                                        </div>
                                     </div>
 
-                                    {(pick(order, ['technicianName', 'TechnicianName'])) && (
-                                        <div className="flex items-center gap-2 text-primary-light font-medium">
-                                            <Wrench className="w-4 h-4" />
-                                            {pick(order, ['technicianName', 'TechnicianName'])}
-                                        </div>
-                                    )}
+                                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+                                        <p className="text-[11px] uppercase tracking-wide text-zinc-500">Địa chỉ</p>
+                                        <p className="text-zinc-200 mt-0.5 line-clamp-1">{pick(order, ['address', 'Address']) || '—'}</p>
+                                    </div>
 
-                                    <div className="pt-2 mt-2 border-t border-white/5 space-y-1.5 text-xs">
-                                        <div className="flex items-center gap-2 text-zinc-400">
-                                            <Calendar className="w-3.5 h-3.5" />
-                                            <span className="text-zinc-500">Tạo lúc:</span> {formatDateTime(pick(order, ['createdAt', 'CreatedAt', 'orderDate', 'OrderDate']))}
+                                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+                                        <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mô tả</p>
+                                        <p className="text-zinc-300 mt-0.5 line-clamp-2">{pick(order, ['description', 'Description']) || '—'}</p>
+                                    </div>
+
+                                    <div className="pt-2 mt-1 border-t border-white/5 space-y-1.5 text-xs">
+                                        <div className="flex items-center justify-between gap-2 text-zinc-400">
+                                            <span className="inline-flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Tạo lúc</span>
+                                            <span className="text-zinc-300">{formatDateTime(pick(order, ['createdAt', 'CreatedAt', 'orderDate', 'OrderDate']))}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-zinc-400">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            <span className="text-zinc-500">Cập nhật:</span> {(() => {
+                                        <div className="flex items-center justify-between gap-2 text-zinc-400">
+                                            <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Cập nhật</span>
+                                            <span className="text-zinc-300">{(() => {
                                                 const updated = pick(order, ['updatedAt', 'UpdatedAt', 'lastUpdateAt', 'LastUpdateAt']);
                                                 return updated ? formatDateTime(updated) : 'Chưa cập nhật';
-                                            })()}
+                                            })()}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-zinc-400">
-                                            <ClipboardList className="w-3.5 h-3.5" />
-                                            <span className="text-zinc-500">Mã đơn:</span> {String(order.id || order.Id || '—')}
+                                        <div className="flex items-center justify-between gap-2 text-zinc-400">
+                                            <span className="inline-flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5" /> Mã đơn</span>
+                                            <span className="font-mono text-zinc-300">{(() => {
+                                                const oid = String(order.id || order.Id || '');
+                                                return oid ? `${oid.slice(0, 8)}...${oid.slice(-4)}` : '—';
+                                            })()}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -621,7 +660,7 @@ export default function OrdersPage() {
                                     })() && (
                                         <Button 
                                             className="w-full bg-primary hover:bg-primary-dark text-white h-9 text-xs"
-                                            onClick={() => handleOpenRating(order)}
+                                            onClick={() => void handleOpenRating(order)}
                                         >
                                             <Star className="w-3.5 h-3.5 mr-1.5 fill-current" /> Đánh giá dịch vụ
                                         </Button>
@@ -663,9 +702,12 @@ export default function OrdersPage() {
                             setSelectedOrder(null);
                         }}
                         onSuccess={() => {
+                            const oid = String(selectedOrder?.id || selectedOrder?.Id || selectedOrder?.orderId || selectedOrder?.OrderId || '');
+                            if (oid) setReviewedOrderIds(prev => new Set(prev).add(oid));
                             setShowRatingModal(false);
                             setSelectedOrder(null);
                             fetchOrders(true);
+                            navigate('/customer/reviews');
                         }}
                     />
                 )}
@@ -918,41 +960,8 @@ function RatingModal({ order, onClose, onSuccess }: { order: any; onClose: () =>
         const orderId = String(order.id || order.Id || order.orderId || order.OrderId || '');
         const technicianId = String(order.technicianId || order.TechnicianId || '');
 
-        const saveLocalReview = () => {
-            const current = (() => {
-                try {
-                    const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
-                    return Array.isArray(parsed) ? parsed : [];
-                } catch {
-                    return [];
-                }
-            })();
-
-            current.unshift({
-                id: `local-review-${Date.now()}`,
-                orderId,
-                technicianId,
-                technicianName: order.technicianName || order.TechnicianName || 'Kỹ thuật viên',
-                customerId: user.id,
-                score,
-                feedback,
-                createdAt: new Date().toISOString(),
-                source: 'local-fallback'
-            });
-            localStorage.setItem('ff_customer_local_reviews', JSON.stringify(current));
-        };
-
-        const forceLocalReview = String(import.meta.env.VITE_FORCE_LOCAL_REVIEW || '').toLowerCase() === 'true';
-
         setIsSubmitting(true);
         try {
-            if (forceLocalReview) {
-                saveLocalReview();
-                toast.success("Đã lưu đánh giá (chế độ test frontend).");
-                onSuccess();
-                return;
-            }
-
             await ratingService.createRating({
                 customerId: user.id,
                 technicianId,
@@ -963,10 +972,7 @@ function RatingModal({ order, onClose, onSuccess }: { order: any; onClose: () =>
             toast.success("Cảm ơn bạn đã đánh giá dịch vụ! ❤️");
             onSuccess();
         } catch (err: any) {
-            // fallback cho môi trường test khi backend reject
-            saveLocalReview();
-            toast.success("Đã lưu đánh giá (chế độ test frontend).");
-            onSuccess();
+            toast.error(err?.response?.data?.message || "Không thể gửi đánh giá");
         } finally {
             setIsSubmitting(false);
         }

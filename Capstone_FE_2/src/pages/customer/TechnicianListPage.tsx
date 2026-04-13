@@ -654,7 +654,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const [foundTech, setFoundTech] = useState<any>(null);
     const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
 
-    const addLocalOrder = (status: 'Rejected' | 'Pending Confirmation') => {
+    const addLocalOrder = (status: 'Pending Confirmation') => {
         if (!user?.id || !foundTech) return;
         const localKey = 'ff_customer_local_orders';
         const current = (() => {
@@ -742,11 +742,19 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             if (!firstTech) return false;
 
             setFoundTech({
+                ...firstTech,
                 technicianId: firstTech.technicianId || firstTech.TechnicianId,
                 fullName: firstTech.technicianName || firstTech.TechnicianName,
                 name: firstTech.technicianName || firstTech.TechnicianName,
                 rating: firstTech.averageRating || firstTech.AverageRating || 5,
                 specialty: firstTech.serviceName || firstTech.ServiceName,
+                serviceName: firstTech.serviceName || firstTech.ServiceName || 'Kỹ thuật viên',
+                orderCount: firstTech.orderCount || firstTech.OrderCount || 0,
+                ratingCount: firstTech.ratingCount || firstTech.RatingCount || 0,
+                avatarURL: firstTech.avatarURL || firstTech.AvatarURL || firstTech.avatarUrl || firstTech.AvatarUrl,
+                phone: firstTech.phone || firstTech.Phone || '',
+                address: firstTech.address || firstTech.Address || '',
+                city: firstTech.city || firstTech.City || ''
             });
             setSearchStatus('found');
             toast.success('Đã tìm thợ theo dữ liệu hiện có');
@@ -768,7 +776,21 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
             const res = await autoFindService.checkAcceptance(user.id);
             if (res && (res.id || res.technicianId || res.TechnicianId)) {
-                setFoundTech(res);
+                setFoundTech({
+                    ...res,
+                    technicianId: res.technicianId || res.TechnicianId || res.id,
+                    fullName: res.fullName || res.FullName || res.name,
+                    name: res.name || res.fullName || res.FullName,
+                    specialty: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
+                    serviceName: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
+                    rating: res.score || res.Score || res.avgScore || res.AvgScore || 5,
+                    orderCount: res.orderCount || res.OrderCount || 0,
+                    ratingCount: res.ratingCount || res.RatingCount || 0,
+                    avatarURL: res.avatarURL || res.AvatarURL || res.avatarUrl || res.AvatarUrl,
+                    phone: res.phone || res.Phone || '',
+                    address: res.address || res.Address || '',
+                    city: res.city || res.City || ''
+                });
                 setSearchStatus('found');
                 return;
             }
@@ -800,8 +822,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
         const rejectedTechId = foundTech.id || foundTech.technicianId || foundTech.TechnicianId;
 
-        // Frontend-only: luôn lưu local Rejected để hiển thị đúng tab rejected.
-        addLocalOrder('Rejected');
+        // Không tạo local rejected order ở phía customer.
+        // Rejected orders chỉ hiển thị khi technician từ chối order thật từ backend.
 
         const fallbackNextTechnician = async () => {
             const listByServiceAndCity = await technicianCatalogService.filterTechnicians({
@@ -822,17 +844,26 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
             const nextTech = candidates.find((t: any) => {
                 const tid = t.technicianId || t.TechnicianId;
-                return tid && tid !== rejectedTechId;
+                const currentId = foundTech?.technicianId || foundTech?.TechnicianId || foundTech?.id;
+                return tid && tid !== rejectedTechId && tid !== currentId;
             });
 
             if (!nextTech) return false;
 
             setFoundTech({
+                ...nextTech,
                 technicianId: nextTech.technicianId || nextTech.TechnicianId,
                 fullName: nextTech.technicianName || nextTech.TechnicianName,
                 name: nextTech.technicianName || nextTech.TechnicianName,
                 rating: nextTech.averageRating || nextTech.AverageRating || 5,
                 specialty: nextTech.serviceName || nextTech.ServiceName,
+                serviceName: nextTech.serviceName || nextTech.ServiceName || 'Kỹ thuật viên',
+                orderCount: nextTech.orderCount || nextTech.OrderCount || 0,
+                ratingCount: nextTech.ratingCount || nextTech.RatingCount || 0,
+                avatarURL: nextTech.avatarURL || nextTech.AvatarURL || nextTech.avatarUrl || nextTech.AvatarUrl,
+                phone: nextTech.phone || nextTech.Phone || '',
+                address: nextTech.address || nextTech.Address || '',
+                city: nextTech.city || nextTech.City || ''
             });
             setSearchStatus('found');
             toast.success('Đã từ chối thợ hiện tại. Đã đề xuất thợ khác.');
@@ -840,14 +871,37 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         };
 
         try {
-            // Ưu tiên lấy thợ kế tiếp từ queue backend
+            // Re-find lại để backend tính đề xuất mới theo cùng tiêu chí
+            await autoFindService.findTechnicians(user.id, {
+                customerId: user.id,
+                serviceId: selectedService,
+                cityId: selectedCity,
+                latitude,
+                longitude,
+                description: desc
+            });
+
             const res = await autoFindService.checkAcceptance(user.id);
             if (res && (res.id || res.technicianId || res.TechnicianId)) {
                 const nextBackendId = res.id || res.technicianId || res.TechnicianId;
                 if (nextBackendId && nextBackendId !== rejectedTechId) {
-                    setFoundTech(res);
+                    setFoundTech({
+                        ...res,
+                        technicianId: res.technicianId || res.TechnicianId || res.id,
+                        fullName: res.fullName || res.FullName || res.name,
+                        name: res.name || res.fullName || res.FullName,
+                        specialty: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
+                        serviceName: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
+                        rating: res.score || res.Score || res.avgScore || res.AvgScore || 5,
+                        orderCount: res.orderCount || res.OrderCount || 0,
+                        ratingCount: res.ratingCount || res.RatingCount || 0,
+                        avatarURL: res.avatarURL || res.AvatarURL || res.avatarUrl || res.AvatarUrl,
+                        phone: res.phone || res.Phone || '',
+                        address: res.address || res.Address || '',
+                        city: res.city || res.City || ''
+                    });
                     setSearchStatus('found');
-                    toast.success('Đã từ chối thợ hiện tại. Đang đề xuất thợ khác.');
+                    toast.success('Đã từ chối thợ hiện tại. Đã đề xuất thợ khác.');
                     return;
                 }
             }
@@ -905,13 +959,13 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     };
 
     return (
-        <DialogContent className="sm:max-w-[480px] bg-[#0a1122] border-white/10 text-white">
+        <DialogContent className="sm:max-w-[760px] bg-[#0a1122] border-white/10 text-white">
             <DialogHeader>
                 <DialogTitle>Tìm kỹ thuật viên tự động</DialogTitle>
             </DialogHeader>
 
             {searchStatus === 'idle' && (
-                <div className="space-y-4 mt-2">
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <Label>Loại dịch vụ</Label>
                         <select
@@ -936,7 +990,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                         </select>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 md:col-span-2">
                         <Label>Tiêu đề</Label>
                         <Input
                             placeholder="Ví dụ: Điều hòa không mát"
@@ -946,17 +1000,17 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                         />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 md:col-span-2">
                         <Label>Mô tả sự cố</Label>
                         <Textarea
                             placeholder="Mô tả ngắn gọn vấn đề của bạn..."
                             value={desc}
                             onChange={e => setDesc(e.target.value)}
-                            className="bg-white/5 border-white/10"
+                            className="bg-white/5 border-white/10 min-h-[96px]"
                         />
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 md:col-span-2">
                         <Label>Địa chỉ</Label>
                         <Input
                             placeholder="Nhập địa chỉ của bạn..."
@@ -966,20 +1020,20 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1.5">
-                            <Label>Latitude</Label>
-                            <Input type="text" value={latitude} onChange={e => setLatitude(e.target.value)} className="bg-white/5 border-white/10" />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Longitude</Label>
-                            <Input type="text" value={longitude} onChange={e => setLongitude(e.target.value)} className="bg-white/5 border-white/10" />
-                        </div>
+                    <div className="space-y-1.5">
+                        <Label>Latitude</Label>
+                        <Input type="text" value={latitude} onChange={e => setLatitude(e.target.value)} className="bg-white/5 border-white/10" />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Longitude</Label>
+                        <Input type="text" value={longitude} onChange={e => setLongitude(e.target.value)} className="bg-white/5 border-white/10" />
                     </div>
 
-                    <Button onClick={handleStartSearch} className="w-full bg-primary hover:bg-primary-dark font-bold py-6" disabled={isSearching}>
-                        {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
-                    </Button>
+                    <div className="md:col-span-2 pt-1">
+                        <Button onClick={handleStartSearch} className="w-full bg-primary hover:bg-primary-dark font-bold py-6" disabled={isSearching}>
+                            {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
+                        </Button>
+                    </div>
                 </div>
             )}
 
@@ -1009,15 +1063,39 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                         <p className="text-zinc-400">Kỹ thuật viên <b>{foundTech.fullName || foundTech.name}</b> đã sẵn sàng.</p>
                     </div>
 
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-2xl font-bold">
-                            {(foundTech.fullName || foundTech.name || 'T')[0]}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 rounded-full bg-primary/20 overflow-hidden flex items-center justify-center text-2xl font-bold">
+                                {foundTech.avatarURL ? (
+                                    <img src={foundTech.avatarURL} alt="avatar" className="w-full h-full object-cover" />
+                                ) : (
+                                    (foundTech.fullName || foundTech.name || 'T')[0]
+                                )}
+                            </div>
+                            <div>
+                                <p className="font-bold text-lg">{foundTech.fullName || foundTech.name}</p>
+                                <p className="text-sm text-zinc-400 flex items-center gap-1">
+                                    <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                                    {foundTech.rating || 5.0} · {foundTech.specialty || 'Kỹ thuật viên'}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="font-bold text-lg">{foundTech.fullName || foundTech.name}</p>
-                            <p className="text-sm text-zinc-400 flex items-center gap-1">
-                                <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                                {foundTech.rating || 5.0} · {foundTech.specialty || 'Kỹ thuật viên'}
+
+                        <div className="mt-4 space-y-2 text-sm">
+                            <p className="text-zinc-300">
+                                <span className="text-zinc-500">Dịch vụ:</span> {foundTech.serviceName || foundTech.specialty || 'Kỹ thuật viên'}
+                            </p>
+                            <p className="text-zinc-300">
+                                <span className="text-zinc-500">Địa chỉ:</span> {foundTech.address || 'Chưa cập nhật'}
+                            </p>
+                            <p className="text-zinc-300">
+                                <span className="text-zinc-500">Thành phố:</span> {foundTech.city || 'Chưa cập nhật'}
+                            </p>
+                            <p className="text-zinc-300">
+                                <span className="text-zinc-500">Kinh nghiệm:</span> {foundTech.orderCount || 0} đơn đã xử lý
+                            </p>
+                            <p className="text-zinc-300">
+                                <span className="text-zinc-500">Lượt đánh giá:</span> {foundTech.ratingCount || 0} đánh giá
                             </p>
                         </div>
                     </div>

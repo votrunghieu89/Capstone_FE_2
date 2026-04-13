@@ -21,6 +21,7 @@ export function useChatSignalR() {
   useEffect(() => {
     if (!user?.id || isConnecting.current || connection) return;
 
+    let disposed = false;
     isConnecting.current = true;
     const baseUrl = resolveHubBaseUrl();
     const hubUrl = `${baseUrl}/ChatHub`;
@@ -47,26 +48,49 @@ export function useChatSignalR() {
     });
 
     newConnection.onclose((err) => {
-      if (err) console.error('SignalR Chat closed with error:', err);
+      if (err && !disposed) console.error('SignalR Chat closed with error:', err);
     });
 
-    newConnection.start()
-      .then(() => {
+    const startConnection = async () => {
+      try {
+        await newConnection.start();
+        if (disposed) return;
         setConnection(newConnection);
-        isConnecting.current = false;
         console.log('SignalR Chat Connected');
-      })
-      .catch((e) => {
-        console.error('SignalR Chat Connection Error: ', e);
-        isConnecting.current = false;
-      });
+      } catch (e: any) {
+        if (disposed) return;
+        const msg = String(e?.message || '');
+        // React StrictMode dev có thể stop ngay lúc đang negotiate -> bỏ qua log lỗi nhiễu
+        if (msg.includes('stopped during negotiation')) {
+          console.warn('SignalR Chat negotiation interrupted (dev cleanup), retrying...');
+          try {
+            await newConnection.start();
+            if (disposed) return;
+            setConnection(newConnection);
+            console.log('SignalR Chat Connected (retry)');
+            return;
+          } catch (retryErr) {
+            if (!disposed) console.error('SignalR Chat Connection Error (retry): ', retryErr);
+          }
+        } else {
+          console.error('SignalR Chat Connection Error: ', e);
+        }
+      } finally {
+        if (!disposed) isConnecting.current = false;
+      }
+    };
+
+    void startConnection();
 
     return () => {
-      void newConnection.stop();
-      setConnection(null);
+      disposed = true;
       isConnecting.current = false;
+      if (newConnection.state !== signalR.HubConnectionState.Disconnected) {
+        void newConnection.stop();
+      }
+      setConnection(null);
     };
-  }, [user, connection]);
+  }, [user?.id]);
 
   return { connection, messages, setMessages };
 }

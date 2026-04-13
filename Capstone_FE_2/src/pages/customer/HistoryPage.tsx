@@ -25,6 +25,7 @@ export default function HistoryPage() {
   const [ratingMap, setRatingMap] = useState<Record<string, { hasFeedback: boolean; score?: number; feedback?: string }>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [ratingOrder, setRatingOrder] = useState<any>(null);
 
   const historyOrders = useMemo(() => {
     return orders
@@ -53,57 +54,16 @@ export default function HistoryPage() {
 
       const historyDataRemote = Array.isArray(historyRes) ? historyRes : (historyRes.items || historyRes.data || []);
 
-      const localCompletedOrders = (() => {
-        try {
-          const parsed = JSON.parse(localStorage.getItem('ff_customer_local_orders') || '[]');
-          const arr = Array.isArray(parsed) ? parsed : [];
-          return arr
-            .filter((o: any) => String(o.customerId || '') === String(user.id || ''))
-            .filter((o: any) => {
-              const s = normalizeStatus(String(o.status || ''));
-              return s === 'completed' || s === 'done';
-            })
-            .map((o: any) => ({
-              id: o.id,
-              Id: o.id,
-              orderId: o.id,
-              OrderId: o.id,
-              technicianId: o.technicianId,
-              TechnicianId: o.technicianId,
-              technicianName: o.technicianName,
-              TechnicianName: o.technicianName,
-              serviceName: o.serviceName,
-              ServiceName: o.serviceName,
-              title: o.title,
-              Title: o.title,
-              description: o.description,
-              Description: o.description,
-              address: o.address,
-              Address: o.address,
-              status: o.status,
-              Status: o.status,
-              orderDate: o.createdAt,
-              OrderDate: o.createdAt,
-              source: o.source || 'local'
-            }));
-        } catch {
-          return [];
-        }
-      })();
-
-      const historyData = [...historyDataRemote, ...localCompletedOrders];
-      const remoteRatings = Array.isArray(ratingsRes) ? ratingsRes : (ratingsRes.items || ratingsRes.data || []);
-      const localRatings = (() => {
-        try {
-          const parsed = JSON.parse(localStorage.getItem('ff_customer_local_reviews') || '[]');
-          const arr = Array.isArray(parsed) ? parsed : [];
-          return arr.filter((r: any) => String(r.customerId || '') === String(user.id || ''));
-        } catch {
-          return [];
-        }
-      })();
-
-      const ratings = [...remoteRatings, ...localRatings];
+      const uniqueOrders = new Map<string, any>();
+      historyDataRemote.forEach((o: any) => {
+        const oid = String(pick(o, ['orderId', 'OrderId', 'id', 'Id']) || '');
+        if (!oid) return;
+        if (!uniqueOrders.has(oid)) uniqueOrders.set(oid, o);
+      });
+      const historyData = Array.from(uniqueOrders.values());
+      const ratings = Array.isArray(ratingsRes)
+        ? ratingsRes
+        : (ratingsRes?.data || ratingsRes?.items || ratingsRes?.result || []);
 
       const map: Record<string, { hasFeedback: boolean; score?: number; feedback?: string }> = {};
       ratings.forEach((r: any) => {
@@ -206,9 +166,20 @@ export default function HistoryPage() {
                         </span>
                       </td>
                       <td className="px-6 py-5 text-right">
-                        <Button variant="ghost" size="sm" className="text-primary hover:text-primary-light hover:bg-primary/10 transition-colors" onClick={() => openDetail(item)}>
-                          Chi tiết <ArrowRight className="w-4 h-4 ml-1" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          {!hasRated && (
+                            <Button
+                              size="sm"
+                              className="bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                              onClick={() => setRatingOrder(item)}
+                            >
+                              Đánh giá
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="text-primary hover:text-primary-light hover:bg-primary/10 transition-colors" onClick={() => openDetail(item)}>
+                            Chi tiết <ArrowRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -234,6 +205,108 @@ export default function HistoryPage() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {ratingOrder && (
+          <HistoryRatingModal
+            order={ratingOrder}
+            onClose={() => setRatingOrder(null)}
+            onSuccess={async () => {
+              setRatingOrder(null);
+              await loadData();
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function HistoryRatingModal({ order, onClose, onSuccess }: { order: any; onClose: () => void; onSuccess: () => void }) {
+  const { user } = useAuthStore();
+  const [score, setScore] = useState(5);
+  const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const orderId = String(pick(order, ['orderId', 'OrderId', 'id', 'Id']));
+  const techId = String(pick(order, ['technicianId', 'TechnicianId']));
+  const source = String(order?.source || '').toLowerCase();
+
+  const submitRating = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id) return;
+    if (!techId) return toast.error('Không tìm thấy kỹ thuật viên của đơn này');
+    if (!orderId || source.includes('local') || source.includes('mock')) {
+      return toast.error('Đơn này không phải dữ liệu DB nên không thể gửi đánh giá.');
+    }
+
+    try {
+      const check = await ratingService.isFeedback(orderId);
+      const isRated = Boolean(check?.isFeedback ?? check?.data?.isFeedback ?? check?.data ?? false);
+      if (isRated) {
+        toast('Đơn này đã được đánh giá trước đó.');
+        onSuccess();
+        return;
+      }
+    } catch {
+      return toast.error('Không thể xác minh trạng thái đánh giá của đơn này.');
+    }
+
+    setIsSubmitting(true);
+    try {
+      await ratingService.createRating({
+        customerId: user.id,
+        technicianId: techId,
+        orderId,
+        score,
+        feedback
+      });
+      toast.success('Đánh giá thành công');
+      onSuccess();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Không thể đánh giá');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[210] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg bg-bg-card/90 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl p-6"
+      >
+        <button onClick={onClose} className="absolute top-4 right-4 text-zinc-400 hover:text-white"><X size={18} /></button>
+        <h3 className="text-xl font-bold text-white mb-1">Đánh giá đơn hàng</h3>
+        <p className="text-sm text-zinc-400 mb-5">Đơn #{orderId.slice(0, 8)} · {pick(order, ['serviceName', 'ServiceName']) || '—'}</p>
+
+        <form onSubmit={submitRating} className="space-y-4">
+          <div className="flex items-center gap-2">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <button key={s} type="button" onClick={() => setScore(s)} className="p-1">
+                <Star className={`w-7 h-7 ${s <= score ? 'text-amber-400 fill-amber-400' : 'text-zinc-600'}`} />
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            rows={3}
+            placeholder="Chia sẻ trải nghiệm của bạn..."
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white"
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
+            <Button type="submit" className="bg-primary hover:bg-primary-dark text-white" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Gửi đánh giá'}
+            </Button>
+          </div>
+        </form>
+      </motion.div>
     </motion.div>
   );
 }
