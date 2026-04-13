@@ -10,75 +10,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Star } from 'lucide-react';
 
-const MOCK_ORDERS = [
-    {
-        OrderId: '11111111-1111-1111-1111-111111111111',
-        TechnicianId: 'aaaa1111-1111-1111-1111-111111111111',
-        TechnicianName: 'Nguyễn Văn A',
-        ServiceName: 'Sửa điều hòa',
-        Title: 'Điều hòa không mát',
-        Description: 'Máy chạy nhưng không lạnh, cần kiểm tra gas.',
-        Address: '12 Nguyễn Văn Linh, Đà Nẵng',
-        Status: 'Pending Confirmation',
-        OrderDate: new Date().toISOString()
-    },
-    {
-        OrderId: '22222222-2222-2222-2222-222222222222',
-        TechnicianId: 'bbbb2222-2222-2222-2222-222222222222',
-        TechnicianName: 'Trần Thị B',
-        ServiceName: 'Sửa tủ lạnh',
-        Title: 'Tủ lạnh chảy nước',
-        Description: 'Ngăn mát bị đọng nước nhiều.',
-        Address: '45 Lê Duẩn, Đà Nẵng',
-        Status: 'In Progress',
-        OrderDate: new Date(Date.now() - 86400000).toISOString()
-    },
-    {
-        OrderId: '55555555-5555-5555-5555-555555555555',
-        TechnicianId: 'eeee5555-5555-5555-5555-555555555555',
-        TechnicianName: 'Hoàng Minh K',
-        ServiceName: 'Sửa máy giặt',
-        Title: 'Máy giặt rung mạnh khi vắt',
-        Description: 'Lồng giặt kêu to, rung bất thường.',
-        Address: '76 Ông Ích Khiêm, Đà Nẵng',
-        Status: 'In Progress',
-        OrderDate: new Date(Date.now() - 2 * 86400000).toISOString()
-    },
-    {
-        OrderId: '66666666-6666-6666-6666-666666666666',
-        TechnicianId: 'ffff6666-6666-6666-6666-666666666666',
-        TechnicianName: 'Vũ Anh T',
-        ServiceName: 'Sửa điện dân dụng',
-        Title: 'Ổ cắm bị chập điện',
-        Description: 'Bật thiết bị thì aptomat nhảy.',
-        Address: '15 Trần Phú, Đà Nẵng',
-        Status: 'In Progress',
-        OrderDate: new Date(Date.now() - 3 * 86400000).toISOString()
-    },
-    {
-        OrderId: '33333333-3333-3333-3333-333333333333',
-        TechnicianId: 'cccc3333-3333-3333-3333-333333333333',
-        TechnicianName: 'Phạm Văn C',
-        ServiceName: 'Sửa máy giặt',
-        Title: 'Máy giặt không vắt',
-        Description: 'Máy báo lỗi ở bước vắt.',
-        Address: '99 Điện Biên Phủ, Đà Nẵng',
-        Status: 'Cancelled',
-        OrderDate: new Date(Date.now() - 4 * 86400000).toISOString()
-    },
-    {
-        OrderId: '44444444-4444-4444-4444-444444444444',
-        TechnicianId: 'dddd4444-4444-4444-4444-444444444444',
-        TechnicianName: 'Lê Thị D',
-        ServiceName: 'Sửa máy nước nóng',
-        Title: 'Máy nước nóng không lên nhiệt',
-        Description: 'Nước vẫn lạnh sau 10 phút bật máy.',
-        Address: '21 Hàm Nghi, Đà Nẵng',
-        Status: 'Rejected',
-        OrderDate: new Date(Date.now() - 5 * 86400000).toISOString()
-    }
-];
-
 export default function OrdersPage() {
     const { user } = useAuthStore();
     const location = useLocation();
@@ -187,18 +118,6 @@ export default function OrdersPage() {
                     orderDate: o.createdAt,
                     source: o.source || 'autofind-local'
                 }));
-            const useMock = import.meta.env.VITE_USE_MOCK_ORDERS === 'true';
-            const filteredMock = statusParam === 'all'
-                ? MOCK_ORDERS
-                : MOCK_ORDERS.filter(m => {
-                    const ms = normalizeStatus(m.Status || '');
-                    if (statusParam === 'pending') return ms === 'pending-confirmation' || ms === 'pending';
-                    if (statusParam === 'in-progress') return ms === 'in-progress' || ms === 'inprogress';
-                    if (statusParam === 'completed') return ms === 'completed' || ms === 'done';
-                    if (statusParam === 'cancelled') return ms === 'cancelled' || ms === 'canceled';
-                    if (statusParam === 'rejected') return ms === 'rejected';
-                    return true;
-                });
 
             const byId = new Map<string, any>();
             merged.forEach((item: any) => {
@@ -211,10 +130,7 @@ export default function OrdersPage() {
             });
             const remoteAndLocal = Array.from(byId.values());
 
-            // Với tab pending / in-progress: luôn ưu tiên dữ liệu từ API tương ứng, không bơm mock.
-            const dataToShow = (statusParam === 'pending' || statusParam === 'in-progress')
-                ? remoteAndLocal
-                : (useMock && remoteAndLocal.length === 0 ? filteredMock : remoteAndLocal);
+            const dataToShow = remoteAndLocal;
             const sortedByNewest = [...dataToShow].sort((a: any, b: any) => {
                 const sa = normalizeStatus(a?.status || a?.Status || '');
                 const sb = normalizeStatus(b?.status || b?.Status || '');
@@ -354,28 +270,6 @@ export default function OrdersPage() {
             localStorage.setItem(localKey, JSON.stringify(current));
         };
 
-        // Cho phép test với dữ liệu mẫu: chuyển local status sang Completed
-        const isMockOrder = /^2{8}-2{4}-2{4}-2{4}-2{12}$/.test(orderId)
-            || /^5{8}-5{4}-5{4}-5{4}-5{12}$/.test(orderId)
-            || /^6{8}-6{4}-6{4}-6{4}-6{12}$/.test(orderId);
-
-        if (isMockOrder) {
-            setOrders(prev => prev.map((o: any) => {
-                const oid = String(pick(o, ['id', 'Id', 'orderId', 'OrderId']));
-                if (oid !== orderId) return o;
-                return {
-                    ...o,
-                    Status: 'Completed',
-                    status: 'Completed',
-                    LastUpdateAt: new Date().toISOString(),
-                    lastUpdateAt: new Date().toISOString()
-                };
-            }));
-            upsertLocalCompletedOrder();
-            toast.success('Đơn hàng đã chuyển sang trạng thái hoàn thành.');
-            navigate('/customer/history');
-            return;
-        }
 
         try {
             await orderService.confirmCompletedOrder({ orderId, technicianId: technicianId || undefined });
@@ -456,15 +350,7 @@ export default function OrdersPage() {
         return s === statusParam;
     });
 
-    const mockInProgressOrders = MOCK_ORDERS.filter(m => {
-        const s = normalizeStatus(m.Status || '');
-        return s === 'in-progress' || s === 'inprogress';
-    });
-
-    // Bảo đảm luôn có dữ liệu test ở tab đang thực hiện
-    const filteredOrders = statusParam === 'in-progress' && filteredOrdersBase.length === 0
-        ? mockInProgressOrders
-        : filteredOrdersBase;
+    const filteredOrders = filteredOrdersBase;
 
     const getStatusTitle = (status: string) => {
         switch (status) {
