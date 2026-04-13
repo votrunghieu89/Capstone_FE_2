@@ -15,6 +15,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import Cookies from "js-cookie"
+import useAuthStore from "@/store/authStore"
 
 const mainNav = [
   {
@@ -56,6 +57,7 @@ export function AppSidebar() {
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(false)
   const [adminUser, setAdminUser] = useState<any>(null)
+  const logout = useAuthStore((state) => state.logout)
 
   useEffect(() => {
     // Load user from localStorage
@@ -66,9 +68,12 @@ export function AppSidebar() {
   }, [])
 
   const handleLogout = () => {
+    logout()
     Cookies.remove("token")
     localStorage.removeItem("adminUser")
     localStorage.removeItem("accessToken")
+    localStorage.removeItem("fastfix-auth-storage")
+    localStorage.removeItem("fastfix_token")
     localStorage.removeItem("refreshToken")
     window.location.href = "/"
   }
