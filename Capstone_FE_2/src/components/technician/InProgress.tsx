@@ -2,55 +2,58 @@ import { useState, useEffect } from 'react';
 import { 
   MapPin, Clock, Phone, MessageSquare, CheckCircle, 
   AlertCircle, Briefcase, User, 
-  Navigation, ChevronRight, Play, Loader2
+  Navigation, ChevronRight, Play, Loader2,
+  Activity, Target, Cloud, CheckCircle2, Zap, Shield, 
+  Sparkles, Image as ImageIcon
 } from 'lucide-react';
-import useAuthStore from '@/store/authStore';
-import technicianOrderService from '@/services/technicianOrderService';
-import { ViewOrderDTO } from '@/types/order';
-import toast from 'react-hot-toast';
-import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
+import useAuthStore from '@/store/authStore';
+import technicianOrderService from '@/services/technicianOrderService';
+import orderService from '@/services/orderService';
+import { statisticService } from '@/services/statisticService';
+import { ViewOrderDTO, OrderDetailDTO } from '@/types/order';
+import toast from 'react-hot-toast';
+import { cn } from '@/lib/utils';
 
-// Kiểu dữ liệu cho đơn đang chờ khách đánh giá
 interface PendingReviewOrder {
   orderId: string;
   title: string;
   customerName: string;
-  sentAt: string; // Thời gian gửi yêu cầu xác nhận
+  sentAt: string;
 }
 
 export function InProgress() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [job, setJob] = useState<ViewOrderDTO | null>(null);
+  const [jobDetail, setJobDetail] = useState<OrderDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentStep, setCurrentStep] = useState<number>(1);
   const [actionLoading, setActionLoading] = useState(false);
   const [pendingReviews, setPendingReviews] = useState<PendingReviewOrder[]>([]);
+  const [stats, setStats] = useState({ total: 0, completed: 0 });
+  const [acceptedCount, setAcceptedCount] = useState(0);
 
   useEffect(() => {
     if (user?.id) {
       loadInProgress();
       loadPendingReviews();
+      loadStats();
     }
   }, [user?.id]);
 
-  useEffect(() => {
-    if (job?.orderId) {
-      const savedStep = localStorage.getItem(`order_step_${job.orderId}`);
-      if (savedStep) {
-        setCurrentStep(parseInt(savedStep));
-      } else {
-        setCurrentStep(1);
-      }
-    }
-  }, [job?.orderId]);
-
-  const updateStep = (step: number) => {
-    if (job?.orderId) {
-      setCurrentStep(step);
-      localStorage.setItem(`order_step_${job.orderId}`, step.toString());
+  const loadStats = async () => {
+    if (!user?.id) return;
+    try {
+      const [total, completed, accepted] = await Promise.all([
+        statisticService.getTotalOrders(user.id),
+        statisticService.getTotalCompletedCount(user.id),
+        technicianOrderService.getConfirmedOrders(user.id)
+      ]);
+      setStats({ total, completed });
+      setAcceptedCount(Array.isArray(accepted) ? accepted.length : 0);
+    } catch (err) {
+      console.warn('Could not load stats', err);
     }
   };
 
@@ -65,7 +68,13 @@ export function InProgress() {
         return;
       }
 
-      // Kiểm tra xem đơn này có đang nằm trong danh sách chờ đánh giá không
+      try {
+        const detail = await orderService.getOrderDetail(data.orderId);
+        setJobDetail(detail);
+      } catch (err) {
+        console.warn('Media fetch failed', err);
+      }
+
       const stored = localStorage.getItem('pendingReviewOrders');
       const pendingList: PendingReviewOrder[] = stored ? JSON.parse(stored) : [];
       const isPending = pendingList.some(p => p.orderId === data.orderId);
@@ -76,363 +85,349 @@ export function InProgress() {
         setJob(data);
       }
     } catch (err: any) {
-      console.error('Error loading in-progress job:', err);
+      console.error('Core error:', err);
       setJob(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load danh sách đơn đang chờ khách đánh giá từ localStorage
   const loadPendingReviews = () => {
     const stored = localStorage.getItem('pendingReviewOrders');
     if (stored) {
-      setPendingReviews(JSON.parse(stored));
+      try { setPendingReviews(JSON.parse(stored)); } catch (e) { setPendingReviews([]); }
     }
   };
 
-  // Lưu đơn vào danh sách chờ đánh giá
-  const addToPendingReview = (order: ViewOrderDTO) => {
-    const newEntry: PendingReviewOrder = {
-      orderId: order.orderId,
-      title: order.title,
-      customerName: order.customerName,
-      sentAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-    };
-    const updated = [newEntry, ...pendingReviews];
-    setPendingReviews(updated);
-    localStorage.setItem('pendingReviewOrders', JSON.stringify(updated));
+  const handleCompleteOrder = async () => {
+    if (!job) return;
+    setActionLoading(true);
+    const completePromise = technicianOrderService.completeOrder(job.orderId)
+      .then(() => {
+        const newEntry: PendingReviewOrder = {
+          orderId: job.orderId,
+          title: job.title,
+          customerName: job.customerName,
+          sentAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        };
+        const updated = [newEntry, ...pendingReviews];
+        setPendingReviews(updated);
+        localStorage.setItem('pendingReviewOrders', JSON.stringify(updated));
+        setJob(null);
+        loadStats();
+      });
+
+    toast.promise(completePromise, {
+      loading: 'Đang gửi xác minh...',
+      success: 'Yêu cầu hoàn tất!',
+      error: 'Lỗi khi gửi yêu cầu.'
+    });
+
+    try {
+      await completePromise;
+    } catch (err) {
+      console.error('Complete error:', err);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  // Xóa đơn khỏi danh sách chờ (khi khách xác nhận xong)
-  const removePendingReview = (orderId: string) => {
+  const handleDebugConfirm = (orderId: string) => {
     const updated = pendingReviews.filter(p => p.orderId !== orderId);
     setPendingReviews(updated);
     localStorage.setItem('pendingReviewOrders', JSON.stringify(updated));
-  };
-
-  const handleNextStep = async () => {
-    if (currentStep < 3) {
-      const next = currentStep + 1;
-      updateStep(next);
-      const labels = ['', 'Di chuyển', 'Sửa chữa'];
-      toast.success(`Đã chuyển sang giai đoạn: ${labels[next]}`, { icon: '🚀' });
-    } else if (currentStep === 3) {
-      if (!job) return;
-      
-      setActionLoading(true);
-      // Sử dụng toast.promise để người dùng thấy quá trình đang xử lý
-      const completePromise = technicianOrderService.completeOrder(job.orderId)
-        .then(() => {
-          // Lưu vào danh sách chờ đánh giá CHỈ khi API thành công
-          addToPendingReview(job);
-          localStorage.removeItem(`order_step_${job.orderId}`);
-          setJob(null);
-          setCurrentStep(1);
-        });
-
-      toast.promise(completePromise, {
-        loading: 'Đang gửi yêu cầu xác nhận...',
-        success: 'Đã gửi yêu cầu! Bạn có thể nhận đơn mới.',
-        error: 'Lỗi khi gửi yêu cầu. Vui lòng thử lại.'
-      });
-
-      try {
-        await completePromise;
-      } catch (err) {
-        console.error('Complete order error:', err);
-      } finally {
-        setActionLoading(false);
-      }
-    }
-  };
-
-  // Debug: Khách xác nhận hoàn thành
-  const handleDebugConfirm = (orderId: string) => {
-    removePendingReview(orderId);
-    toast.success('Khách hàng đã xác nhận! Đơn chuyển vào lịch sử.');
-  };
-
-  const handleRefresh = () => {
-    loadInProgress();
-    loadPendingReviews();
-    toast.success('Đã cập nhật dữ liệu mới nhất');
+    toast.success('Ghi nhận thành công!');
+    loadStats();
   };
 
   if (loading && !job) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-slate-500">
-        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin mb-3" />
-        <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Đang đồng bộ dữ liệu...</p>
+      <div className="flex bg-[#020617] h-[calc(100vh-80px)] items-center justify-center">
+        <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-[1500px] mx-auto px-6 py-4 h-full flex flex-col animate-in fade-in duration-500 overflow-y-auto custom-scrollbar">
-
-      {/* PHẦN 1: CÔNG VIỆC ĐANG THỰC HIỆN */}
-      <AnimatePresence mode="wait">
-        {job ? (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col gap-5 shrink-0"
-          >
-            {/* COMPACT STEPPER */}
-            <div className="bg-[#0f172a]/40 backdrop-blur-2xl rounded-[32px] border border-white/5 p-5 shadow-xl relative overflow-hidden shrink-0">
-               <div className="relative z-10 flex items-center justify-between max-w-4xl mx-auto">
-                 {[
-                   { id: 1, label: 'Đã nhận', icon: Briefcase },
-                   { id: 2, label: 'Di chuyển', icon: Navigation },
-                   { id: 3, label: 'Sửa chữa', icon: AlertCircle },
-                   { id: 4, label: 'Hoàn thành', icon: CheckCircle }
-                 ].map((s, idx) => (
-                   <div key={s.id} className="flex-1 flex items-center group">
-                      <div className="flex flex-col items-center gap-2 relative z-10 mx-auto">
-                         <div className={cn(
-                           "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500 border-2",
-                           currentStep >= s.id 
-                            ? "bg-indigo-500 border-indigo-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.3)]" 
-                            : "bg-slate-900 border-slate-800 text-slate-600"
-                         )}>
-                            {currentStep > s.id ? <CheckCircle size={20} /> : <s.icon size={20} />}
-                         </div>
-                         <div className="text-center">
-                            <p className={cn(
-                              "text-[9px] font-black uppercase tracking-widest transition-colors",
-                              currentStep >= s.id ? "text-white" : "text-slate-600"
-                            )}>{s.label}</p>
-                         </div>
-                      </div>
-                      {idx < 3 && (
-                        <div className="hidden md:block flex-1 h-[2px] mx-2 -mt-6 bg-slate-800 relative min-w-[30px]">
-                           <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: currentStep > s.id ? '100%' : '0%' }}
-                              className="absolute inset-0 bg-indigo-500"
-                           />
-                        </div>
-                      )}
-                   </div>
-                 ))}
-               </div>
-            </div>
-
-            {/* MAIN CONTENT GRID */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start">
-              
-              {/* LEFT COL: INFO */}
-              <div className="flex flex-col gap-4">
-                <div className="bg-[#0f172a]/60 backdrop-blur-3xl rounded-[32px] border border-white/5 p-8 shadow-xl relative group flex flex-col gap-6">
+    <div className="h-[calc(100vh-80px)] bg-[#020617] text-slate-200 overflow-hidden flex flex-col">
+      <div className="max-w-[1600px] w-full mx-auto px-4 md:px-8 py-8 flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
+        
+        {/* === LEFT CONTENT: PREMIUM DESIGN === */}
+        <div className="flex-1 min-w-0 overflow-y-auto pr-2 md:pr-4 custom-scrollbar space-y-8 animate-in fade-in duration-1000">
+          <AnimatePresence mode="wait">
+            {job ? (
+              <motion.div 
+                key="active-job"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="space-y-8 pb-32"
+              >
+                {/* Main Pro Frame */}
+                <div className="bg-[#0f172a]/60 backdrop-blur-3xl rounded-[44px] border border-white/10 p-8 md:p-10 shadow-2xl flex flex-col gap-10 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/5 rounded-full blur-[100px] pointer-events-none" />
                   
-                  {/* Compact Header */}
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-white/5 pb-6">
-                    <div>
-                       <h2 className="text-3xl font-black text-white tracking-tight leading-none mb-2">{job.customerName}</h2>
-                       <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                          <User size={12}/> ID: #{job.orderId.slice(-6)}
+                  {/* Header Row */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/[0.03] border border-white/5 rounded-3xl p-6 gap-6 relative z-10">
+                    <div className="flex items-center gap-6">
+                       <div className="w-20 h-20 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-2xl relative group">
+                          <User size={40} className="group-hover:scale-110 transition-transform" />
+                          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 border-4 border-[#0f172a] rounded-full" />
+                       </div>
+                       <div>
+                          <h1 className="text-3xl font-black text-white tracking-tighter mb-1 lowercase leading-none">{job.customerName || 'Khách hàng'}</h1>
+                          <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                             <Shield size={12} className="text-indigo-400" /> ID: #{job.orderId ? job.orderId.slice(-6).toUpperCase() : 'N/A'}
+                          </div>
                        </div>
                     </div>
-                    <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-2xl flex items-center gap-3">
-                       <Clock className="text-amber-500" size={16} />
-                       <p className="text-[11px] font-black text-white uppercase tracking-tighter">HẠN: 17:00</p>
-                    </div>
-                  </div>
-
-                  {/* Compact Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white/[0.03] p-5 rounded-[24px] border border-white/5 flex items-start gap-4">
-                       <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400 border border-indigo-500/10 shrink-0">
-                          <MapPin size={18} />
-                       </div>
-                       <div className="min-w-0">
-                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">ĐỊA CHỈ</p>
-                          <p className="text-sm font-bold text-white leading-tight line-clamp-2">{job.address}</p>
-                       </div>
-                    </div>
-                    <div className="bg-white/[0.03] p-5 rounded-[24px] border border-white/5 flex items-start gap-4">
-                       <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 border border-emerald-500/10 shrink-0">
-                          <AlertCircle size={18} />
-                       </div>
-                       <div className="min-w-0">
-                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">THIẾT BỊ</p>
-                          <p className="text-sm font-bold text-white leading-tight">Điều hòa</p>
-                       </div>
+                    <div className="flex flex-col items-start sm:items-end w-full sm:w-auto border-t sm:border-t-0 border-white/5 pt-4 sm:pt-0">
+                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Thời gian giới hạn</p>
+                       <p className="text-3xl font-black text-amber-500 tabular-nums lowercase">17:00 <span className="text-xs uppercase opacity-30">pm</span></p>
                     </div>
                   </div>
 
-                  {/* Compact Notes */}
-                  <div className="bg-white/[0.02] p-6 rounded-[24px] border border-white/5">
-                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Briefcase size={12}/> GHI CHÚ</p>
-                     <p className="text-sm text-slate-300 font-medium leading-relaxed italic line-clamp-2">
-                       "{job.description || 'Khách báo cần kiểm tra gấp do có trẻ nhỏ.'}"
+                  {/* Core Metrics Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+                     <div className="bg-white/[0.02] p-6 rounded-[32px] border border-white/5 group hover:bg-white/[0.05] transition-all duration-500">
+                        <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-110 transition-transform">
+                           <MapPin size={24} />
+                        </div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">VỊ TRÍ TRIỂN KHAI</p>
+                        <p className="text-xs font-bold text-white leading-relaxed line-clamp-2">{job.address || 'Đang cập nhật vị trí...'}</p>
+                     </div>
+                     <div className="bg-white/[0.02] p-6 rounded-[32px] border border-white/5 group hover:bg-white/[0.05] transition-all duration-500">
+                        <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400 mb-4 group-hover:scale-110 transition-transform">
+                           <AlertCircle size={24} />
+                        </div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">LOẠI DỊCH VỤ</p>
+                        <p className="text-xs font-bold text-white truncate">{job.serviceName || 'Xử lý kỹ thuật'}</p>
+                     </div>
+                     <div className="bg-white/[0.02] p-6 rounded-[32px] border border-white/5 group hover:bg-white/[0.05] transition-all duration-500 sm:col-span-2 lg:col-span-1">
+                        <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400 mb-4 group-hover:scale-110 transition-transform">
+                           <Clock size={24} />
+                        </div>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">DỰ KIẾN HOÀN THÀNH</p>
+                        <p className="text-xs font-bold text-white lowercase">45-60 phút thi công</p>
+                     </div>
+                  </div>
+
+                  {/* Media Gallery */}
+                  <div className="space-y-6 relative z-10">
+                    <div className="flex items-center justify-between px-2">
+                       <h3 className="text-[11px] font-black text-white uppercase tracking-[0.4em] flex items-center gap-2">
+                          <Sparkles size={14} className="text-indigo-400" /> BẰNG CHỨNG HIỆN TRƯỜNG & HÌNH ẢNH
+                       </h3>
+                    </div>
+                    
+                    <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
+                       {jobDetail?.imageUrls && jobDetail.imageUrls.length > 0 ? (
+                         jobDetail.imageUrls.map((url, idx) => (
+                           <div key={idx} className="min-w-[220px] h-[150px] rounded-3xl overflow-hidden border border-white/5 relative group cursor-pointer snap-start shadow-2xl">
+                              <img src={url} alt="Evidence" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                              <div className="absolute inset-0 bg-indigo-600/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                 <ImageIcon size={24} className="text-white" />
+                              </div>
+                           </div>
+                         ))
+                       ) : (
+                         <div className="w-full h-[150px] bg-white/[0.01] border border-dashed border-white/10 rounded-[32px] flex flex-col items-center justify-center text-slate-600 gap-3 group">
+                            <ImageIcon size={40} className="opacity-20 group-hover:scale-110 transition-transform" />
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em]">Hệ thống chưa nhận hình ảnh</p>
+                         </div>
+                       )}
+                    </div>
+                  </div>
+
+                  {/* Problem Description */}
+                  <div className="bg-[#020617] border border-white/5 rounded-[32px] p-8 relative overflow-hidden group">
+                     <div className="absolute top-0 right-0 p-8 opacity-[0.03] text-indigo-500 group-hover:scale-105 transition-transform duration-700">
+                        <Briefcase size={100} />
+                     </div>
+                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Mô tả chi tiết từ khách</p>
+                     <p className="text-base text-slate-300 font-medium italic relative z-10 leading-relaxed max-w-4xl">
+                        "{job.description || 'Hệ thống đang tiến hành kiểm tra và phân tích yêu cầu từ phía khách hàng...'}"
                      </p>
                   </div>
 
-                  {/* Compact Video */}
-                  <div className="h-44 rounded-[28px] bg-slate-950 border border-white/5 overflow-hidden relative group cursor-pointer shadow-lg shrink-0">
-                     <img 
-                      src="https://images.unsplash.com/photo-1581094288338-2314dddb7903?q=80&w=2070&auto=format&fit=crop" 
-                      className="w-full h-full object-cover opacity-30 transition duration-500 group-hover:scale-105" 
-                      alt="Thumbnail"
-                     />
-                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-14 h-14 bg-indigo-500/30 backdrop-blur-xl border border-white/20 rounded-full flex items-center justify-center text-white shadow-xl group-hover:bg-indigo-500 transition-all">
-                           <Play size={24} fill="currentColor" className="ml-0.5" />
+                  {/* PRO Action Toolbar */}
+                  <div className="pt-6 border-t border-white/5 flex flex-col gap-6 relative z-10">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                       <button 
+                         onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.address)}`, '_blank')}
+                         className="flex-1 py-5 px-8 bg-[#0f172a] border border-white/10 rounded-[28px] flex items-center justify-between group hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all shadow-2xl"
+                       >
+                         <div className="flex items-center gap-4">
+                            <Navigation size={20} className="text-indigo-400 group-hover:scale-110 transition-transform" />
+                            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 group-hover:text-white transition-colors">Xem lộ trình Google Maps</span>
+                         </div>
+                         <ChevronRight size={18} className="text-slate-700 group-hover:translate-x-1 group-hover:text-indigo-400 transition-all" />
+                       </button>
+                       <div className="flex gap-4 w-full sm:w-auto">
+                          <a href={`tel:${job.customerPhone}`} className="flex-1 sm:w-16 sm:h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-[24px] flex items-center justify-center text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all shadow-xl group/link">
+                            <Phone size={24} className="group-hover/link:rotate-12 transition-transform" />
+                          </a>
+                          <a href={`https://zalo.me/${job.customerPhone}`} target="_blank" rel="noreferrer" className="flex-1 sm:w-16 sm:h-16 bg-sky-500/10 border border-sky-500/20 rounded-[24px] flex items-center justify-center text-sky-400 hover:bg-sky-500 hover:text-white transition-all shadow-xl group/link">
+                            <MessageSquare size={24} className="group-hover/link:scale-110 transition-transform" />
+                          </a>
+                       </div>
+                    </div>
+
+                    <button 
+                      onClick={handleCompleteOrder}
+                      disabled={actionLoading}
+                      className={cn(
+                        "w-full p-10 rounded-[44px] flex items-center justify-between transition-all duration-700 border-2 shadow-2xl overflow-hidden relative group/final active:scale-[0.99]",
+                        actionLoading 
+                          ? "bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed"
+                          : "bg-emerald-500/10 border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                      )}
+                    >
+                      <div className="flex items-center gap-8 relative z-10">
+                        <div className="w-16 h-16 rounded-[22px] bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30 group-hover/final:bg-white group-hover/final:text-emerald-600 transition-all duration-500 shadow-lg">
+                           <Zap size={28} />
                         </div>
-                     </div>
-                     <div className="absolute top-4 left-4 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full border border-white/10 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                        <span className="text-[8px] font-black text-white uppercase tracking-widest">VIDEO HIỆN TRƯỜNG</span>
-                     </div>
+                        <div className="text-left">
+                          <p className="text-[10px] font-black uppercase opacity-60 mb-0.5 tracking-[0.3em]">CÔNG VIỆC ĐÃ XONG</p>
+                          <p className="text-3xl font-black uppercase tracking-tighter">Xác nhận hoàn tất</p>
+                        </div>
+                      </div>
+                      <CheckCircle size={40} className="relative z-10 group-hover/final:scale-110 transition-transform group-hover/final:rotate-12" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 opacity-0 group-hover/final:opacity-100 transition-opacity duration-700" />
+                    </button>
                   </div>
+                </div>
+
+                {/* Pending Confirmation List */}
+                {pendingReviews.length > 0 && (
+                  <div className="space-y-6 pt-10">
+                    <h3 className="text-[11px] font-black text-amber-500 uppercase tracking-[0.4em] px-2 flex items-center gap-3">
+                       <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                       DANH SÁCH CHỜ KHÁCH HÀNG PHẢN HỒI ({pendingReviews.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {pendingReviews.map((pr) => (
+                        <div key={pr.orderId} className="bg-[#0f172a]/40 backdrop-blur-md border border-white/5 rounded-[36px] p-6 flex items-center justify-between group hover:border-white/10 transition-all shadow-xl">
+                          <div className="flex items-center gap-5 min-w-0">
+                             <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400 border border-white/5 shrink-0 group-hover:scale-110 transition-transform">
+                                <Clock size={24} className="animate-pulse" />
+                             </div>
+                             <div className="min-w-0">
+                                <h4 className="text-sm font-black text-white uppercase truncate mb-1 tracking-tight">{pr.title}</h4>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{pr.customerName} • {pr.sentAt}</p>
+                             </div>
+                          </div>
+                          <button onClick={() => handleDebugConfirm(pr.orderId)} className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center hover:bg-emerald-600 transition-all shrink-0 shadow-lg group-hover:rotate-12 transition-transform">
+                             <CheckCircle size={20} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-48 animate-in zoom-in duration-700">
+                 <div className="w-24 h-24 rounded-[32px] bg-slate-900 border border-white/5 flex items-center justify-center text-slate-800 mb-8 shadow-inner">
+                    <Briefcase size={48} />
+                 </div>
+                 <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-3">Hệ thống đang sẵn sàng</h2>
+                 <p className="text-slate-500 mb-12 text-center max-w-sm font-medium">Bạn chưa có công việc đang thực hiện. Hãy tiếp nhận đơn hàng tại danh sách đơn đã tiếp nhận.</p>
+                 <Link to="/technician/don-hang/da-tiep-nhan" className="group px-12 py-5 bg-indigo-600 text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.2em] shadow-2xl hover:bg-indigo-500 transition-all flex items-center gap-4">
+                    Đến trang đơn đã tiếp nhận <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                 </Link>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* === RIGHT SIDEBAR: PERSISTENT SYNCED DESIGN === */}
+        <div className="w-full lg:w-[380px] space-y-8 h-full shrink-0 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible pr-2 md:pr-0">
+          
+          {/* Stats Widget */}
+          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/10 rounded-[40px] p-8 space-y-8 relative overflow-hidden shadow-2xl shrink-0">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none text-white">
+                <Activity size={120} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">Nhiệm vụ đã nhận</p>
+                <div className="flex items-baseline gap-2">
+                   <span className="text-5xl font-black text-white tabular-nums">{acceptedCount}</span>
+                   <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-tighter">Hiện có</span>
                 </div>
               </div>
-
-              {/* RIGHT COL: SIDEBAR */}
-              <div className="flex flex-col gap-5">
-                {/* Map */}
-                <div className="bg-[#0f172a]/60 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 shadow-xl space-y-5">
-                   <div className="flex items-center justify-between">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">LỘ TRÌNH</p>
-                      <div className="flex items-center gap-2">
-                         <span className="text-xs font-black text-white">4.2 km</span>
-                         <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 rounded text-[8px] font-black border border-emerald-500/10">~12'</span>
-                      </div>
-                   </div>
-                   <div className="h-48 rounded-[24px] bg-slate-900 border border-white/5 overflow-hidden relative shadow-inner">
-                      <img 
-                        src="https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=2068&auto=format&fit=crop" 
-                        alt="Map" 
-                        className="w-full h-full object-cover opacity-30 grayscale"
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                         <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center border-2 border-white/20 shadow-xl">
-                            <Navigation size={16} className="text-white" />
-                         </div>
-                      </div>
-                   </div>
-                </div>
-
-                {/* Quick Contact */}
-                <div className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 shadow-xl space-y-4">
-                   <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">LIÊN HỆ</p>
-                   <div className="grid grid-cols-2 gap-3">
-                      <a href={`tel:${job.customerPhone}`} className="flex flex-col items-center gap-2 p-4 bg-white/[0.03] rounded-[20px] border border-white/5 hover:bg-white/[0.08] transition-all group">
-                        <Phone size={16} className="text-emerald-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[8px] font-black text-white uppercase">GỌI ĐIỆN</span>
-                      </a>
-                      <a href={`https://zalo.me/${job.customerPhone}`} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-2 p-4 bg-white/[0.03] rounded-[20px] border border-white/5 hover:bg-white/[0.08] transition-all group">
-                        <MessageSquare size={16} className="text-sky-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[8px] font-black text-white uppercase">ZALO</span>
-                      </a>
-                   </div>
-                </div>
-
-                {/* Action Button */}
-                <button 
-                  onClick={handleNextStep}
-                  disabled={actionLoading}
-                  className={cn(
-                    "w-full p-6 rounded-[32px] flex items-center justify-between transition-all duration-300 border-2",
-                    actionLoading 
-                      ? "bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed"
-                      : "bg-indigo-500/10 border-indigo-500 text-indigo-400 hover:bg-indigo-500 hover:text-white shadow-lg active:scale-95"
-                  )}
-                >
-                  <div className="text-left">
-                    <p className="text-[8px] font-black uppercase opacity-60 mb-0.5 tracking-widest">
-                      {actionLoading ? 'ĐANG XỬ LÝ' : 'TIẾP THEO'}
-                    </p>
-                    <p className="text-sm font-black uppercase tracking-tighter">
-                       {actionLoading ? "Vui lòng đợi..." : (
-                         <>
-                           {currentStep === 1 && "BẮT ĐẦU DI CHUYỂN"}
-                           {currentStep === 2 && "BẮT ĐẦU SỬA CHỮA"}
-                           {currentStep === 3 && "GỬI XÁC NHẬN HOÀN THÀNH"}
-                         </>
-                       )}
-                    </p>
-                  </div>
-                  {actionLoading ? <Loader2 size={20} className="animate-spin" /> : <ChevronRight size={20} />}
-                </button>
+              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 shadow-xl">
+                 <CheckCircle2 size={32} />
               </div>
             </div>
-          </motion.div>
-        ) : (
-          /* Khi không có đơn đang thực hiện -> Hiển thị nút vào Đã tiếp nhận */
-          <div className="flex flex-col items-center justify-center py-20 bg-[#0f172a]/20 border border-dashed border-slate-800 rounded-[40px] text-slate-500 shrink-0">
-            <Briefcase className="w-12 h-12 opacity-10 mb-4" />
-            <p className="text-lg font-black text-slate-400 tracking-tight">Hiện không có công việc đang thực hiện</p>
-            <p className="text-sm text-slate-600 mt-1 mb-6">Vào mục "Đã tiếp nhận" để bắt đầu đơn tiếp theo</p>
-            <Link 
-              to="/technician/don-hang/da-tiep-nhan" 
-              className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
-            >
-               Vào đơn đã tiếp nhận
-               <ChevronRight size={16} />
-            </Link>
+            <button onClick={loadStats} className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center justify-between group transition-all">
+               <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                    <Cloud size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-black text-white uppercase leading-none mb-1">Đồng bộ đám mây</p>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest italic">UPDATING...</p>
+                  </div>
+               </div>
+               <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
+            </button>
           </div>
-        )}
-      </AnimatePresence>
 
-      {/* PHẦN 2: ĐƠN ĐANG CHỜ KHÁCH ĐÁNH GIÁ */}
-      {pendingReviews.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-10 shrink-0"
-        >
-          <div className="flex items-center justify-between mb-6">
-             <h3 className="text-[11px] font-black text-amber-400 uppercase tracking-[0.3em] flex items-center gap-2">
-                <Clock size={14} /> ĐƠN CHỜ KHÁCH ĐÁNH GIÁ ({pendingReviews.length})
-             </h3>
-             <button 
-               onClick={handleRefresh}
-               className="px-4 py-2 bg-white/5 rounded-xl text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-white hover:bg-white/10 transition-all border border-white/5"
-             >
-               Làm mới (Sync)
-             </button>
-          </div>
-          <div className="space-y-4">
-            {pendingReviews.map((pr) => (
-              <div
-                key={pr.orderId}
-                className="bg-[#0f172a]/40 backdrop-blur-xl border border-amber-500/10 rounded-[28px] p-6 flex flex-col sm:flex-row items-center justify-between gap-4 group hover:border-amber-500/20 transition-all"
-              >
-                <div className="flex items-center gap-5 flex-1 min-w-0">
-                  <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400 border border-amber-500/10 shrink-0">
-                     <Clock size={20} className="animate-pulse" />
+          {/* Map Insight Widget */}
+          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/10 rounded-[40px] p-8 space-y-8 shadow-2xl shrink-0">
+            <div className="flex items-center justify-between">
+               <div className="space-y-1">
+                 <h3 className="text-xs font-black text-white uppercase tracking-widest leading-none mb-1">Khu vực triển khai</h3>
+                 <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-[0.2em] font-black">Hoạt động trực tuyến</p>
+               </div>
+               <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter shadow-sm">TRỰC TUYẾN</div>
+            </div>
+            <div className="relative rounded-3xl overflow-hidden aspect-video bg-slate-900 border border-white/5 group shadow-xl">
+               <iframe width="100%" height="100%" frameBorder="0" style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }} src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d122691.61914371526!2d108.132717088925!3d16.047165882643883!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x314219c7922b6539%3A0x1390977800000000!2zxJDDoCBO4bq5bmcsIFZp4buHdCBOYW0!5e0!3m2!1svi!2s!4v1713170000000!5m2!1svi!2s" allowFullScreen></iframe>
+               <div className="absolute bottom-4 left-4 right-4 p-4 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 text-center">
+                  <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">ĐÀ NẴNG CITY</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">ACTIVE COVERAGE</p>
+               </div>
+            </div>
+            <div className="space-y-5 px-1">
+               <div className="flex items-center gap-5 group">
+                  <div className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 border border-white/5 shadow-inner group-hover:text-indigo-400 transition-colors">
+                    <MapPin size={20} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                     <h4 className="text-sm font-black text-white uppercase tracking-tight truncate">{pr.title}</h4>
-                     <div className="flex items-center gap-3 mt-1">
-                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">{pr.customerName}</p>
-                        <div className="w-1 h-1 rounded-full bg-slate-700" />
-                        <p className="text-[9px] text-amber-400/60 font-bold">Gửi lúc {pr.sentAt}</p>
-                     </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">VÙNG ĐĂNG KÝ</p>
+                    <p className="text-[13px] font-bold text-slate-200 uppercase">Việt Nam</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                   <div className="flex flex-col items-end gap-1 px-4 py-2 bg-amber-500/5 rounded-2xl border border-amber-500/10">
-                      <p className="text-[8px] font-black text-amber-500 uppercase tracking-widest leading-none">TRẠNG THÁI</p>
-                      <p className="text-[10px] font-bold text-white uppercase tracking-tighter flex items-center gap-1.5">
-                        <Loader2 size={10} className="animate-spin text-amber-500" /> Đang đợi khách
-                      </p>
-                   </div>
-                   <button 
-                     onClick={() => handleDebugConfirm(pr.orderId)}
-                     className="h-11 px-6 bg-emerald-600 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-emerald-900/20 hover:scale-105 active:scale-95 transition-all"
-                   >
-                     Duyệt nhanh (Debug)
-                   </button>
-                </div>
-              </div>
-            ))}
+               </div>
+               <div className="flex items-center gap-5 group">
+                  <div className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 border border-white/5 shadow-inner group-hover:text-emerald-400 transition-colors">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">HIỆN DIỆN</p>
+                    <p className="text-[13px] font-bold text-slate-200">Thành phố Đà Nẵng</p>
+                  </div>
+               </div>
+            </div>
+            {/* Goal Progress Widget */}
+            <div className="pt-8 border-t border-white/10 space-y-5 px-1">
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Target size={16} className="text-indigo-400" />
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">CHỈ TIÊU</span>
+                  </div>
+                  <span className="text-sm font-black text-white tabular-nums">{stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}%</span>
+               </div>
+               <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden shadow-inner flex">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} transition={{ duration: 1.5, ease: "easeOut" }} className="h-full bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+               </div>
+            </div>
           </div>
-        </motion.div>
-      )}
+        </div>
+
+      </div>
     </div>
   );
 }

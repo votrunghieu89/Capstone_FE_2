@@ -19,8 +19,8 @@ export interface RegisterTechnicianData {
   phoneNumber: string;
   address: string;
   cityId: string;
-  latitude: number;
-  longitude: number;
+  latitude: string;
+  longitude: string;
 }
 
 // Matches BE: Capstone_2_BE.DTOs.Authentication.LoginResultDTO

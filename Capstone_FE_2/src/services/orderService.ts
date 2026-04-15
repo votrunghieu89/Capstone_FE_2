@@ -11,8 +11,8 @@ export interface OrderUpdateFormDTO {
   description?: string;
   address?: string;
   cityId?: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: string;
+  longitude?: string;
   videoUrl?: File;
   images?: File[];
 }
@@ -67,8 +67,8 @@ const orderService = {
     if (typeof data.description === 'string') formData.append('Description', data.description);
     if (typeof data.address === 'string') formData.append('Address', data.address);
     if (typeof data.cityId === 'string' && data.cityId) formData.append('CityId', data.cityId);
-    if (typeof data.latitude === 'number') formData.append('Latitude', String(data.latitude));
-    if (typeof data.longitude === 'number') formData.append('Longitude', String(data.longitude));
+    if (typeof data.latitude === 'string') formData.append('Latitude', data.latitude);
+    if (typeof data.longitude === 'string') formData.append('Longitude', data.longitude);
     if (data.videoUrl) formData.append('videoUrl', data.videoUrl);
 
     if (data.images && data.images.length > 0) {
