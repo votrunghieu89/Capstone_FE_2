@@ -23,9 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Plus, Search, MoreHorizontal, BriefcaseBusiness, Phone, Star, Eye, Trash2 } from "lucide-react"
-import type { TechnicianItem } from "@/types/admin"
-import { adminDelete, adminGet, adminPost, normalizeListPayload } from "@/utils/adminHttp"
+import { Plus, Search, MoreHorizontal, BriefcaseBusiness, Phone, Star, Eye, MessageSquare, Loader2 } from "lucide-react"
 
 type TechStatus = "san-sang" | "dang-lam" | "nghi-phep"
 
@@ -43,10 +41,23 @@ type TechItem = {
   reviews: number
 }
 
+type TechReviewItem = {
+  ratingId: string
+  customerName: string
+  score: number
+  feedback: string
+  createdAt: string
+}
+
+type TechReviewOverview = {
+  averageRating: number
+  totalRatings: number
+}
+
 const statusMap: Record<TechStatus, { label: string; className: string }> = {
-  "san-sang": { label: "Sẵn sàng", className: "bg-emerald-950/40 text-emerald-300 border-emerald-800" },
-  "dang-lam": { label: "Đang làm việc", className: "bg-blue-950/40 text-blue-300 border-blue-800" },
-  "nghi-phep": { label: "Nghỉ phép", className: "bg-slate-900/50 text-slate-300 border-slate-700" },
+  "san-sang": { label: "Sẵn sàng", className: "bg-[#0f3c2f] text-[#46d898] border-[#1d6a52]" },
+  "dang-lam": { label: "Đang làm việc", className: "bg-[#0d2747] text-[#5eb3ff] border-[#1b436f]" },
+  "nghi-phep": { label: "Nghỉ phép", className: "bg-[#2b2d33] text-[#a8acb9] border-[#464a56]" },
 }
 
 const seedTechnicians: TechItem[] = [
@@ -58,32 +69,17 @@ const seedTechnicians: TechItem[] = [
   { id: "t6", technicianId: "t6", userId: "t6", code: "KTV-006", name: "Bùi Văn Q", email: "quang@gmail.com", phone: "0900000011", specialty: "Sơn sửa", status: "san-sang", rating: 0, reviews: 0 },
 ]
 
-function mapTechnician(item: TechnicianItem, index: number): TechItem {
-  const status: TechStatus = item.isActive
-    ? item.isAvailable
-      ? "san-sang"
-      : "dang-lam"
-    : "nghi-phep"
-
-  return {
-    id: item.userId || item.id,
-    technicianId: item.id,
-    userId: item.userId || item.id,
-    code: `KTV-${String(index + 1).padStart(3, "0")}`,
-    name: item.fullName,
-    email: item.email,
-    phone: item.phone || "--",
-    specialty: item.bio || "Chưa cập nhật",
-    status,
-    rating: Number(item.averageRating || 0),
-    reviews: item.totalReviews || 0,
-  }
-}
-
 function getInitials(name: string) {
   const parts = name.trim().split(" ").filter(Boolean)
   if (parts.length === 0) return "K"
   return parts.slice(0, 2).map((s) => s[0].toUpperCase()).join("")
+}
+
+function formatReviewDate(value?: string) {
+  if (!value) return "Không rõ thời gian"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("vi-VN")
 }
 
 export default function TechniciansPage() {
@@ -95,6 +91,11 @@ export default function TechniciansPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [formError, setFormError] = useState("")
+  const [isReviewsOpen, setIsReviewsOpen] = useState(false)
+  const [isReviewsLoading, setIsReviewsLoading] = useState(false)
+  const [reviewsError, setReviewsError] = useState("")
+  const [reviewItems, setReviewItems] = useState<TechReviewItem[]>([])
+  const [reviewOverview, setReviewOverview] = useState<TechReviewOverview>({ averageRating: 0, totalRatings: 0 })
   const [newTech, setNewTech] = useState({
     name: "",
     email: "",
@@ -103,33 +104,8 @@ export default function TechniciansPage() {
     status: "san-sang" as TechStatus,
   })
 
-  const reloadTechnicians = async () => {
-    const data = await adminGet("/admin/technicians")
-    const list = normalizeListPayload<TechnicianItem>(data).map(mapTechnician)
-    setTechnicians(list)
-  }
-
   useEffect(() => {
-    let mounted = true
-
-    ;(async () => {
-      try {
-        const data = await adminGet("/admin/technicians")
-        const list = normalizeListPayload<TechnicianItem>(data).map(mapTechnician)
-        if (!mounted) return
-        setTechnicians(list)
-      } catch {
-        if (!mounted) return
-        setTechnicians(seedTechnicians)
-      } finally {
-        if (!mounted) return
-        setIsLoading(false)
-      }
-    })()
-
-    return () => {
-      mounted = false
-    }
+    setIsLoading(false)
   }, [])
 
   const filteredTechnicians = useMemo(() => {
@@ -156,44 +132,36 @@ export default function TechniciansPage() {
     setIsDetailOpen(true)
   }
 
-  const deleteTech = async (tech: TechItem) => {
-    const snapshot = technicians
-    setTechnicians((prev) => prev.filter((t) => t.id !== tech.id))
+  const openReviews = (tech: TechItem) => {
+    setSelectedTech(tech)
+    setIsReviewsOpen(true)
+    setIsReviewsLoading(true)
+    setReviewsError("")
 
-    try {
-      const candidateIds = Array.from(new Set([tech.userId, tech.technicianId, tech.id].filter(Boolean)))
-      let deleted = false
+    const simulatedReviews: TechReviewItem[] = [
+      {
+        ratingId: `${tech.id}-r1`,
+        customerName: "Khách hàng A",
+        score: tech.rating > 0 ? Math.min(5, Math.round(tech.rating)) : 5,
+        feedback: "Thợ đến đúng giờ, xử lý sự cố nhanh và tư vấn rõ ràng.",
+        createdAt: new Date().toISOString(),
+      },
+      {
+        ratingId: `${tech.id}-r2`,
+        customerName: "Khách hàng B",
+        score: tech.rating > 1 ? Math.min(5, Math.round(tech.rating)) : 4,
+        feedback: "Thái độ nhiệt tình, làm việc cẩn thận.",
+        createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
+      },
+    ]
 
-      for (const candidateId of candidateIds) {
-        try {
-          await adminDelete(`/admin/technicians/${candidateId}`)
-          deleted = true
-          break
-        } catch {
-          // try next candidate id
-        }
-      }
-
-      if (!deleted) {
-        for (const candidateId of candidateIds) {
-          try {
-            await adminDelete(`/admin/users/${candidateId}`)
-            deleted = true
-            break
-          } catch {
-            // try next candidate id
-          }
-        }
-      }
-
-      if (!deleted) {
-        throw new Error("Cannot delete technician with provided IDs")
-      }
-
-      await reloadTechnicians()
-    } catch {
-      setTechnicians(snapshot)
-    }
+    const derivedAverage = simulatedReviews.reduce((sum, item) => sum + item.score, 0) / simulatedReviews.length
+    setReviewItems(simulatedReviews)
+    setReviewOverview({
+      averageRating: Number(derivedAverage.toFixed(1)),
+      totalRatings: simulatedReviews.length,
+    })
+    setIsReviewsLoading(false)
   }
 
   const handleCreateTechnician = async () => {
@@ -228,22 +196,7 @@ export default function TechniciansPage() {
     setFormError("")
     setNewTech({ name: "", email: "", phone: "", specialty: "", status: "san-sang" })
 
-    try {
-      await adminPost("/admin/technicians", {
-        fullName: name,
-        email,
-        phone,
-        password: "123456Aa@",
-        bio: specialty,
-        experienceYears: 0,
-        hourlyRate: undefined,
-        isAvailable: newTech.status === "san-sang",
-      })
-
-      await reloadTechnicians()
-    } catch {
-      // Keep optimistic local row if API create fails.
-    }
+    // Local-only mode: keep UI update without API calls.
   }
 
   return (
@@ -387,26 +340,97 @@ export default function TechniciansPage() {
         </DialogContent>
       </Dialog>
 
-      <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
-        <Card className="border border-slate-800 bg-[#0b111f] shadow-sm rounded-xl">
-          <CardContent className="p-4 flex flex-col gap-4">
+      <Dialog
+        open={isReviewsOpen}
+        onOpenChange={(open) => {
+          setIsReviewsOpen(open)
+          if (!open) {
+            setReviewsError("")
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl border border-slate-800 bg-[#0d1322] text-slate-100">
+          <DialogHeader>
+            <DialogTitle className="text-slate-100 text-lg">Đánh giá kỹ thuật viên</DialogTitle>
+          </DialogHeader>
+
+          {selectedTech && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-800 bg-[#0b111f] p-4">
+                <p className="text-sm text-slate-300">{selectedTech.name}</p>
+                <p className="text-xs text-[#3b82f6] mt-1">{selectedTech.code}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                  <Badge variant="outline" className="bg-[#0d2747] text-[#5eb3ff] border-[#1b436f]">
+                    Trung bình: {reviewOverview.averageRating.toFixed(1)}
+                  </Badge>
+                  <Badge variant="outline" className="bg-[#101a2f] text-slate-200 border-slate-700">
+                    Tổng đánh giá: {reviewOverview.totalRatings}
+                  </Badge>
+                </div>
+              </div>
+
+              {isReviewsLoading && (
+                <div className="py-8 text-center text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Đang tải đánh giá...
+                </div>
+              )}
+
+              {!isReviewsLoading && reviewsError && (
+                <div className="py-4 text-sm text-red-300">{reviewsError}</div>
+              )}
+
+              {!isReviewsLoading && !reviewsError && reviewItems.length === 0 && (
+                <div className="py-6 text-sm text-slate-400">Kỹ thuật viên này chưa có đánh giá nào.</div>
+              )}
+
+              {!isReviewsLoading && !reviewsError && reviewItems.length > 0 && (
+                <div className="max-h-[380px] overflow-y-auto space-y-3 pr-1">
+                  {reviewItems.map((review) => (
+                    <div key={review.ratingId} className="rounded-xl border border-slate-800 bg-[#0b111f] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-100">{review.customerName}</p>
+                        <p className="text-xs text-slate-400">{formatReviewDate(review.createdAt)}</p>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`h-4 w-4 ${star <= review.score ? "text-yellow-400 fill-yellow-400" : "text-slate-600"}`}
+                          />
+                        ))}
+                        <span className="ml-1 text-xs text-slate-400">({review.score}/5)</span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-300 leading-relaxed">{review.feedback}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <main className="flex-1 p-6 flex flex-col gap-5 max-w-[1400px] w-full mx-auto">
+        <Card className="border border-slate-800 bg-[#0b111f] shadow-sm rounded-2xl">
+          <CardContent className="p-5 flex flex-col gap-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <div className="relative flex-1 max-w-sm">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="relative flex-1 max-w-[460px] min-w-[220px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                   <Input
                     placeholder="Tìm kiếm kỹ thuật viên..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+                    className="h-10 pl-9 bg-[#0f1627] border-slate-700 text-slate-100 placeholder:text-slate-500"
                   />
                 </div>
 
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[160px] bg-[#101a2f] border-slate-700 text-slate-100">
+                  <SelectTrigger className="w-[160px] h-10 bg-[#0f1627] border-slate-700 text-slate-100">
                     <SelectValue placeholder="Tất cả" />
                   </SelectTrigger>
-                  <SelectContent className="border-slate-700 bg-[#101a2f] text-slate-100">
+                  <SelectContent className="border-slate-700 bg-[#0f1627] text-slate-100">
                     <SelectItem value="all">Tất cả</SelectItem>
                     <SelectItem value="san-sang">Sẵn sàng</SelectItem>
                     <SelectItem value="dang-lam">Đang làm việc</SelectItem>
@@ -415,17 +439,17 @@ export default function TechniciansPage() {
                 </Select>
               </div>
 
-              <Button className="bg-[#2563eb] hover:bg-[#1e4fc7] text-white" onClick={() => setIsCreateOpen(true)}>
+              <Button className="h-10 px-4 bg-[#2563eb] hover:bg-[#1e4fc7] text-white" onClick={() => setIsCreateOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Thêm kỹ thuật viên
               </Button>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="bg-[#101a2f] text-slate-200 border-slate-700">Tổng: {technicians.length}</Badge>
-              <Badge variant="outline" className="bg-emerald-950/40 text-emerald-300 border-emerald-800">Sẵn sàng: {readyCount}</Badge>
-              <Badge variant="outline" className="bg-blue-950/40 text-blue-300 border-blue-800">Đang làm việc: {busyCount}</Badge>
-              <Badge variant="outline" className="bg-slate-900/50 text-slate-300 border-slate-700">Nghỉ phép: {leaveCount}</Badge>
+              <Badge variant="outline" className="bg-[#0f1627] text-slate-200 border-slate-700">Tổng: {technicians.length}</Badge>
+              <Badge variant="outline" className="bg-[#0f3c2f] text-[#46d898] border-[#1d6a52]">Sẵn sàng: {readyCount}</Badge>
+              <Badge variant="outline" className="bg-[#0d2747] text-[#5eb3ff] border-[#1b436f]">Đang làm việc: {busyCount}</Badge>
+              <Badge variant="outline" className="bg-[#2b2d33] text-[#a8acb9] border-[#464a56]">Nghỉ phép: {leaveCount}</Badge>
             </div>
           </CardContent>
         </Card>
@@ -434,11 +458,13 @@ export default function TechniciansPage() {
           {isLoading && (
             <div className="col-span-full text-center text-slate-400 py-8">Đang tải dữ liệu...</div>
           )}
+          {!isLoading && filteredTechnicians.length === 0 && (
+            <div className="col-span-full text-center text-slate-400 py-8">Chưa có kỹ thuật viên phù hợp</div>
+          )}
           {filteredTechnicians.map((tech) => (
             <Card
               key={tech.id}
-              className="border border-slate-800 bg-[#0b111f] rounded-2xl hover:border-slate-700 transition-colors cursor-pointer"
-              onClick={() => openDetail(tech)}
+              className="border border-slate-800 bg-[#0b111f] rounded-2xl hover:border-slate-700 transition-colors min-h-[286px]"
             >
               <CardContent className="p-5 flex flex-col gap-4">
                 <div className="flex items-start justify-between">
@@ -468,9 +494,9 @@ export default function TechniciansPage() {
                         <Eye className="h-4 w-4" />
                         Xem chi tiết
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-400 focus:text-red-300" onSelect={() => deleteTech(tech)}>
-                        <Trash2 className="h-4 w-4" />
-                        Xóa
+                      <DropdownMenuItem onSelect={() => openReviews(tech)}>
+                        <MessageSquare className="h-4 w-4" />
+                        Xem đánh giá
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

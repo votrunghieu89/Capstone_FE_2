@@ -26,14 +26,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Lock, LockOpen, Search } from "lucide-react"
-import axios from "axios"
-import {
-  getRoleFromAccessToken,
-  getRoleFromPersistedStore,
-  getTokenFromCookie,
-  getTokenFromPersistedStore,
-  isTokenExpired,
-} from "@/utils/authToken"
 import type { UserDetailItem, UserItem } from "@/types/admin"
 
 type AccountRole = "nguoi-dung" | "ky-thuat-vien"
@@ -50,98 +42,78 @@ type AccountItem = {
 }
 
 const roleMap: Record<AccountRole, { label: string; className: string }> = {
-  "nguoi-dung": { label: "Người dùng", className: "bg-blue-950/40 text-blue-300 border-blue-800" },
-  "ky-thuat-vien": { label: "Kỹ thuật viên", className: "bg-amber-950/40 text-amber-300 border-amber-800" },
+  "nguoi-dung": { label: "Người dùng", className: "bg-[#0d2747] text-[#5eb3ff] border-[#1b436f]" },
+  "ky-thuat-vien": { label: "Kỹ thuật viên", className: "bg-[#33250f] text-[#f8ba4b] border-[#7b5a22]" },
 }
+
+const seedAccounts: AccountItem[] = [
+  {
+    id: "u1",
+    fullName: "Quyet",
+    email: "p@gmail.com",
+    phone: "0123456789",
+    role: "ky-thuat-vien",
+    isActive: true,
+    isVerified: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "u2",
+    fullName: "quyết",
+    email: "a@gmail.com",
+    phone: "0123456788",
+    role: "ky-thuat-vien",
+    isActive: true,
+    isVerified: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "u3",
+    fullName: "Trần Văn H",
+    email: "h@gmail.com",
+    phone: "0912345678",
+    role: "nguoi-dung",
+    isActive: true,
+    isVerified: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "u4",
+    fullName: "Hồ SĨ T",
+    email: "trieu@gmail.com",
+    phone: "0981112222",
+    role: "ky-thuat-vien",
+    isActive: false,
+    isVerified: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "u5",
+    fullName: "Bùi Quyết",
+    email: "quyet123@gmail.com",
+    phone: "0933334444",
+    role: "ky-thuat-vien",
+    isActive: true,
+    isVerified: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "u6",
+    fullName: "Đỗ Đạt",
+    email: "dat@gmail.com",
+    phone: "0901010101",
+    role: "nguoi-dung",
+    isActive: false,
+    isVerified: true,
+    createdAt: new Date().toISOString(),
+  },
+]
 
 function normalizeRole(role?: string): AccountRole | null {
   const value = (role || "").trim().toLowerCase()
   if (value === "customer" || value === "nguoi-dung") return "nguoi-dung"
   if (value === "technician" || value === "ky-thuat-vien") return "ky-thuat-vien"
   return null
-}
-
-function normalizeListPayload<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) return payload as T[]
-  if (payload && typeof payload === "object") {
-    const obj = payload as Record<string, unknown>
-    if (Array.isArray(obj.items)) return obj.items as T[]
-    if (Array.isArray(obj.data)) return obj.data as T[]
-    if (obj.data && typeof obj.data === "object") {
-      const dataObj = obj.data as Record<string, unknown>
-      if (Array.isArray(dataObj.items)) return dataObj.items as T[]
-    }
-  }
-  return []
-}
-
-function getTokenCandidates(): string[] {
-  const lsToken = localStorage.getItem("accessToken") || ""
-  const legacyToken = localStorage.getItem("fastfix_token") || ""
-  const persistedToken = getTokenFromPersistedStore()
-  const persistedRole = getRoleFromPersistedStore()
-  const cookieToken = getTokenFromCookie()
-
-  const candidates: string[] = []
-  if (persistedRole === "admin" && persistedToken && !isTokenExpired(persistedToken)) {
-    candidates.push(persistedToken)
-  }
-  for (const token of [lsToken, cookieToken, legacyToken, persistedToken]) {
-    if (!token || isTokenExpired(token)) continue
-    const role = getRoleFromAccessToken(token)
-    if (!role || role.includes("admin")) {
-      candidates.push(token)
-    }
-  }
-  return Array.from(new Set(candidates))
-}
-
-const adminClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
-  withCredentials: true,
-  timeout: 10000,
-  headers: { "Content-Type": "application/json" },
-})
-
-const adminCookieClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/api",
-  withCredentials: true,
-  timeout: 10000,
-  headers: { "Content-Type": "application/json" },
-})
-
-async function adminGet(path: string): Promise<unknown> {
-  const candidates = getTokenCandidates()
-  for (const token of candidates) {
-    try {
-      const res = await adminClient.get(path, { headers: { Authorization: `Bearer ${token}` } })
-      if (localStorage.getItem("accessToken") !== token) {
-        localStorage.setItem("accessToken", token)
-      }
-      return res.data
-    } catch (error: any) {
-      if (error?.response?.status !== 401) throw error
-    }
-  }
-  const fallback = await adminCookieClient.get(path)
-  return fallback.data
-}
-
-async function adminPut(path: string, data: unknown): Promise<unknown> {
-  const candidates = getTokenCandidates()
-  for (const token of candidates) {
-    try {
-      const res = await adminClient.put(path, data, { headers: { Authorization: `Bearer ${token}` } })
-      if (localStorage.getItem("accessToken") !== token) {
-        localStorage.setItem("accessToken", token)
-      }
-      return res.data
-    } catch (error: any) {
-      if (error?.response?.status !== 401) throw error
-    }
-  }
-  const fallback = await adminCookieClient.put(path, data)
-  return fallback.data
 }
 
 function formatDate(value: string) {
@@ -159,44 +131,26 @@ export default function RequestsPage() {
   const [selectedAccount, setSelectedAccount] = useState<AccountItem | null>(null)
 
   useEffect(() => {
-    let mounted = true
+    const mapped = seedAccounts.reduce<AccountItem[]>((acc, user) => {
+      const role = normalizeRole(user.role)
+      if (!role) return acc
 
-    ;(async () => {
-      try {
-        const data = await adminGet("/admin/users")
-        const users = normalizeListPayload<UserItem>(data)
+      acc.push({
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone || "--",
+        role,
+        isActive: user.isActive,
+        isVerified: true,
+        createdAt: user.createdAt,
+      })
 
-        const mapped = users
-          .map((user) => {
-            const role = normalizeRole(user.role)
-            if (!role) return null
-            return {
-              id: user.id,
-              fullName: user.fullName,
-              email: user.email,
-              phone: user.phone || "--",
-              role,
-              isActive: user.isActive,
-              isVerified: true,
-              createdAt: user.createdAt,
-            } satisfies AccountItem
-          })
-          .filter((item): item is AccountItem => item !== null)
+      return acc
+    }, [])
 
-        if (!mounted) return
-        setAccounts(mapped)
-      } catch {
-        if (!mounted) return
-        setAccounts([])
-      } finally {
-        if (!mounted) return
-        setIsLoading(false)
-      }
-    })()
-
-    return () => {
-      mounted = false
-    }
+    setAccounts(mapped)
+    setIsLoading(false)
   }, [])
 
   const filteredAccounts = useMemo(() => {
@@ -218,44 +172,12 @@ export default function RequestsPage() {
     if (!target) return
     const nextActive = !target.isActive
 
-    try {
-      if (target.role === "ky-thuat-vien") {
-        await adminPut(`/admin/technicians/${id}/toggle-active`, { isActive: nextActive })
-      } else {
-        await adminPut(`/admin/users/${id}/toggle-active`, { isActive: nextActive })
-      }
-      setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: nextActive } : a)))
-    } catch {
-      // Keep UI stable if API call fails.
-    }
+    setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: nextActive } : a)))
   }
 
   const handleOpenDetail = async (account: AccountItem) => {
     setSelectedAccount(account)
     setIsDetailOpen(true)
-
-    try {
-      const detailData = await adminGet(`/admin/users/${account.id}`)
-      const detailObj = (detailData && typeof detailData === "object" && "data" in (detailData as Record<string, unknown>))
-        ? ((detailData as Record<string, unknown>).data as UserDetailItem)
-        : (detailData as UserDetailItem)
-
-      if (!detailObj) return
-
-      const role = normalizeRole(detailObj.role) || account.role
-      setSelectedAccount({
-        id: detailObj.id || account.id,
-        fullName: detailObj.fullName || account.fullName,
-        email: detailObj.email || account.email,
-        phone: detailObj.phone || account.phone,
-        role,
-        isActive: detailObj.isActive,
-        isVerified: detailObj.isVerified,
-        createdAt: detailObj.createdAt || account.createdAt,
-      })
-    } catch {
-      // Keep already selected row data if detail API fails.
-    }
   }
 
   return (
@@ -306,25 +228,25 @@ export default function RequestsPage() {
         </DialogContent>
       </Dialog>
 
-      <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
-        <Card className="border border-slate-800 bg-[#0b111f] shadow-sm rounded-xl">
-          <CardContent className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="relative flex-1 max-w-sm">
+      <main className="flex-1 p-6 flex flex-col gap-5 max-w-[1400px] w-full mx-auto">
+        <Card className="border border-slate-800 bg-[#0b111f] shadow-sm rounded-2xl">
+          <CardContent className="p-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="relative flex-1 max-w-[460px] min-w-[220px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <Input
                   placeholder="Tìm kiếm tài khoản..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-[#101a2f] border-slate-700 text-slate-100 placeholder:text-slate-500"
+                  className="h-10 pl-9 bg-[#0f1627] border-slate-700 text-slate-100 placeholder:text-slate-500"
                 />
               </div>
 
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-[180px] bg-[#101a2f] border-slate-700 text-slate-100">
+                <SelectTrigger className="w-[180px] h-10 bg-[#0f1627] border-slate-700 text-slate-100">
                   <SelectValue placeholder="Lọc theo vai trò" />
                 </SelectTrigger>
-                <SelectContent className="border-slate-700 bg-[#101a2f] text-slate-100">
+                <SelectContent className="border-slate-700 bg-[#0f1627] text-slate-100">
                   <SelectItem value="all">Tất cả</SelectItem>
                   <SelectItem value="nguoi-dung">Người dùng</SelectItem>
                   <SelectItem value="ky-thuat-vien">Kỹ thuật viên</SelectItem>
@@ -332,22 +254,23 @@ export default function RequestsPage() {
               </Select>
             </div>
 
-            <Badge variant="outline" className="bg-[#101a2f] text-slate-200 border-slate-700 px-3 py-1.5 text-xs font-semibold">
+            <Badge variant="outline" className="bg-[#0f1627] text-slate-200 border-slate-700 px-3 py-1.5 text-sm font-semibold">
               Tổng: {filteredAccounts.length}
             </Badge>
           </CardContent>
         </Card>
 
-        <Card className="border border-slate-800 bg-[#0b111f] shadow-sm overflow-hidden rounded-xl">
+        <Card className="border border-slate-800 bg-[#0b111f] shadow-sm overflow-hidden rounded-2xl">
           <CardContent className="p-0">
+            <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-[#101a2f] border-b border-slate-800">
+              <TableHeader className="bg-[#10172b] border-b border-slate-800">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-xs font-bold text-slate-300 h-12">Họ tên</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-300 h-12 hidden md:table-cell">Email</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-300 h-12 text-center">Vai trò</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-300 h-12 text-center">Trạng thái</TableHead>
-                  <TableHead className="text-xs font-bold text-slate-300 h-12 text-center">Thao tác</TableHead>
+                  <TableHead className="text-sm font-semibold text-slate-300 h-14 min-w-[190px]">Họ tên</TableHead>
+                  <TableHead className="text-sm font-semibold text-slate-300 h-14 min-w-[240px]">Email</TableHead>
+                  <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[180px]">Vai trò</TableHead>
+                  <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[190px]">Trạng thái</TableHead>
+                  <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[170px]">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -365,12 +288,12 @@ export default function RequestsPage() {
                     className="hover:bg-[#111b32] border-b border-slate-800/80 transition-colors cursor-pointer"
                     onClick={() => handleOpenDetail(account)}
                   >
-                    <TableCell className="text-sm font-semibold text-slate-100">{account.fullName}</TableCell>
-                    <TableCell className="text-[13px] text-slate-400 hidden md:table-cell max-w-[220px] truncate">
+                    <TableCell className="text-[15px] font-medium text-slate-100 py-4 leading-none">{account.fullName}</TableCell>
+                    <TableCell className="text-sm text-slate-400 max-w-[220px] truncate py-4 leading-none">
                       {account.email}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={`font-semibold ${roleMap[account.role].className}`}>
+                      <Badge variant="outline" className={`font-semibold text-xs px-2.5 py-0.5 rounded-md ${roleMap[account.role].className}`}>
                         {roleMap[account.role].label}
                       </Badge>
                     </TableCell>
@@ -379,8 +302,8 @@ export default function RequestsPage() {
                         variant="outline"
                         className={
                           account.isActive
-                            ? "font-semibold bg-emerald-900/40 text-emerald-300 border-emerald-700"
-                            : "font-semibold bg-red-900/40 text-red-300 border-red-700"
+                            ? "font-semibold text-xs rounded-md px-2.5 py-0.5 bg-[#0f3c2f] text-[#3fdf95] border-[#1a6f4f]"
+                            : "font-semibold text-xs rounded-md px-2.5 py-0.5 bg-[#421216] text-[#ff5656] border-[#8e222b]"
                         }
                       >
                         {account.isActive ? "Đang hoạt động" : "Đang bị khóa"}
@@ -396,8 +319,8 @@ export default function RequestsPage() {
                         }}
                         className={
                           account.isActive
-                            ? "border-amber-700 text-amber-300 hover:text-amber-200 hover:bg-amber-900/30"
-                            : "border-emerald-700 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-900/30"
+                            ? "h-9 min-w-[94px] border-[#5f3b15] bg-[#18161c] text-[#f0a342] hover:text-[#f7b659] hover:bg-[#221c20]"
+                            : "h-9 min-w-[94px] border-[#12606c] bg-[#111e2b] text-[#66d5e6] hover:text-[#8de8f2] hover:bg-[#16293a]"
                         }
                       >
                         {account.isActive ? <Lock className="h-4 w-4 mr-1" /> : <LockOpen className="h-4 w-4 mr-1" />}
@@ -416,6 +339,7 @@ export default function RequestsPage() {
                 )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </main>
