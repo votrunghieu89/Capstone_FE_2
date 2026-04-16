@@ -16,8 +16,8 @@ export interface TechnicianProfileViewDTO {
   description: string;
   experiences: string;
   cityId: string;
-  latitude: number;
-  longitude: number;
+  latitude: string;
+  longitude: string;
   serviceId: string;
   serviceName?: string;
 }
@@ -31,7 +31,8 @@ export interface TechnicianProfileUpdateDTO {
   description: string;
   experiences: string;
   cityId: string;
-  longitude: number;
+  latitude: string;
+  longitude: string;
   serviceId: string;
   avatarFile?: File;
 }

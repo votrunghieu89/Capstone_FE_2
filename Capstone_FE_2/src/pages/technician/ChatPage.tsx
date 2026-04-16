@@ -43,9 +43,11 @@ export default function ChatPage() {
   ]);
 
   useEffect(() => {
+    // Note: onMessageReceived is currently not implemented in chatService.
+    // This will be enabled when SignalR integration is completed.
+    /*
     if (selectedContact) {
-      // Setup real-time listener for current contact
-      chatService.onMessageReceived((senderId, content) => {
+      chatService.onMessageReceived((senderId: string, content: string) => {
         if (senderId === selectedContact.id) {
           const newMessage: Message = {
             id: Date.now().toString(),
@@ -58,6 +60,7 @@ export default function ChatPage() {
         }
       });
     }
+    */
   }, [selectedContact?.id]);
 
   useEffect(() => {
@@ -67,21 +70,28 @@ export default function ChatPage() {
   const handleSend = async () => {
     if (!inputValue.trim() || !selectedContact || !user?.id) return;
 
-    const newMessage: Message = {
+    const messageText = inputValue.trim();
+    setInputValue('');
+
+    // Optimistic UI update
+    const tempMessage: Message = {
       id: Date.now().toString(),
       senderId: user.id,
-      content: inputValue,
+      content: messageText,
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
       isRead: false
     };
-
-    setMessages(prev => [...prev, newMessage]);
-    setInputValue('');
+    setMessages(prev => [...prev, tempMessage]);
 
     try {
-      await chatService.sendMessage(selectedContact.id, inputValue);
+      await chatService.insertMessage({
+        senderId: user.id,
+        receiverId: selectedContact.id,
+        content: messageText
+      });
     } catch (err) {
       toast.error('Gửi tin nhắn thất bại');
+      // Potential: Rollback UI if needed
     }
   };
 

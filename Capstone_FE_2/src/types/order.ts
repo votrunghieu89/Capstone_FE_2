@@ -35,12 +35,14 @@ export interface ViewOrderDetailDTO {
   description: string;
   address: string;
   cityName: string;
-  latitude: number;
-  longitude: number;
+  latitude: string;
+  longitude: string;
   status: string;
   orderDate: string;
   completeAt: string;
-  attachments: OrderAttachment[];
+  attachments?: OrderAttachment[]; // Vẫn giữ để tương thích nếu cần
+  videoUrl?: string;               // Thêm để khớp Backend thực tế
+  ImageUrls?: string[];            // Thêm để khớp Backend thực tế
 }
 
 export interface OrderAttachment {
@@ -64,8 +66,8 @@ export interface CreateOrderDTO {
   description: string;
   address: string;
   city: string;
-  latitude: number;
-  longitude: number;
+  latitude: string;
+  longitude: string;
   videoFileName?: string;
   imageFileNames?: string[];
 }

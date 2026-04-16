@@ -24,29 +24,24 @@ const technicianService = {
   updateProfile: async (data: any): Promise<{ message: string }> => {
     const formData = new FormData();
     
-    // Append all fields to FormData
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        // Chuẩn hóa key sang PascalCase để khớp với .NET DTO
-        // Lưu ý: Backend yêu cầu tên cực kỳ chính xác 'AvatarURl' cho file ảnh
-        let normalizedKey = key.charAt(0).toUpperCase() + key.slice(1);
-        
-        if (key === 'avatarFile') {
-          normalizedKey = 'AvatarURl';
-          if (value instanceof File) {
-            formData.append(normalizedKey, value);
-          }
-        } else if (key === 'longitude') {
-          normalizedKey = 'Longtitude';
-          formData.append(normalizedKey, value.toString());
-        } else if (key === 'phoneNumber') {
-          normalizedKey = 'PhoneNumber';
-          formData.append(normalizedKey, value.toString());
-        } else {
-          formData.append(normalizedKey, value.toString());
-        }
-      }
-    });
+    // Ánh xạ chính xác theo TechnicianProfileUpdateDTO của Backend
+    if (data.id) formData.append('Id', data.id);
+    if (data.fullName) formData.append('FullName', data.fullName);
+    if (data.phoneNumber) formData.append('PhoneNumber', data.phoneNumber);
+    if (data.address) formData.append('Address', data.address);
+    if (data.cityId) formData.append('CityId', data.cityId);
+    if (data.serviceId) formData.append('ServiceId', data.serviceId);
+    if (data.description) formData.append('Description', data.description);
+    if (data.experiences) formData.append('Experiences', data.experiences);
+    
+    // Tọa độ (đã là string từ FE)
+    if (data.latitude) formData.append('Latitude', data.latitude.toString());
+    if (data.longitude) formData.append('Longitude', data.longitude.toString());
+
+    // File ảnh (Backend yêu cầu tên field là AvatarURl)
+    if (data.avatarFile instanceof File) {
+      formData.append('AvatarURl', data.avatarFile);
+    }
 
     const res = await api.put('/technician/profile', formData, {
       headers: {

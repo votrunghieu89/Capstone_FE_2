@@ -31,8 +31,8 @@ export default function TechProfilePage() {
     experiences: '',
     cityId: '',
     serviceId: '',
-    latitude: 16.047079,
-    longitude: 108.206230,
+    latitude: '16.047079',
+    longitude: '108.206230',
     avatarFile: null as File | null
   });
 
@@ -67,7 +67,7 @@ export default function TechProfilePage() {
   }, [user?.id]);
 
   const fetchProfile = async () => {
-    if (!user?.id) return;
+    if (!user?.id) return null;
     try {
       setLoading(true);
       const data = await technicianService.getProfile(user.id);
@@ -80,14 +80,16 @@ export default function TechProfilePage() {
         experiences: data.experiences || '',
         cityId: data.cityId || '',
         serviceId: data.serviceId || '',
-        latitude: data.latitude || 0,
-        longitude: data.longitude || 0,
+        latitude: data.latitude || '0',
+        longitude: data.longitude || '0',
         avatarFile: null
       });
       setAvatarPreview(data.avatarURL || null);
+      return data;
     } catch (err: any) {
-      toast.error('Điền đầy đủ thông tin nha');
+      toast.error('Gặp lỗi khi tải hồ sơ');
       console.error(err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -110,18 +112,20 @@ export default function TechProfilePage() {
         ...formData,
         id: user.id
       } as any);
-      toast.success('Cập nhật hồ sơ thành công');
-      setIsEditing(false);
-      await fetchProfile();
       
-      if (user) {
+      const updatedProfile = await fetchProfile();
+      
+      if (user && updatedProfile) {
         setUser({
           ...user,
-          fullName: formData.fullName,
-          phone: formData.phoneNumber,
-          avatarUrl: avatarPreview || user.avatarUrl
+          fullName: updatedProfile.fullName,
+          phone: updatedProfile.phoneNumber,
+          avatarUrl: updatedProfile.avatarURL
         });
       }
+      
+      toast.success('Cập nhật hồ sơ thành công');
+      setIsEditing(false);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Lỗi khi cập nhật hồ sơ');
       console.error(err);
@@ -208,7 +212,7 @@ export default function TechProfilePage() {
                   <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 group-hover/info:text-blue-400 transition-colors">
                     <Mail size={16} />
                   </div>
-                  <span className="text-sm font-bold text-slate-400">{user?.email}</span>
+                  <span className="text-sm font-bold text-slate-400">{profile.email || user?.email}</span>
                 </div>
                 <div className="w-px h-4 bg-white/10 hidden md:block"></div>
                 <div className="flex items-center gap-3 group/info">
@@ -247,9 +251,9 @@ export default function TechProfilePage() {
       {/* Modern Stats Overlay */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { label: 'Đánh giá hiệu suất', value: profile.averageRating?.toFixed(1) || '0.0', sub: 'Sao', icon: Star, color: 'text-amber-400', bg: 'from-amber-400/20 to-transparent' },
+          { label: 'Đánh giá hiệu suất', value: (profile.averageRating || 0).toFixed(1), sub: 'Sao', icon: Star, color: 'text-amber-400', bg: 'from-amber-400/20 to-transparent' },
           { label: 'Việc hoàn thành', value: profile.totalOrders || '0', sub: 'Công việc', icon: TrendingUp, color: 'text-blue-400', bg: 'from-blue-400/20 to-transparent' },
-          { label: 'Kinh nghiệm', value: profile.experiences.match(/\d+/) ? profile.experiences.match(/\d+/)?.[0] : '0', sub: 'Năm', icon: Award, color: 'text-indigo-400', bg: 'from-indigo-400/20 to-transparent' }
+          { label: 'Kinh nghiệm', value: profile.experiences || '0', sub: 'Năm', icon: Award, color: 'text-indigo-400', bg: 'from-indigo-400/20 to-transparent' }
         ].map((stat, i) => (
           <div key={i} className="group relative overflow-hidden bg-[#0f172a]/40 backdrop-blur-2xl rounded-[32px] border border-white/5 p-8 transition-all hover:border-white/10">
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-100 transition-opacity duration-500", stat.bg)}></div>
@@ -505,6 +509,19 @@ export default function TechProfilePage() {
                           value={formData.description}
                           onChange={e => setFormData({ ...formData, description: e.target.value })}
                           className="w-full px-6 py-4 bg-white/[0.03] border border-white/5 rounded-2xl text-white text-sm focus:border-indigo-500/50 outline-none font-medium resize-none leading-relaxed transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-1">Kinh nghiệm làm việc</label>
+                      <div className="relative">
+                        <Award size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input 
+                          value={formData.experiences}
+                          onChange={e => setFormData({ ...formData, experiences: e.target.value })}
+                          placeholder="Vd: 5 năm trong nghề"
+                          className="w-full pl-12 pr-6 py-4 bg-white/[0.03] border border-white/5 rounded-2xl text-white text-sm focus:border-indigo-500/50 outline-none font-bold transition-all"
                         />
                       </div>
                     </div>

@@ -34,6 +34,7 @@ const TechAcceptedRequestsPage = lazy(() => import('@/pages/technician/AcceptedR
 const TechInProgressPage = lazy(() => import('@/pages/technician/InProgressPage'));
 const TechHistoryPage = lazy(() => import('@/pages/technician/HistoryPage'));
 const TechChatPage = lazy(() => import('@/pages/technician/ChatPage'));
+const TechOrderDetailPage = lazy(() => import('@/pages/technician/OrderDetailPage'));
 
 const TechCustomerHubPage = CustomerHub;
 const TechCommunicationPage = Communication;
@@ -94,6 +95,7 @@ export default function AppRoutes() {
           <Route path="yeu-cau-moi" element={<TechNewRequestsPage />} />
           <Route path="don-hang/dang-cho" element={<TechNewRequestsPage />} />
           <Route path="don-hang/da-tiep-nhan" element={<TechAcceptedRequestsPage />} />
+          <Route path="don-hang/chi-tiet/:id" element={<TechOrderDetailPage />} />
           <Route path="dang-thuc-hien" element={<TechInProgressPage />} />
           <Route path="don-hang/dang-thuc-hien" element={<TechInProgressPage />} />
           <Route path="lich-su" element={<TechHistoryPage />} />
