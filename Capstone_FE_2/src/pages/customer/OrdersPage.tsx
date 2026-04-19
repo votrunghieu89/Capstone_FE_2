@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
-import { Wrench, Calendar, Clock, ClipboardList, X, Loader2, RefreshCw } from 'lucide-react';
+import { Wrench, Calendar, Clock, ClipboardList, X, Loader2, RefreshCw, MessageCircle } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
 import orderService from '@/services/orderService';
 import ratingService from '@/services/ratingService';
@@ -435,39 +435,50 @@ export default function OrdersPage() {
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 key={order.id || order.Id || idx}
-                                className="border border-white/5 bg-[#050b18] rounded-xl p-5 hover:border-primary/30 transition-all group"
+                                className="border border-white/5 bg-[#050b18] rounded-2xl p-5 hover:border-primary/30 transition-all group"
                             >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="px-2.5 py-1 rounded-md text-xs font-semibold bg-white/5 text-zinc-300">
-                                        #{(String(order.id || order.Id || '')).substring(0, 8)}
+                                <div className="flex items-start justify-between gap-3 mb-4">
+                                    <div>
+                                        <p className="text-[11px] uppercase tracking-[0.28em] text-zinc-500 mb-1">Mã đơn</p>
+                                        <p className="text-sm font-semibold text-zinc-300 font-mono">{(() => {
+                                            const oid = String(order.id || order.Id || '');
+                                            return oid ? `${oid.slice(0, 8)}...${oid.slice(-4)}` : '—';
+                                        })()}</p>
                                     </div>
                                     <StatusBadge status={order.status || order.Status || 'Pending'} />
                                 </div>
-                                <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2 group-hover:text-primary-light transition-colors">
-                                    <Wrench className="w-5 h-5 text-zinc-400 group-hover:text-primary-light" />
-                                    {pick(order, ['title', 'Title']) || 'Yêu cầu sửa chữa'}
-                                </h3>
+
+                                <div className="space-y-2 mb-4">
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2 leading-snug group-hover:text-primary-light transition-colors">
+                                        <Wrench className="w-5 h-5 text-zinc-400 group-hover:text-primary-light flex-shrink-0" />
+                                        <span className="line-clamp-2">{pick(order, ['title', 'Title']) || 'Yêu cầu sửa chữa'}</span>
+                                    </h3>
+                                    <p className="text-sm text-zinc-400 leading-relaxed line-clamp-2">
+                                        {pick(order, ['description', 'Description']) || '—'}
+                                    </p>
+                                </div>
 
                                 <div className="space-y-3 text-sm text-zinc-300">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+                                        <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
                                             <p className="text-[11px] uppercase tracking-wide text-zinc-500">Dịch vụ</p>
-                                            <p className="text-zinc-200 mt-0.5 truncate">{pick(order, ['serviceName', 'ServiceName']) || '—'}</p>
+                                            <p className="text-zinc-200 mt-1 truncate font-medium">{pick(order, ['serviceName', 'ServiceName']) || '—'}</p>
                                         </div>
-                                        <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
+                                        <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
                                             <p className="text-[11px] uppercase tracking-wide text-zinc-500">Kỹ thuật viên</p>
-                                            <p className="text-primary-light mt-0.5 truncate">{pick(order, ['technicianName', 'TechnicianName']) || 'Chưa gán thợ'}</p>
+                                            <p className="text-primary-light mt-1 truncate font-medium">{pick(order, ['technicianName', 'TechnicianName']) || 'Chưa gán thợ'}</p>
                                         </div>
                                     </div>
 
-                                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-                                        <p className="text-[11px] uppercase tracking-wide text-zinc-500">Địa chỉ</p>
-                                        <p className="text-zinc-200 mt-0.5 line-clamp-1">{pick(order, ['address', 'Address']) || '—'}</p>
-                                    </div>
-
-                                    <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-                                        <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mô tả</p>
-                                        <p className="text-zinc-300 mt-0.5 line-clamp-2">{pick(order, ['description', 'Description']) || '—'}</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
+                                            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Địa chỉ</p>
+                                            <p className="text-zinc-200 mt-1 line-clamp-1 font-medium">{pick(order, ['address', 'Address']) || '—'}</p>
+                                        </div>
+                                        <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
+                                            <p className="text-[11px] uppercase tracking-wide text-zinc-500">Trạng thái</p>
+                                            <p className="text-zinc-200 mt-1 font-medium">{order.status || order.Status || 'Pending'}</p>
+                                        </div>
                                     </div>
 
                                     <div className="pt-2 mt-1 border-t border-white/5 space-y-1.5 text-xs">
@@ -482,20 +493,13 @@ export default function OrdersPage() {
                                                 return updated ? formatDateTime(updated) : 'Chưa cập nhật';
                                             })()}</span>
                                         </div>
-                                        <div className="flex items-center justify-between gap-2 text-zinc-400">
-                                            <span className="inline-flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5" /> Mã đơn</span>
-                                            <span className="font-mono text-zinc-300">{(() => {
-                                                const oid = String(order.id || order.Id || '');
-                                                return oid ? `${oid.slice(0, 8)}...${oid.slice(-4)}` : '—';
-                                            })()}</span>
-                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="mt-6 flex flex-col gap-2">
+                                <div className="mt-5 grid grid-cols-2 gap-2">
                                     <Button
                                         variant="outline"
-                                        className="w-full border-primary/30 text-primary-light hover:bg-primary/10 h-9 text-xs"
+                                        className="w-full border-primary/30 text-primary-light hover:bg-primary/10 h-10 text-sm font-medium truncate px-3"
                                         onClick={() => handleOpenDetail(order)}
                                     >
                                         Xem chi tiết
@@ -507,24 +511,24 @@ export default function OrdersPage() {
                                     })() && (
                                         <Button
                                             variant="outline"
-                                            className="w-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10 h-9 text-xs"
+                                            className="w-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10 h-10 text-sm font-medium truncate px-3"
                                             onClick={() => handleOpenUpdate(order)}
                                         >
-                                            Cập nhật đơn hàng
+                                            Cập nhật
                                         </Button>
                                     )}
 
-                                    {/* Action Buttons based on Status */}
                                     {(() => {
                                         const status = normalizeStatus(order.status || order.Status || '');
                                         return (status === 'pending' || status === 'pending-confirmation');
                                     })() && (
                                         <Button 
                                             variant="outline" 
-                                            className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 h-9 text-xs"
+                                            className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 h-10 text-sm font-medium truncate px-3"
                                             onClick={() => handleCancel(order)}
                                         >
-                                            <X className="w-3.5 h-3.5 mr-1.5" /> Hủy yêu cầu
+                                            <X className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                                            <span className="truncate">Hủy yêu cầu</span>
                                         </Button>
                                     )}
 
@@ -533,10 +537,11 @@ export default function OrdersPage() {
                                         return status === 'in-progress' || status === 'inprogress';
                                     })() && (
                                         <Button 
-                                            className="w-full bg-green-600 hover:bg-green-700 text-white h-9 text-xs"
+                                            className="w-full bg-green-600 hover:bg-green-700 text-white h-10 text-sm font-medium truncate px-3"
                                             onClick={() => handleConfirmComplete(order)}
                                         >
-                                            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Xác nhận hoàn thành
+                                            <RefreshCw className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                                            <span className="truncate">Hoàn thành</span>
                                         </Button>
                                     )}
 
@@ -545,24 +550,25 @@ export default function OrdersPage() {
                                         return status === 'completed' || status === 'done';
                                     })() && (
                                         <Button 
-                                            className="w-full bg-primary hover:bg-primary-dark text-white h-9 text-xs"
+                                            className="w-full bg-primary hover:bg-primary-dark text-white h-10 text-sm font-medium truncate px-3"
                                             onClick={() => void handleOpenRating(order)}
                                         >
-                                            <Star className="w-3.5 h-3.5 mr-1.5 fill-current" /> Đánh giá dịch vụ
+                                            <Star className="w-3.5 h-3.5 mr-1.5 fill-current flex-shrink-0" />
+                                            <span className="truncate">Đánh giá</span>
                                         </Button>
                                     )}
 
-                                    {/* Chat Button if technician assigned */}
                                     {(order.technicianId || order.TechnicianId) && (() => {
                                         const status = normalizeStatus(order.status || order.Status || '');
                                         return status !== 'cancelled' && status !== 'canceled';
                                     })() && (
                                         <Button 
                                             variant="ghost"
-                                            className="w-full bg-white/5 hover:bg-white/10 text-white h-9 text-xs"
+                                            className="w-full bg-white/5 hover:bg-white/10 text-white h-10 text-sm font-medium truncate px-3"
                                             onClick={() => handleChatWithTech(order.technicianId || order.TechnicianId)}
                                         >
-                                            Chat với thợ
+                                            <MessageCircle className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
+                                            <span className="truncate">Chat với thợ</span>
                                         </Button>
                                     )}
                                 </div>
@@ -825,6 +831,51 @@ function OrderDetailModal({ order, onClose }: { order: any; onClose: () => void 
                                 const updated = pick(data, ['updatedAt', 'UpdatedAt', 'lastUpdateAt', 'LastUpdateAt']);
                                 return updated ? formatDateTime(updated) : 'Chưa cập nhật';
                             })()}</p>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-4 md:col-span-2">
+                            <p className="text-zinc-500 mb-3">Tệp đính kèm</p>
+                            {(() => {
+                                const videoUrl = pick(data, ['videoUrl', 'VideoUrl', 'videoURL']);
+                                const imageUrls = pick(data, ['ImageUrls', 'imageUrls']);
+                                const images = Array.isArray(imageUrls) ? imageUrls : [];
+                                const hasMedia = Boolean(videoUrl) || images.length > 0;
+
+                                if (!hasMedia) {
+                                    return <p className="text-white/70 text-sm">Chưa có ảnh hoặc video đính kèm.</p>;
+                                }
+
+                                return (
+                                    <div className="space-y-4">
+                                        {videoUrl && (
+                                            <div>
+                                                <p className="text-sm text-zinc-400 mb-2">Video</p>
+                                                <video controls className="w-full rounded-xl border border-white/10 bg-black">
+                                                    <source src={String(videoUrl)} />
+                                                    Trình duyệt của bạn không hỗ trợ video.
+                                                </video>
+                                            </div>
+                                        )}
+
+                                        {images.length > 0 && (
+                                            <div>
+                                                <p className="text-sm text-zinc-400 mb-2">Ảnh</p>
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                    {images.map((img: string, idx: number) => (
+                                                        <a key={`${img}-${idx}`} href={String(img)} target="_blank" rel="noreferrer" className="block">
+                                                            <img
+                                                                src={String(img)}
+                                                                alt={`Order attachment ${idx + 1}`}
+                                                                className="w-full h-32 object-cover rounded-xl border border-white/10 hover:opacity-90 transition-opacity"
+                                                            />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
                 )}

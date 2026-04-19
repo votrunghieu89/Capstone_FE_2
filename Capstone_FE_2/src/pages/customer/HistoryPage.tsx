@@ -26,6 +26,8 @@ export default function HistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [ratingOrder, setRatingOrder] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
 
   const historyOrders = useMemo(() => {
     return orders
@@ -34,11 +36,22 @@ export default function HistoryPage() {
         return s === 'completed' || s === 'done';
       })
       .sort((a, b) => {
-        const ta = new Date(pick(a, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt', 'createAt', 'CreateAt']) || 0).getTime();
-        const tb = new Date(pick(b, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt', 'createAt', 'CreateAt']) || 0).getTime();
+        const ta = new Date(pick(a, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt', 'createAt', 'CreateAt', 'updatedAt', 'UpdatedAt']) || 0).getTime();
+        const tb = new Date(pick(b, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt', 'createAt', 'CreateAt', 'updatedAt', 'UpdatedAt']) || 0).getTime();
         return tb - ta;
       });
   }, [orders]);
+
+  const totalPages = Math.max(1, Math.ceil(historyOrders.length / pageSize));
+  const pagedHistoryOrders = historyOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const loadData = async () => {
     if (!user?.id) {
@@ -140,8 +153,8 @@ export default function HistoryPage() {
                     <Loader2 className="w-5 h-5 animate-spin inline mr-2" /> Đang tải lịch sử...
                   </td>
                 </tr>
-              ) : historyOrders.length > 0 ? (
-                historyOrders.map((item) => {
+              ) : pagedHistoryOrders.length > 0 ? (
+                pagedHistoryOrders.map((item) => {
                   const orderId = String(pick(item, ['orderId', 'OrderId', 'id', 'Id']));
                   const ratingInfo = ratingMap[orderId];
                   const hasRated = Boolean(ratingInfo?.hasFeedback);
@@ -195,6 +208,22 @@ export default function HistoryPage() {
           </table>
         </div>
       </div>
+
+      {!isLoading && historyOrders.length > pageSize && (
+        <div className="flex items-center justify-between gap-3 bg-[#0a1122] border border-white/5 rounded-2xl px-4 py-3">
+          <p className="text-sm text-zinc-400">
+            Trang <span className="text-white font-semibold">{currentPage}</span> / {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-white/10" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+              Trước
+            </Button>
+            <Button variant="outline" className="border-white/10" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+              Sau
+            </Button>
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {selectedOrder && (

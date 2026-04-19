@@ -15,7 +15,7 @@ import { useState } from 'react';
 const menuItems = [
     { href: '/customer/technicians', label: 'Tìm thợ sửa chữa', icon: Users },
     {
-        href: '/customer/orders',
+        href: '/customer/orders?status=pending',
         label: 'Đơn hàng',
         icon: ClipboardList,
         subItems: [
@@ -86,7 +86,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                                     <Link
                                         to={item.href}
                                         onClick={() => {
-                                            if (window.innerWidth < 768 && !hasSubItems) onClose();
+                                            if (window.innerWidth < 768) onClose();
                                         }}
                                         className={cn(
                                             'group flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 relative',
