@@ -8,8 +8,6 @@ export function useNotificationSignalR() {
   const { user } = useAuthStore();
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const isConnecting = useRef(false);
-
   // Fetch initial notifications
   useEffect(() => {
     if (user?.id) {
@@ -27,12 +25,16 @@ export function useNotificationSignalR() {
     let isMounted = true;
     if (!user?.id || connectionRef.current) return;
 
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5271/api';
+    const hubBase = String(apiBase).replace(/\/api\/?$/, '');
+    const hubUrl = import.meta.env.VITE_SIGNALR_NOTIFICATION_URL || `${hubBase}/hubs/notification`;
     const newConnection = new signalR.HubConnectionBuilder()
-      .withUrl(`/hubs/notification?AccountId=${user.id}`, {
-        skipNegotiation: true,
-        transport: signalR.HttpTransportType.WebSockets
+      .withUrl(`${hubUrl}?AccountId=${user.id}`, {
+        skipNegotiation: false,
+        transport: signalR.HttpTransportType.WebSockets,
+        accessTokenFactory: () => localStorage.getItem('token') || localStorage.getItem('accessToken') || ''
       })
-      .withAutomaticReconnect()
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .build();
 
     connectionRef.current = newConnection;

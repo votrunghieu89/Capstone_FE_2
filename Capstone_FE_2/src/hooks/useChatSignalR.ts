@@ -24,7 +24,7 @@ export function useChatSignalR() {
     let disposed = false;
     isConnecting.current = true;
     const baseUrl = resolveHubBaseUrl();
-    const hubUrl = `${baseUrl}/ChatHub`;
+    const hubUrl = `${baseUrl}/hubs/chat`;
 
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {

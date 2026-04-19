@@ -22,7 +22,19 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      "/hubs/notification": {
+        target: BACKEND_URL,
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+      },
       "/NotificationHub": {
+        target: BACKEND_URL,
+        changeOrigin: true,
+        secure: false,
+        ws: true,
+      },
+      "/hubs/chat": {
         target: BACKEND_URL,
         changeOrigin: true,
         secure: false,

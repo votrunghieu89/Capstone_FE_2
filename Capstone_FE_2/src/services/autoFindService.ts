@@ -24,6 +24,16 @@ export interface PlaceAutoOrderDTO {
     videoFile?: File;
 }
 
+export interface GeocodeResult {
+    latitude: string;
+    longitude: string;
+    displayName: string;
+    source?: string;
+    method?: string;
+    confidence?: number;
+    query?: string;
+}
+
 const formatDecimalForBackend = (value: number) => {
     if (!Number.isFinite(value)) return '0';
     // Backend đang parse decimal theo culture dùng dấu phẩy
@@ -79,6 +89,11 @@ const autoFindService = {
      */
     clearSession: async (customerId: string) => {
         const res = await api.delete(`/customer/autofind/clear/${customerId}`);
+        return res.data;
+    },
+
+    resolveLocation: async (payload: { address: string; city: string }): Promise<GeocodeResult> => {
+        const res = await api.post('/customer/autofind/resolve-location', payload);
         return res.data;
     }
 };

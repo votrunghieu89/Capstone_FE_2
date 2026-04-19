@@ -11,7 +11,8 @@ export interface AppNotification {
   createAt: string;
 }
 
-const HUB_URL = import.meta.env.VITE_SIGNALR_URL || '';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5271/api';
+const HUB_URL = import.meta.env.VITE_SIGNALR_NOTIFICATION_URL || String(API_URL).replace(/\/api\/?$/, '');
 
 class NotificationService {
   private connection: HubConnection | null = null;
@@ -22,8 +23,10 @@ class NotificationService {
     if (!token) return;
 
     this.connection = new HubConnectionBuilder()
-      .withUrl(`${HUB_URL}/NotificationHub`, {
-        accessTokenFactory: () => token
+      .withUrl(`${HUB_URL}/hubs/notification`, {
+        accessTokenFactory: () => token,
+        skipNegotiation: false,
+        transport: 1
       })
       .configureLogging(LogLevel.Information)
       .withAutomaticReconnect()
