@@ -14,7 +14,8 @@ export enum OrderStatus {
 export interface ViewOrderDTO {
   orderId: string;
   customerName: string;
-  customerPhone: string;
+  customerPhone?: string;
+  phoneNumber?: string; // Backend actually sends this
   serviceName: string;
   title: string;
   description: string;
@@ -43,6 +44,8 @@ export interface ViewOrderDetailDTO {
   attachments?: OrderAttachment[]; // Vẫn giữ để tương thích nếu cần
   videoUrl?: string;               // Thêm để khớp Backend thực tế
   ImageUrls?: string[];            // Thêm để khớp Backend thực tế
+  aiDiagnostic?: string;           // Kết quả chẩn đoán từ AI
+  phoneNumgber?: string;           // Backend typo property
 }
 
 export interface OrderAttachment {
@@ -55,6 +58,7 @@ export interface OrderAttachment {
 export interface OrderActionDTO {
   orderId: string;
   technicianId: string;
+  reason?: string;
 }
 
 // Matches BE: Capstone_2_BE.DTOs.Customer.Order.CreateOrderDTO

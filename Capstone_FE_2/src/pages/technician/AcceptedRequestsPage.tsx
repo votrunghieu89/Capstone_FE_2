@@ -1,80 +1,127 @@
 import { useState, useEffect } from 'react';
 import { 
-  Clock, MapPin, User, ChevronRight, X, Phone, 
-  Map as MapIcon, Play, AlertCircle, CheckCircle2,
-  Activity, Navigation, Target, ShieldCheck, Zap,
-  BarChart3, Settings2, RefreshCcw, Cloud
+  MapPin, Clock, AlertCircle, 
+  Phone, User, ChevronRight,
+  CheckCircle2, Cloud, Navigation,
+  Activity, Target, ArrowRight, RefreshCcw, Zap, LocateFixed
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { openGoogleMapsRoute, getMapEmbedSrc, getMapEmbedSrcByAddress } from '@/utils/mapUtils';
+import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { useNavigate, Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
 import orderService from '@/services/orderService';
 import { statisticService } from '@/services/statisticService';
-import type { ViewOrderDTO, OrderDetailDTO } from '@/types/order';
+import type { ViewOrderDTO, ViewOrderDetailDTO } from '@/types/order';
+import { TechnicianProfileViewDTO } from '@/types/technician';
+import technicianService from '@/services/technicianService';
+import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 export default function TechAcceptedRequestsPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const [acceptedRequests, setAcceptedRequests] = useState<ViewOrderDTO[]>([]);
+  const [requests, setRequests] = useState<ViewOrderDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detailsMap, setDetailsMap] = useState<Record<string, OrderDetailDTO>>({});
+  const [detailsMap, setDetailsMap] = useState<Record<string, ViewOrderDetailDTO>>({});
+  const [fetchingMedia, setFetchingMedia] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
+  const [profile, setProfile] = useState<TechnicianProfileViewDTO | null>(null);
+  
+  // Real-time stats states
   const [stats, setStats] = useState({
-    rating: 0,
+    todayReceived: 0,
+    completionRate: 0,
+    acceptedCount: 0,
     total: 0,
     completed: 0
   });
+  
+  // Real-time GPS device location
+  const { location: gpsLocation, loading: gpsLoading, error: gpsError } = useCurrentLocation();
+  const [techLocation, setTechLocation] = useState<{ address: string, cityName: string } | null>(null);
 
   useEffect(() => {
     if (user?.id) {
-      loadAcceptedOrders();
+      loadRequests();
       loadStats();
+      loadLocation();
     }
   }, [user?.id]);
 
-  const loadStats = async () => {
+  const loadLocation = async () => {
     if (!user?.id) return;
     try {
-      const [rating, total, completed] = await Promise.all([
-        statisticService.getAverageRating(user.id),
-        statisticService.getTotalOrders(user.id),
-        statisticService.getTotalCompletedCount(user.id)
-      ]);
-      setStats({ rating, total, completed });
+      const loc = await technicianOrderService.getTechnicianLocation(user.id);
+      setTechLocation(loc);
     } catch (err) {
-      console.warn('Could not load stats', err);
+      console.warn('Could not fetch technician live location', err);
     }
   };
 
-  const loadAcceptedOrders = async () => {
+  const loadRequests = async () => {
+    if (!user?.id) return;
     try {
       setLoading(true);
-      const data = await technicianOrderService.getConfirmedOrders(user!.id);
-      setAcceptedRequests(Array.isArray(data) ? data : []);
-      enrichWithDetails(data);
-    } catch (err: any) {
-      console.error('Error loading orders:', err);
-      toast.error('Không thể tải đơn hàng');
+      const confirmedOrders = await technicianOrderService.getConfirmedOrders(user.id);
+      const sortedData = [...confirmedOrders].sort((a, b) => 
+        new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime()
+      );
+      setRequests(sortedData);
+      enrichWithMedia(sortedData);
+    } catch (err) {
+      console.error('Error loading requests:', err);
+      toast.error('Không thể tải danh sách đơn đã tiếp nhận');
     } finally {
       setLoading(false);
     }
   };
 
-  const enrichWithDetails = async (orders: ViewOrderDTO[]) => {
+  const loadStats = async () => {
+    if (!user?.id) return;
+    try {
+      const [receivedToday, completed, total, profileData] = await Promise.all([
+        statisticService.getTodayReceivedCount(user.id),
+        statisticService.getTotalCompletedCount(user.id),
+        statisticService.getTotalOrders(user.id),
+        technicianService.getProfile(user.id)
+      ]);
+      
+      setProfile(profileData);
+      
+      const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+      setStats({
+        todayReceived: receivedToday,
+        completionRate: rate,
+        acceptedCount: requests.length,
+        total,
+        completed
+      });
+    } catch (err) {
+      console.warn('Could not load sidebar stats', err);
+    }
+  };
+
+  const enrichWithMedia = async (orders: ViewOrderDTO[]) => {
     for (const order of orders) {
-      if (detailsMap[order.orderId]) continue;
+      if (detailsMap[order.orderId] || fetchingMedia.has(order.orderId)) continue;
+      setFetchingMedia(prev => new Set(prev).add(order.orderId));
       try {
-        const detail = await orderService.getOrderDetail(order.orderId);
+        const detail: ViewOrderDetailDTO = await orderService.getOrderDetail(order.orderId);
         if (detail) {
           setDetailsMap(prev => ({ ...prev, [order.orderId]: detail }));
         }
       } catch (err) {
         console.warn(`Failed to fetch detail for order ${order.orderId}`, err);
+      } finally {
+        setFetchingMedia(prev => {
+          const next = new Set(prev);
+          next.delete(order.orderId);
+          return next;
+        });
       }
     }
   };
@@ -83,10 +130,7 @@ export default function TechAcceptedRequestsPage() {
     if (!user?.id) return;
     setActionLoading(true);
     try {
-      await technicianOrderService.startOrder({ 
-        orderId, 
-        technicianId: user.id 
-      });
+      await technicianOrderService.startOrder({ orderId, technicianId: user.id });
       toast.success('Đã bắt đầu công việc!');
       setTimeout(() => navigate('/technician/don-hang/dang-thuc-hien'), 500);
     } catch (err: any) {
@@ -98,8 +142,8 @@ export default function TechAcceptedRequestsPage() {
 
   if (loading) {
     return (
-      <div className="h-[calc(100vh-80px)] bg-[#020617] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+      <div className="flex bg-[#020617] items-center justify-center min-h-[calc(100vh-80px)]">
+        <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
       </div>
     );
   }
@@ -108,20 +152,23 @@ export default function TechAcceptedRequestsPage() {
     <div className="h-[calc(100vh-80px)] bg-[#020617] text-slate-200 overflow-hidden flex flex-col">
       <div className="max-w-[1600px] w-full mx-auto px-4 md:px-8 py-8 flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
         
-        {/* === MAIN CONTENT === */}
+        {/* === MAIN CONTENT: Requests List (SCROLLABLE AREA) === */}
         <div className="flex-1 flex flex-col min-h-0 space-y-8">
-          <div className="shrink-0 flex items-end justify-between">
+          {/* Header Title & Badge */}
+          <div className="flex items-center justify-between shrink-0">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-1 bg-emerald-500 rounded-full" />
                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500">Lịch trình công việc</span>
               </div>
-              <h1 className="text-4xl font-black text-white tracking-tighter uppercase">Đã tiếp nhận</h1>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Quản lý hiệu quả các đơn hàng đã xác nhận</p>
+              <div className="flex items-center gap-4">
+                <h1 className="text-4xl font-black text-white tracking-tighter">Đã tiếp nhận</h1>
+
+              </div>
             </div>
 
             <button 
-              onClick={() => loadAcceptedOrders()}
+              onClick={() => { loadRequests(); loadStats(); }}
               className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center gap-2 transition-all group"
             >
               <RefreshCcw size={16} className={cn("text-emerald-400 group-hover:rotate-180 transition-transform duration-500")} />
@@ -129,10 +176,11 @@ export default function TechAcceptedRequestsPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+          {/* List Area (Independent Scroll) */}
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5">
             <AnimatePresence mode='popLayout'>
-              {acceptedRequests.length === 0 ? (
-                <div className="bg-[#0f172a]/40 border border-dashed border-white/10 rounded-[40px] p-24 text-center">
+              {requests.length === 0 ? (
+                <div className="bg-[#0f172a]/40 border border-dashed border-white/10 rounded-[32px] p-24 text-center">
                   <AlertCircle size={48} className="mx-auto text-slate-600 mb-4" />
                   <h2 className="text-xl font-black text-white uppercase mb-2">Chưa có công việc</h2>
                   <p className="text-slate-500 mb-8 max-w-sm mx-auto text-sm">Mọi yêu cầu bạn đã tiếp nhận sẽ hiển thị chi tiết tại đây.</p>
@@ -141,99 +189,113 @@ export default function TechAcceptedRequestsPage() {
                   </Link>
                 </div>
               ) : (
-                acceptedRequests.map((req, idx) => (
-                  <motion.div 
-                    key={req.orderId}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
+                requests.map((request, idx) => (
+                  <motion.div
+                    key={request.orderId}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.1 }}
-                    className="bg-[#0f172a]/40 border border-white/5 rounded-[32px] overflow-hidden group hover:border-white/10 transition-all shadow-xl"
+                    className="group bg-[#0f172a]/60 backdrop-blur-xl border border-white/5 hover:border-emerald-500/30 rounded-[28px] p-6 transition-all duration-300 relative overflow-hidden flex flex-col gap-6"
                   >
-                    <div className="p-8 space-y-8">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-black text-indigo-400 uppercase tracking-widest">
-                            {req.serviceName}
-                          </span>
-                          <span className="text-[11px] font-bold text-slate-600 uppercase">ID: #{req.orderId.slice(0, 8).toUpperCase()}</span>
-                        </div>
-                        <div className="flex flex-col items-end">
-                           <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Khoảng cách</span>
-                           <span className="text-2xl font-black text-white uppercase tabular-nums tracking-tighter">2.1 <span className="text-xs text-slate-400">KM</span></span>
-                        </div>
+                    {/* Card Header: Tag + ID + Status */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg">
+                          {detailsMap[request.orderId]?.serviceName || request.serviceName || 'DỊCH VỤ'}
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-600">
+                          #TK-{(request.orderId || '').slice(-5).toUpperCase()}
+                        </span>
                       </div>
-
-                      <div className="space-y-4">
-                        <h2 className="text-3xl font-black text-white tracking-tight group-hover:text-emerald-400 transition-colors uppercase leading-tight">
-                          {req.title}
-                        </h2>
-                        <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-3xl line-clamp-2">
-                          {detailsMap[req.orderId]?.description || "Đang tải mô tả chi tiết từ hệ thống..."}
-                        </p>
+                      <div className="flex items-center gap-2 text-emerald-400">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Đã tiếp nhận</span>
                       </div>
+                    </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12 pt-4">
-                        <div className="space-y-6">
-                           <div className="flex items-center gap-4 group/item">
-                              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 group-hover/item:text-blue-400 transition-colors">
-                                 <User size={18} />
-                              </div>
-                              <div className="space-y-0.5">
-                                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Khách hàng</p>
-                                 <h4 className="text-sm font-bold text-slate-200">{req.customerName}</h4>
-                              </div>
-                           </div>
-                           <div className="flex items-center gap-4 group/item">
-                              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 group-hover/item:text-blue-400 transition-colors">
-                                 <MapPin size={18} />
-                              </div>
-                              <div className="space-y-0.5 min-w-0">
-                                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Khu vực</p>
-                                 <h4 className="text-sm font-bold text-slate-200 truncate pr-4">{req.address}</h4>
-                              </div>
-                           </div>
-                        </div>
+                    {/* Card Body: Title & Core Info */}
+                    <div className="flex flex-col xl:flex-row gap-8">
+                       <div className="flex-1 space-y-6">
+                          <h2 className="text-2xl font-black text-white group-hover:text-emerald-400 transition-colors">
+                            {request.title || 'Yêu cầu sửa chữa thiết bị'}
+                          </h2>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             {/* Customer Info */}
+                             <div className="flex items-center gap-4">
+                               <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0">
+                                 <User size={20} className="text-slate-400" />
+                               </div>
+                               <div className="min-w-0">
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Khách hàng</p>
+                                 <p className="text-sm font-bold text-white truncate">{request.customerName}</p>
+                               </div>
+                             </div>
 
-                        <div className="space-y-6">
-                           <div className="flex items-center gap-4 group/item">
-                              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                                 <CheckCircle2 size={18} />
-                              </div>
-                              <div className="space-y-0.5">
-                                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Trạng thái</p>
-                                 <h4 className="text-sm font-bold text-emerald-400 uppercase tracking-tighter">Đã xác nhận</h4>
-                              </div>
-                           </div>
-                           <div className="flex items-center gap-4 group/item">
-                              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 group-hover/item:text-blue-400 transition-colors">
-                                 <Clock size={18} />
-                              </div>
-                              <div className="space-y-0.5">
-                                 <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Thời gian xác nhận</p>
-                                 <h4 className="text-sm font-bold text-slate-200 tabular-nums">
-                                    {format(new Date(req.orderDate), "HH:mm 'ngày' dd/MM", { locale: vi })}
-                                 </h4>
-                              </div>
-                           </div>
-                        </div>
-                      </div>
+                             {/* Address Info */}
+                             <div className="flex items-start gap-4">
+                               <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 shrink-0">
+                                 <MapPin size={20} className="text-blue-400" />
+                               </div>
+                               <div className="min-w-0">
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Địa chỉ</p>
+                                 <p className="text-sm font-medium text-slate-300 line-clamp-2 leading-tight">
+                                   {detailsMap[request.orderId]?.address || request.address}
+                                 </p>
+                               </div>
+                             </div>
 
-                      <div className="grid grid-cols-2 gap-4 pt-6">
-                         <button 
-                           onClick={() => navigate(`/technician/don-hang/chi-tiet/${req.orderId}`)}
-                           className="py-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] transition-all"
-                         >
-                           Chi tiết
-                         </button>
-                         <button 
-                           onClick={() => handleStartWork(req.orderId)}
-                           disabled={actionLoading}
-                           className="py-4 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-emerald-900/40 transition-all flex items-center justify-center gap-2 group/btn active:scale-95 disabled:opacity-50"
-                         >
-                           Bắt đầu ngay
-                           <Zap size={16} className="group-hover/btn:scale-125 transition-transform" />
-                         </button>
-                      </div>
+                             {/* Phone Number */}
+                             <div className="flex items-center gap-4">
+                               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shrink-0">
+                                 <Phone size={20} className="text-emerald-400" />
+                               </div>
+                               <div>
+                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Số điện thoại</p>
+                                 <p className="text-sm font-bold text-white">
+                                   {request.phoneNumber || request.customerPhone || detailsMap[request.orderId]?.customerPhone || 'Chưa có SĐT'}
+                                 </p>
+                               </div>
+                             </div>
+                          </div>
+                       </div>
+
+                       {/* Call to Action Buttons */}
+                       <div className="flex flex-row xl:flex-col items-center justify-end gap-3 shrink-0">
+                          <button 
+                            onClick={() => handleStartWork(request.orderId)}
+                            disabled={actionLoading}
+                            className="w-full sm:w-auto px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
+                          >
+                            Bắt đầu ngay <Zap size={15} />
+                          </button>
+                          <div className="flex w-full gap-3">
+                             <button 
+                               onClick={() => openGoogleMapsRoute(
+                                 techLocation ? `${techLocation.address}, ${techLocation.cityName}` : gpsLocation, 
+                                 detailsMap[request.orderId]?.address || request.address
+                               )}
+                               className="flex-1 px-4 py-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 font-black text-[10px] uppercase tracking-widest rounded-xl border border-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                             >
+                               <Navigation size={13} />
+                               Chỉ đường
+                             </button>
+                             <button 
+                               onClick={() => navigate(`/technician/don-hang/chi-tiet/${request.orderId}`)}
+                               className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-300 font-black text-[10px] uppercase tracking-widest rounded-xl border border-white/5 transition-all active:scale-95"
+                             >
+                               Chi tiết
+                             </button>
+                          </div>
+                       </div>
+                    </div>
+
+                    {/* Card Footer: Time Badge */}
+                    <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+                      <Clock size={14} className="text-slate-600" />
+                      <span className="text-[11px] font-bold text-slate-500">
+                        Hẹn lúc: <span className="text-white">{format(new Date(request.orderDate), "HH:mm")}</span> - Hôm nay ({formatDistanceToNow(new Date(request.orderDate), { addSuffix: true, locale: vi })})
+                      </span>
                     </div>
                   </motion.div>
                 ))
@@ -242,12 +304,12 @@ export default function TechAcceptedRequestsPage() {
           </div>
         </div>
 
-        {/* === SIDEBAR (PERSISTENT DESIGN) === */}
-        <div className="w-full lg:w-[380px] space-y-8 h-full shrink-0 flex flex-col min-h-0 overflow-y-auto lg:overflow-visible pr-2 md:pr-0">
+        {/* === SIDEBAR: Stats & Insights (Fixed in place) === */}
+        <div className="w-full lg:w-[380px] space-y-4 h-full shrink-0 pb-4">
           
           {/* Dashboard Stats */}
-          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/10 rounded-[40px] p-8 space-y-8 relative overflow-hidden shadow-2xl shrink-0">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none text-white">
+          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/5 rounded-[32px] p-6 space-y-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
                 <Activity size={120} />
             </div>
 
@@ -255,101 +317,62 @@ export default function TechAcceptedRequestsPage() {
               <div>
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">Nhiệm vụ đã nhận</p>
                 <div className="flex items-baseline gap-2">
-                   <span className="text-5xl font-black text-white tabular-nums">{acceptedRequests.length}</span>
+                   <span className="text-5xl font-black text-white leading-none">{requests.length}</span>
                    <span className="text-[11px] font-bold text-emerald-400 uppercase">Hiện có</span>
                 </div>
               </div>
-              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 shadow-xl">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
                  <CheckCircle2 size={32} />
               </div>
             </div>
 
-            <button onClick={loadStats} className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center justify-between group transition-all">
-               <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                    <Cloud size={20} />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs font-black text-white uppercase leading-none mb-1">Đồng bộ đám mây</p>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase">UPDATING...</p>
-                  </div>
-               </div>
-               <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </button>
+
           </div>
 
-          {/* Map Insight (SYNCED) */}
-          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/10 rounded-[40px] p-8 space-y-8 shadow-2xl shrink-0">
-            <div className="flex items-center justify-between">
-               <div className="space-y-1">
-                 <h3 className="text-xs font-black text-white uppercase tracking-widest leading-none mb-1">Khu vực triển khai</h3>
-                 <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter font-black">Hoạt động trực tuyến</p>
-               </div>
-               <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter shadow-md">TRỰC TUYẾN</div>
+          {/* Deployment Map Insight */}
+          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/5 rounded-[32px] p-6 space-y-5">
+            <div className="space-y-4 px-1 mb-4">
+               <h3 className="text-[11px] font-black text-[#2DD4BF] uppercase tracking-[0.4em]">VỊ TRÍ DỊCH VỤ</h3>
+               {[
+                 { label: 'THÀNH PHỐ', value: profile?.city || 'Đà Nẵng' },
+                 { label: 'ĐỊA CHỈ CỤ THỂ', value: profile?.address || 'Chưa cập nhật' }
+               ].map((item, idx) => (
+                 <div key={idx} className="flex items-start gap-4">
+                   <div className="mt-0.5 w-8 h-8 rounded-full bg-[#2DD4BF]/10 flex items-center justify-center text-[#2DD4BF] shrink-0">
+                     <MapPin size={14} />
+                   </div>
+                   <div className="space-y-0.5">
+                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{item.label}</p>
+                     <p className="text-sm font-bold text-slate-200 uppercase">{item.value}</p>
+                   </div>
+                 </div>
+               ))}
             </div>
 
-            <div className="relative rounded-3xl overflow-hidden aspect-video bg-slate-900 border border-white/5 group shadow-xl">
-               <iframe width="100%" height="100%" frameBorder="0" style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }} src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d122691.61914371526!2d108.132717088925!3d16.047165882643883!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x314219c7922b6539%3A0x1390977800000000!2zxJDDoCBO4bq5bmcsIFZp4buHdCBOYW0!5e0!3m2!1svi!2s!4v1713170000000!5m2!1svi!2s" allowFullScreen></iframe>
+            <div className="relative rounded-2xl overflow-hidden border border-white/5 aspect-video bg-slate-900 group cursor-crosshair shrink-0">
+               <iframe 
+                  key={techLocation ? `${techLocation.address}-${techLocation.cityName}` : (gpsLocation ? `${gpsLocation.lat},${gpsLocation.lng}` : 'profile')}
+                  width="100%" 
+                  height="100%" 
+                  frameBorder="0" 
+                  style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }} 
+                  src={techLocation ? getMapEmbedSrcByAddress(`${techLocation.address}, ${techLocation.cityName}`, 13) : getMapEmbedSrc(gpsLocation, profile?.latitude, profile?.longitude, 13)} 
+                  allowFullScreen
+                ></iframe>
                <div className="absolute bottom-4 left-4 right-4 p-4 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 text-center">
-                  <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">ĐÀ NẴNG CITY</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase">ACTIVE COVERAGE</p>
+                  <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">{profile?.city ? `${profile.city} CITY` : 'ĐÀ NẴNG CITY'}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">ACTIVE COVERAGE</p>
                </div>
             </div>
 
-            <div className="space-y-5 px-1">
-               <div className="flex items-center gap-5 group">
-                  <div className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 border border-white/5">
-                    <MapPin size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">VÙNG ĐĂNG KÝ</p>
-                    <p className="text-[13px] font-bold text-slate-200">Việt Nam</p>
-                  </div>
-               </div>
-               <div className="flex items-center gap-5 group">
-                  <div className="w-11 h-11 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 border border-white/5">
-                    <CheckCircle2 size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">HIỆN DIỆN</p>
-                    <p className="text-[13px] font-bold text-slate-200">Thành phố Đà Nẵng</p>
-                  </div>
-               </div>
-            </div>
 
-            <div className="pt-8 border-t border-white/10 space-y-5 px-1">
-               <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Target size={16} className="text-indigo-400" />
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">CHỈ TIÊU</span>
-                  </div>
-                  <span className="text-sm font-black text-white tabular-nums">{stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}%</span>
-               </div>
-               <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden shadow-inner flex">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0}%` }} transition={{ duration: 1.5 }} className="h-full bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
-               </div>
-            </div>
+
+
           </div>
+
         </div>
 
       </div>
     </div>
   );
 }
-
-const Loader2 = ({ size, className }: { size: number, className?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={cn("lucide lucide-loader-2", className)}
-  >
-    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-  </svg>
-);

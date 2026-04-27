@@ -4,9 +4,12 @@ import * as React from 'react'
 import { GripVerticalIcon } from 'lucide-react'
 import * as ResizablePanels from 'react-resizable-panels'
 
-const PanelGroup = ResizablePanels.PanelGroup
-const Panel = ResizablePanels.Panel
-const PanelResizeHandle = ResizablePanels.PanelResizeHandle
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PanelGroup = (ResizablePanels as any).Group || (ResizablePanels as any).PanelGroup
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Panel = (ResizablePanels as any).Panel
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PanelResizeHandle = (ResizablePanels as any).Separator || (ResizablePanels as any).PanelResizeHandle
 
 import { cn } from '@/lib/utils'
 

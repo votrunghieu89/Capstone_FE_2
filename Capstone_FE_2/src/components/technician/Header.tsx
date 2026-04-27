@@ -1,29 +1,40 @@
-import { Menu, Bell, Settings, LogOut, User } from 'lucide-react';
+import { Menu, Settings, LogOut, User, Zap } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import technicianOrderService from '@/services/technicianOrderService';
+import technicianService from '@/services/technicianService';
 import toast from 'react-hot-toast';
 
 export function Header({ onMenuClick }: { onMenuClick: () => void }) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, isOnline, setOnlineStatus } = useAuthStore();
   const navigate = useNavigate();
-  const [newRequestsCount, setNewRequestsCount] = useState<number>(0);
 
   useEffect(() => {
     if (user?.id) {
-      loadNewRequestsCount();
+      syncProfileData();
     }
   }, [user?.id]);
 
-  const loadNewRequestsCount = async () => {
+  const syncProfileData = async () => {
     if (!user?.id) return;
     try {
-      const pendingOrders = await technicianOrderService.getConfirmingOrders(user.id);
-      setNewRequestsCount(pendingOrders.length);
+      const profileInfo = await technicianService.getProfile(user.id);
+      if (
+        profileInfo && 
+        (profileInfo.fullName !== user.fullName || profileInfo.avatarURL !== user.avatarUrl)
+      ) {
+        useAuthStore.getState().setUser({
+          ...user,
+          fullName: profileInfo.fullName || user.fullName,
+          avatarUrl: profileInfo.avatarURL || user.avatarUrl,
+          phone: profileInfo.phoneNumber || user.phone
+        });
+      }
     } catch (err) {
-      console.error('Error fetching notification count:', err);
+      console.error('Failed to sync profile data for header:', err);
     }
   };
 
@@ -45,26 +56,51 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
         
 
 
-        <h2 className="text-sm font-bold text-slate-200 hidden lg:block ml-4">
-          Chào mừng quay lại, <span className="text-blue-400">{user?.fullName || 'Kỹ thuật viên'}</span> 👋
-        </h2>
+        <div className="hidden lg:flex items-center gap-6 ml-4">
+          {/* Full Segmented Toggle - Positioned to the LEFT of greeting */}
+          <div className="flex items-center bg-slate-900 border border-white/5 p-1 rounded-2xl relative scale-90 origin-left">
+            <motion.div 
+                className={cn(
+                  "absolute h-[calc(100%-8px)] rounded-xl z-0",
+                  isOnline ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-rose-500/10 border border-rose-500/20"
+                )}
+                initial={false}
+                animate={{ x: isOnline ? 0 : 110 }}
+                style={{ width: isOnline ? '110px' : '125px' }}
+                transition={{ type: "spring", stiffness: 350, damping: 30 }}
+            />
+
+            <button 
+              onClick={() => !isOnline && setOnlineStatus(true)}
+              className={cn(
+                "relative z-10 px-4 py-1.5 flex items-center gap-2 transition-all duration-300 w-[110px] justify-center",
+                isOnline ? "text-emerald-400" : "text-slate-600 hover:text-slate-500"
+              )}
+            >
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", isOnline ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]" : "bg-slate-700")} />
+                <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Trực tuyến</span>
+                {isOnline && <Zap size={10} className="fill-emerald-400 shrink-0" />}
+            </button>
+
+            <button 
+              onClick={() => isOnline && setOnlineStatus(false)}
+              className={cn(
+                "relative z-10 px-4 py-1.5 flex items-center gap-2 transition-all duration-300 w-[125px] justify-center",
+                !isOnline ? "text-rose-400" : "text-slate-600 hover:text-slate-500"
+              )}
+            >
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", !isOnline ? "bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.4)]" : "bg-slate-700")} />
+                <span className="text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Ngoại tuyến</span>
+            </button>
+          </div>
+
+          <h2 className="text-sm font-bold text-slate-200">
+            Chào mừng quay lại, <span className="text-blue-400">{user?.fullName || 'Kỹ thuật viên'}</span> 👋
+          </h2>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Notifications */}
-        <button 
-          onClick={() => navigate('/technician/don-hang/dang-cho')}
-          className="p-2.5 hover:bg-slate-800 rounded-xl relative text-slate-400 transition-all group"
-          title={newRequestsCount > 0 ? `Bạn đang có ${newRequestsCount} yêu cầu mới cần xử lý` : "Không có yêu cầu mới"}
-        >
-          <Bell className="w-5 h-5 group-hover:text-red-400" />
-          {newRequestsCount > 0 && (
-            <span className="absolute top-1 right-1 text-[10px] font-black text-rose-500 animate-in zoom-in duration-300">
-              {newRequestsCount}
-            </span>
-          )}
-        </button>
-
         <div className="h-8 w-px bg-slate-800 mx-2 hidden sm:block" />
 
         <div className="flex items-center gap-2 sm:pl-2">
@@ -72,7 +108,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
             onClick={() => navigate('/technician/ho-so')}
             className="p-2.5 hover:bg-slate-800 rounded-xl text-slate-400 transition-all group" title="Profile"
           >
-            <Settings className="w-5 h-5 group-hover:text-amber-400" />
+            <User className="w-5 h-5 group-hover:text-amber-400" />
           </button>
           
           <button 

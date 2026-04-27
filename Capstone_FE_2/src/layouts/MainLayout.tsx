@@ -19,6 +19,7 @@ import logoImg from "../assets/logo.png";
 
 import AuthModal from "../components/shared/AuthModal";
 import useAuthStore from "../store/authStore";
+import technicianService from "../services/technicianService";
 
 /* ═══════════════════════════════════════
    NAVBAR
@@ -34,7 +35,27 @@ function Navbar() {
     if (isAuthenticated && !user) {
       fetchMe();
     }
-  }, [isAuthenticated, user]);
+    
+    // Sync tech profile to ensure avatar and name are up to date after login
+    if (isAuthenticated && user?.id && (user as any).role?.toLowerCase() === 'technician') {
+      const syncTechProfile = async () => {
+        try {
+          const profileInfo = await technicianService.getProfile(user.id);
+          if (profileInfo && (profileInfo.fullName !== user.fullName || profileInfo.avatarURL !== user.avatarUrl)) {
+             useAuthStore.getState().setUser({
+                ...user,
+                fullName: profileInfo.fullName || user.fullName,
+                avatarUrl: profileInfo.avatarURL || user.avatarUrl,
+                phone: profileInfo.phoneNumber || user.phone
+             });
+          }
+        } catch (e) {
+          console.error("Failed to sync profile in MainLayout:", e);
+        }
+      }
+      syncTechProfile();
+    }
+  }, [isAuthenticated, user?.id]);
 
   // Close dropdown on outside click
   useEffect(() => {

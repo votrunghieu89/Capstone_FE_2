@@ -21,9 +21,18 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap, Marker } from 'react-leaflet';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import useAuthStore from '@/store/authStore';
+import { useCurrentLocation } from '@/hooks/useCurrentLocation';
+
+const currentLocationIcon = new L.DivIcon({
+  className: 'custom-location-icon',
+  html: '<div class="relative flex items-center justify-center w-8 h-8"><div class="absolute w-full h-full bg-rose-500 rounded-full animate-ping opacity-75"></div><div class="relative w-4 h-4 bg-rose-500 rounded-full border-2 border-white shadow-[0_0_20px_rgba(244,63,94,1)]"></div></div>',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16]
+});
 import technicianOrderService from '@/services/technicianOrderService';
 import technicianService from '@/services/technicianService';
 import authService from '@/services/authService';
@@ -38,16 +47,21 @@ export function CommandCenter() {
   const { user, isOnline, setOnlineStatus } = useAuthStore();
   const [summary, setSummary] = useState<any>(null);
   const [newRequests, setNewRequests] = useState<ViewOrderDTO[]>([]);
+  const [orderLocations, setOrderLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<'week' | 'month'>('month');
+  const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week');
   const [isMapOpen, setIsMapOpen] = useState(false);
+  const { location: currentLoc } = useCurrentLocation();
   
   // Real statistical data states
   const [todayReceived, setTodayReceived] = useState(0);
-  const [totalCompleted, setTotalCompleted] = useState(0);
+  const [totalCompleted, setTotalCompleted] = useState(0); // Dùng để hiển thị số đơn hoàn thành TRONG NGÀY
+  const [allTimeCompleted, setAllTimeCompleted] = useState(0); // Dùng cho thanh tiến trình
   const [totalOrders, setTotalOrders] = useState(0);
   const [avgRating, setAvgRating] = useState(0);
   const [chartData, setChartData] = useState<any[]>([]);
+  const [techLocation, setTechLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   const weekData = [
     { day: 'T2', count: 4 },
@@ -93,19 +107,45 @@ export function CommandCenter() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [today, total, rating, all, pending, profile] = await Promise.all([
-        statisticService.getTodayReceivedCount(user.id).catch(() => 0),
+      const [pending, todayCompleted, totalCompleted, avgRating, totalAll, profile] = await Promise.all([
+        technicianOrderService.getConfirmingOrders(user.id).catch(() => []),
+        statisticService.getTodayCompletedCount(user.id).catch(() => 0),
         statisticService.getTotalCompletedCount(user.id).catch(() => 0),
         statisticService.getAverageRating(user.id).catch(() => 0),
         statisticService.getTotalOrders(user.id).catch(() => 0),
-        technicianOrderService.getConfirmingOrders(user.id).catch(() => []),
         technicianService.getProfile(user.id).catch(() => null)
       ]);
-      setTodayReceived(today);
-      setTotalCompleted(total);
-      setAvgRating(rating);
-      setTotalOrders(all);
-      setNewRequests(pending);
+      
+      setNewRequests(Array.isArray(pending) ? pending : []);
+      setTodayReceived(pending.length);
+      setTotalCompleted(todayCompleted);
+      setAllTimeCompleted(totalCompleted);
+      setAvgRating(avgRating);
+      setTotalOrders(totalAll);
+      setProfile(profile);
+
+      try {
+        const loc = await technicianOrderService.getTechnicianLocation(user.id);
+        // Since BE only returns address, we don't set techLocation here
+        // The map will fallback to currentLoc (HTML5 GPS)
+      } catch (err) {
+        console.error("Lỗi lấy vị trí KTV:", err);
+      }
+      // Fetch Locations for the map
+      if (Array.isArray(pending) && pending.length > 0) {
+        const locs = await Promise.all(
+          pending.map(async (order: ViewOrderDTO) => {
+            try {
+              // coords is { address, cityName }, no latitude/longitude
+              // if (coords?.latitude != null && coords?.longitude != null) { ... }
+              return null;
+            } catch {
+              return null;
+            }
+          })
+        );
+        setOrderLocations(locs.filter(l => l !== null));
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
     } finally {
@@ -116,11 +156,37 @@ export function CommandCenter() {
   const fetchChartData = async () => {
     if (!user?.id) return;
     try {
-      if (timeRange === 'month') {
+      if (timeRange === 'day') {
+        const orders = await technicianOrderService.getHistoryOrders(user.id);
+        const todayDate = new Date().toDateString();
+        
+        const todayOrders = (orders || []).filter(o => new Date(o.orderDate).toDateString() === todayDate);
+        
+        const labels = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
+        const dataMap = new Map<string, number>();
+        labels.forEach(l => dataMap.set(l, 0));
+        
+        todayOrders.forEach(o => {
+           const hour = new Date(o.orderDate).getHours();
+           let slot = '00:00';
+           if (hour >= 3 && hour < 6) slot = '03:00';
+           else if (hour >= 6 && hour < 9) slot = '06:00';
+           else if (hour >= 9 && hour < 12) slot = '09:00';
+           else if (hour >= 12 && hour < 15) slot = '12:00';
+           else if (hour >= 15 && hour < 18) slot = '15:00';
+           else if (hour >= 18 && hour < 21) slot = '18:00';
+           else if (hour >= 21) slot = '21:00';
+           
+           dataMap.set(slot, dataMap.get(slot)! + 1);
+        });
+
+        const formattedData = labels.map(l => ({ day: l, count: dataMap.get(l) || 0 }));
+        setChartData(formattedData);
+      } else if (timeRange === 'month') {
         const year = new Date().getFullYear();
         const data = await statisticService.getMonthlyPerformance(user.id, year);
         const formattedData = data.map((item: any) => ({
-          day: item.label || '?',
+          day: item.label ? `${item.label.replace('Tháng ', '')}/${year}` : '?',
           count: item.value || 0
         }));
         setChartData(formattedData);
@@ -139,19 +205,6 @@ export function CommandCenter() {
     }
   };
 
-  const handleToggleOnline = async () => {
-    const newStatus = !isOnline;
-    setOnlineStatus(newStatus);
-    try {
-      if (user?.id) {
-        await authService.updateOnlineStatus(user.id, newStatus ? 1 : 0);
-        toast.success(newStatus ? 'Đã trực tuyến' : 'Đã ngoại tuyến');
-      }
-    } catch (err) {
-      setOnlineStatus(!newStatus);
-      toast.error('Lỗi cập nhật trạng thái');
-    }
-  };
 
 
   const containerVariants = {
@@ -207,59 +260,19 @@ export function CommandCenter() {
             </p>
           </motion.div>
           
-          <motion.div variants={itemVariants} className="flex items-center gap-8">
-            <div 
-              onClick={handleToggleOnline}
-              className="bg-[#0f172a]/60 backdrop-blur-xl border border-white/5 rounded-full p-1 flex items-center relative cursor-pointer shadow-2xl w-[280px] h-[48px] overflow-hidden"
-            >
-              {/* Sliding Background */}
-              <motion.div
-                initial={false}
-                animate={{
-                  x: isOnline ? 0 : 138,
-                  backgroundColor: isOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                  borderColor: isOnline ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-                }}
-                className="absolute inset-y-1 w-[138px] rounded-full border border-white/10 z-0"
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              />
-
-              {/* Online Option */}
-              <div className={cn(
-                "flex-1 flex items-center justify-center gap-2.5 z-10 transition-colors duration-300",
-                isOnline ? "text-emerald-400" : "text-slate-500"
-              )}>
+          <motion.div variants={itemVariants} className="flex items-center gap-4">
+             {/* Dynamic Live Indicator */}
+             <div className="bg-indigo-500/10 border border-indigo-500/20 px-6 py-3 rounded-2xl backdrop-blur-md flex items-center gap-3 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
                 <div className="relative">
-                  <div className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" : "bg-slate-600")} />
-                  {isOnline && (
-                    <motion.div 
-                      layoutId="pulse"
-                      className="absolute inset-0 w-2 h-2 rounded-full bg-emerald-500 animate-ping opacity-40" 
-                    />
-                  )}
+                   <div className={cn("w-2.5 h-2.5 rounded-full", isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500")} />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-[0.15em]">Trực tuyến</span>
-                {isOnline && <Zap size={12} className="animate-pulse" />}
-              </div>
-
-              {/* Offline Option */}
-              <div className={cn(
-                "flex-1 flex items-center justify-center gap-2.5 z-10 transition-colors duration-300",
-                !isOnline ? "text-red-400" : "text-slate-500"
-              )}>
-                <div className="relative">
-                  <div className={cn("w-2 h-2 rounded-full", !isOnline ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" : "bg-slate-600")} />
-                  {!isOnline && (
-                    <motion.div 
-                      layoutId="pulse"
-                      className="absolute inset-0 w-2 h-2 rounded-full bg-red-500 animate-ping opacity-40" 
-                    />
-                  )}
+                <div className="flex flex-col">
+                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Trạng thái hiện tại</span>
+                   <span className={cn("text-xs font-black uppercase tracking-widest", isOnline ? "text-emerald-400" : "text-rose-400")}>
+                      {isOnline ? 'Đang trực tuyến' : 'Đang ngoại tuyến'}
+                   </span>
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-[0.15em]">Ngoại tuyến</span>
-                {!isOnline && <ShieldCheck size={12} />}
-              </div>
-            </div>
+             </div>
           </motion.div>
         </section>
 
@@ -287,9 +300,15 @@ export function CommandCenter() {
                 </div>
                 <div className="mt-4">
                    <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500 w-[45%] rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-1000" />
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min((newRequests.length / 10) * 100, 100)}%` }}
+                        className="h-full bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" 
+                      />
                    </div>
-                   <p className="text-[11px] text-slate-500 mt-3 font-black uppercase tracking-[0.1em] italic">SẴN SÀNG TIẾP NHẬN</p>
+                   <p className="text-[11px] text-slate-500 mt-3 font-black uppercase tracking-[0.1em] italic">
+                      {newRequests.length > 5 ? 'LƯU LƯỢNG CAO' : 'SẴN SÀNG TIẾP NHẬN'}
+                   </p>
                 </div>
               </motion.div>
 
@@ -302,18 +321,18 @@ export function CommandCenter() {
                        Hoàn thành
                     </p>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-black text-white tracking-tighter">{totalCompleted}</span>
+                      <span className="text-5xl font-black text-white tracking-tighter">{totalCompleted}</span>
                     </div>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 shadow-inner">
-                     <CheckCircle size={24} />
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 shadow-inner">
+                     <CheckCircle size={28} />
                   </div>
                 </div>
                  <div className="mt-4">
                     <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
                        <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: `${totalOrders > 0 ? (totalCompleted / totalOrders) * 100 : 0}%` }}
+                        animate={{ width: `${totalOrders > 0 ? (allTimeCompleted / totalOrders) * 100 : 0}%` }}
                         className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]" 
                        />
                     </div>
@@ -332,13 +351,13 @@ export function CommandCenter() {
                        Đánh giá TB
                     </p>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-black text-white tracking-tighter">
+                      <span className="text-5xl font-black text-white tracking-tighter">
                         {avgRating > 0 ? avgRating.toFixed(1) : '5.0'}
                       </span>
                     </div>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 text-amber-400 shadow-inner">
-                     <Star size={24} />
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 text-amber-400 shadow-inner">
+                     <Star size={28} />
                   </div>
                 </div>
                  <div className="mt-4">
@@ -398,8 +417,8 @@ export function CommandCenter() {
                         dataKey="day" 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#475569', fontSize: 11, fontWeight: 900 }}
-                        dy={15}
+                        tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
+                        dy={10}
                       />
                       <YAxis 
                         axisLine={false} 
@@ -441,14 +460,27 @@ export function CommandCenter() {
             <motion.div variants={itemVariants} className="flex-1 min-h-[500px] h-full">
               <div 
                 onClick={() => setIsMapOpen(true)}
-                className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 shadow-2xl h-full flex flex-col relative overflow-hidden group cursor-pointer hover:border-white/10 transition-colors"
+                className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col h-full shadow-2xl relative overflow-hidden group cursor-pointer hover:border-white/10 transition-colors"
               >
-                <div className="flex items-center justify-between mb-8 shrink-0 px-2">
-                  <div className="space-y-1">
-                    <h3 className="text-[14px] font-black text-white uppercase tracking-[0.2em]">Bản đồ Đà Nẵng</h3>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Phân bổ nhân sự trực tuyến toàn khu vực</p>
+                <div className="flex items-start justify-between mb-8 shrink-0 px-2">
+                  <div className="space-y-4 shrink-0">
+                    <h3 className="text-[11px] font-black text-[#2DD4BF] uppercase tracking-[0.4em] mb-2 shrink-0">VỊ TRÍ DỊCH VỤ</h3>
+                    {[
+                      { label: 'THÀNH PHỐ', value: profile?.city || 'Đà Nẵng' },
+                      { label: 'ĐỊA CHỈ CỤ THỂ', value: profile?.address || 'Chưa cập nhật' }
+                    ].map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-4">
+                        <div className="mt-0.5 w-8 h-8 rounded-full bg-[#2DD4BF]/10 flex items-center justify-center text-[#2DD4BF] shrink-0">
+                          <MapPin size={14} />
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{item.label}</p>
+                          <p className="text-sm font-bold text-slate-200 uppercase">{item.value}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 text-slate-400 group-hover:text-indigo-400 transition-colors">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 text-slate-400 group-hover:text-indigo-400 transition-colors shrink-0">
                     <Layers size={20} />
                   </div>
                 </div>
@@ -463,35 +495,24 @@ export function CommandCenter() {
                     attributionControl={false}
                   >
                     <TileLayer
-                      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                      url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
                     />
-                    {danangDistricts.map((district, idx) => (
-                      <CircleMarker 
-                        key={idx}
-                        center={district.coords}
-                        radius={10 + (district.count / 2.5)}
-                        fillColor={district.color}
-                        color="white"
-                        weight={1.5}
-                        fillOpacity={0.65}
-                      />
-                    ))}
+                    
+                    {/* Đã xóa toàn bộ chấm màu quận huyện và đơn hàng theo yêu cầu */}
+                    
+                    {(techLocation || currentLoc) && (
+                      <Marker position={[techLocation?.lat || currentLoc!.lat, techLocation?.lng || currentLoc!.lng]} icon={currentLocationIcon}>
+                        <Popup className="custom-leaflet-popup">
+                          <div className="px-3 py-2 bg-rose-600 rounded-lg text-white font-black text-[11px] uppercase tracking-wider">
+                            Vị trí của bạn
+                          </div>
+                        </Popup>
+                      </Marker>
+                    )}
                   </MapContainer>
                 </div>
 
-                {/* Bottom Stats Overlay */}
-                <div className="absolute bottom-8 left-8 right-8 z-20 flex justify-between gap-6 pointer-events-none">
-                   <div className="bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/5 shadow-2xl">
-                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter mb-1">Khu vực ưu tiên</p>
-                      <p className="text-[14px] font-black text-white tracking-wide">Hải Châu & Sơn Trà</p>
-                   </div>
-                   <div className="bg-emerald-500/20 backdrop-blur-md px-4 py-3 rounded-2xl border border-emerald-500/20 shadow-2xl">
-                      <p className="text-[9px] font-black text-emerald-400 uppercase tracking-tighter mb-1">Kênh giám sát</p>
-                      <p className="text-[14px] font-black text-emerald-400 flex items-center gap-2">
-                         ON-SIDE <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      </p>
-                   </div>
-                </div>
+                {/* Đã xóa các Badge ghi chú trên bản đồ */}
               </div>
             </motion.div>
           </div>
@@ -520,9 +541,9 @@ export function CommandCenter() {
 
               <button 
                 onClick={() => setIsMapOpen(false)}
-                className="absolute top-8 right-10 z-20 w-14 h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 hover:border-white/20 transition-all hover:rotate-90 group"
+                className="absolute top-8 right-10 z-20 w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 hover:bg-rose-500 hover:text-white transition-all hover:rotate-90 group shadow-[0_0_15px_rgba(244,63,94,0.2)]"
               >
-                < Zap className="group-hover:text-indigo-400 transition-colors" />
+                < Zap className="transition-colors" />
               </button>
 
               <div className="absolute inset-0 z-10">
@@ -533,57 +554,28 @@ export function CommandCenter() {
                   attributionControl={false}
                 >
                   <TileLayer
-                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
                   />
-                  {danangDistricts.map((district, idx) => (
-                    <CircleMarker 
-                      key={idx}
-                      center={district.coords}
-                      radius={12 + (district.count / 2)}
-                      fillColor={district.color}
-                      color="white"
-                      weight={2}
-                      fillOpacity={0.7}
-                    >
-                      <Popup className="custom-leaflet-popup detail-popup">
-                        <div className="p-4 min-w-[200px] bg-[#0f172a] rounded-xl">
-                          <h4 className="font-black text-white border-b border-white/10 pb-2 mb-3 uppercase text-[12px] tracking-wider">
-                            {district.name}
-                          </h4>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center text-[12px]">
-                              <span className="text-slate-400 font-bold">NHÂN SỰ TRỰC TUYẾN:</span>
-                              <span className="font-black text-indigo-400">{district.count} KTV</span>
-                            </div>
-                            <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500" style={{ width: `${(district.count/40)*100}%` }} />
-                            </div>
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className="text-slate-500 font-medium">TỶ LỆ PHỦ SÓNG:</span>
-                              <span className="text-emerald-400 font-black">CAO</span>
-                            </div>
-                          </div>
+                  {/* Đã xóa các chấm màu quận huyện trên bản đồ phóng to */}
+                  
+                  {(techLocation || currentLoc) && (
+                    <Marker position={[techLocation?.lat || currentLoc!.lat, techLocation?.lng || currentLoc!.lng]} icon={currentLocationIcon}>
+                      <Popup className="custom-leaflet-popup">
+                        <div className="px-3 py-2 bg-rose-600 rounded-lg text-white font-black text-[11px] uppercase tracking-wider">
+                          Vị trí của bạn
                         </div>
                       </Popup>
-                    </CircleMarker>
-                  ))}
+                    </Marker>
+                  )}
                 </MapContainer>
               </div>
 
               {/* Bottom Decorative Element */}
               <div className="absolute bottom-8 left-10 right-10 z-20 flex items-center justify-between pointer-events-none">
                  <div className="flex gap-4">
-                    {danangDistricts.slice(0, 3).map((d, i) => (
-                       <div key={i} className="bg-white/5 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/5">
-                          <div className="flex items-center gap-3">
-                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                             <span className="text-[10px] font-black text-white uppercase">{d.name}</span>
-                          </div>
-                          <p className="text-[14px] font-black text-indigo-400 mt-1">{d.count}</p>
-                       </div>
-                    ))}
+                    {/* Removed overlay elements matching Image 2 */}
                  </div>
-                 <div className="text-right">
+                 <div className="text-right bg-slate-900/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/5">
                     <p className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1">Dữ liệu cập nhật thời gian thực</p>
                     <p className="text-white font-black text-[12px]">HỆ THỐNG PHÂN BỔ FASTFIX v.2.0</p>
                  </div>
@@ -595,4 +587,3 @@ export function CommandCenter() {
     </div>
   );
 }
-

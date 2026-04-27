@@ -70,6 +70,7 @@ export default function RequestsPage() {
       try {
         const token = localStorage.getItem("accessToken")
 
+
         const res = await fetch("http://localhost:5271/api/admin/users", {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -91,6 +92,24 @@ export default function RequestsPage() {
             createdAt: u.createAt,
           }
         })
+
+//         const mapped = users
+//           .map((user) => {
+//             const role = normalizeRole(user.role)
+//             if (!role) return null
+//             return {
+//               id: user.id,
+//               fullName: user.fullName,
+//               email: user.email,
+//               phone: user.phone || "--",
+//               role,
+//               isActive: user.isActive,
+//               isVerified: true,
+//               createdAt: user.createdAt,
+//             } satisfies AccountItem
+//           })
+//           .filter((item): item is NonNullable<typeof item> => item !== null) as AccountItem[]
+
 
         setAccounts(mapped)
       } catch (err) {

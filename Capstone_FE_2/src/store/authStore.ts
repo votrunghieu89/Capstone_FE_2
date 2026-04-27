@@ -59,7 +59,17 @@ const useAuthStore = create<AuthState>()(
         document.cookie = 'token=; path=/; max-age=0';
       },
 
-      setOnlineStatus: (isOnline: boolean) => set({ isOnline }),
+      setOnlineStatus: async (isOnline: boolean) => {
+        const { user } = get();
+        set({ isOnline });
+        if (user?.id) {
+          try {
+            await authService.updateOnlineStatus(user.id, isOnline ? 1 : 0);
+          } catch (err) {
+            console.error('Failed to sync online status to BE:', err);
+          }
+        }
+      },
       setUser: (user) => set({ user }),
 
       fetchMe: async () => {
