@@ -159,37 +159,37 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let mounted = true
 
-    ;(async () => {
-      const [statsResult, requestsResult, usersResult] = await Promise.allSettled([
-        fetchAdminData('/admin/stats'),
-        fetchAdminData('/admin/requests'),
-        fetchAdminData('/admin/users'),
-      ])
+      ; (async () => {
+        const [statsResult, requestsResult, usersResult] = await Promise.allSettled([
+          fetchAdminData('/admin/stats'),
+          fetchAdminData('/admin/requests'),
+          fetchAdminData('/admin/users'),
+        ])
 
-      if (!mounted) return
+        if (!mounted) return
 
-      const parsedRequests =
-        requestsResult.status === 'fulfilled'
-          ? normalizeListPayload<RequestItem>(requestsResult.value)
-          : []
-      const parsedUsers =
-        usersResult.status === 'fulfilled'
-          ? normalizeListPayload<UserItem>(usersResult.value)
-          : []
+        const parsedRequests =
+          requestsResult.status === 'fulfilled'
+            ? normalizeListPayload<RequestItem>(requestsResult.value)
+            : []
+        const parsedUsers =
+          usersResult.status === 'fulfilled'
+            ? normalizeListPayload<UserItem>(usersResult.value)
+            : []
 
-      const parsedStats =
-        statsResult.status === 'fulfilled'
-          ? normalizeStatsPayload(statsResult.value)
-          : null
+        const parsedStats =
+          statsResult.status === 'fulfilled'
+            ? normalizeStatsPayload(statsResult.value)
+            : null
 
-      setRequests(parsedRequests)
-      setUsers(parsedUsers)
-      setStats(parsedStats ?? buildStatsFromLists(parsedRequests, parsedUsers))
+        setRequests(parsedRequests)
+        setUsers(parsedUsers)
+        setStats(parsedStats ?? buildStatsFromLists(parsedRequests, parsedUsers))
 
-      setStatsLoading(false)
-      setRequestsLoading(false)
-      setUsersLoading(false)
-    })()
+        setStatsLoading(false)
+        setRequestsLoading(false)
+        setUsersLoading(false)
+      })()
 
     return () => {
       mounted = false
@@ -207,7 +207,6 @@ export default function AdminDashboardPage() {
         <DashboardCharts
           requests={requests}
           users={users}
-          loading={requestsLoading || usersLoading}
         />
       </main>
     </>
