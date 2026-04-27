@@ -28,7 +28,6 @@ export interface TechnicianItem {
   email: string
   phone: string | null
   address: string | null
-  bio?: string
   isAvailable: boolean
   averageRating: number
   totalReviews: number
