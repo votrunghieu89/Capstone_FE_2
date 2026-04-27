@@ -1,290 +1,672 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar, ChevronDown, Star, Download, CheckCircle2, 
-  Briefcase, ThumbsUp, User as UserIcon, Loader2, Clock, Eye, Play, Phone
+  User as UserIcon, Loader2, Clock, MapPin, MessageSquare,
+  Refrigerator, Droplets, Zap, RotateCw, XCircle, ShieldAlert,
+  Activity, Eye, X, ChevronLeft, ChevronRight, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
 import technicianService from '@/services/technicianService';
-import type { ViewOrderDTO } from '@/types/order';
-import type { TechnicianRatingViewDTO, RatingOverviewDTO } from '@/types/technician';
+import orderService from '@/services/orderService';
+import type { ViewOrderDTO, ViewOrderDetailDTO } from '@/types/order';
+import type { RatingOverviewDTO } from '@/types/technician';
+import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
+
+type TabType = 'all' | 'completed' | 'canceled' | 'rejected';
+
+interface ExtendedOrderDTO extends ViewOrderDTO {
+  category: 'completed' | 'canceled' | 'rejected';
+}
 
 export default function TechHistoryPage() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'reviews' ? 'reviews' : 'history';
-  const [activeTab, setActiveTab] = useState<'history' | 'reviews'>(initialTab);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [historyItems, setHistoryItems] = useState<ViewOrderDTO[]>([]);
-  const [ratings, setRatings] = useState<TechnicianRatingViewDTO[]>([]);
-  const [ratingOverview, setRatingOverview] = useState<RatingOverviewDTO | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialTab = searchParams.get('tab') as TabType || 'all';
+  
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
 
   useEffect(() => {
-    if (user?.id) {
-      loadData();
+    const tab = searchParams.get('tab') as TabType;
+    if (tab && tab !== activeTab && ['all', 'completed', 'canceled', 'rejected'].includes(tab)) {
+      setActiveTab(tab);
     }
+  }, [searchParams]);
+
+  const [items, setItems] = useState<ExtendedOrderDTO[]>([]);
+  const [ratingOverview, setRatingOverview] = useState<RatingOverviewDTO | null>(null);
+  
+  const [stats, setStats] = useState({ totalOrders: 0, avgRating: 0, totalCompleted: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
+
+  // Filters & Pagination
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Modal Detail State
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [orderDetail, setOrderDetail] = useState<ViewOrderDetailDTO | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) loadStats();
   }, [user?.id]);
 
-  const loadData = async () => {
+  useEffect(() => {
+    if (user?.id) fetchTabData();
+    setCurrentPage(1); // Reset page on tab change
+  }, [activeTab, user?.id]);
+
+  const loadStats = async () => {
     if (!user?.id) return;
     try {
-      setLoading(true);
-      
-      // Load history orders separately to ensure we get them even if ratings fail
-      try {
-        const history = await technicianOrderService.getHistoryOrders(user.id);
-        
-        // MOCK: Lấy thêm dữ liệu hoàn thành đơn từ localStorage
-        const mockStr = localStorage.getItem('mockCompletedOrders');
-        const mockOrders = mockStr ? JSON.parse(mockStr) : [];
-        
-        // Gộp dữ liệu theo orderId, ưu tiên mock nếu trùng (để lấy trạng thái Completed)
-        const combined = [...mockOrders, ...history].filter((v, i, a) => a.findIndex(t => (t.orderId === v.orderId)) === i);
-        
-        setHistoryItems(combined);
-      } catch (err) {
-        console.error('Error loading history orders:', err);
-        // We only toast error for main history if it's not a 404
-        toast.error('Không thể tải danh sách công việc');
-      }
-
-      // Load ratings and overview
-      try {
-        const [reviews, overview] = await Promise.all([
-          technicianService.getRatings(user.id),
-          technicianService.getRatingOverview(user.id)
-        ]);
-        setRatings(reviews);
-        setRatingOverview(overview);
-      } catch (err: any) {
-        // If 404, it just means no ratings yet, which is fine
-        if (err.response?.status !== 404) {
-          console.error('Error loading ratings:', err);
-          toast.error('Không thể tải thông tin đánh giá');
-        }
-      }
-
-    } catch (err: any) {
-      console.error('General data loading error:', err);
+      setLoadingStats(true);
+      const [total, avg, completed, overview] = await Promise.allSettled([
+        technicianService.getTotalOrders(user.id),
+        technicianService.getAvgRating(user.id),
+        technicianService.getTotalCompleted(user.id),
+        technicianService.getRatingOverview(user.id)
+      ]);
+      setStats({
+        totalOrders: total.status === 'fulfilled' ? total.value : 0,
+        avgRating: avg.status === 'fulfilled' ? avg.value : 0,
+        totalCompleted: completed.status === 'fulfilled' ? completed.value : 0
+      });
+      if (overview.status === 'fulfilled') setRatingOverview(overview.value);
+    } catch (e) {
+      console.error("General Stats Fetch Error:", e);
     } finally {
-      setLoading(false);
+      setLoadingStats(false);
     }
   };
 
-  const summaryStats = [
-    { 
-      label: 'Đơn Hoàn Thành', 
-      value: String(historyItems.length), 
-      icon: CheckCircle2, 
-      color: 'text-blue-400', 
-      bg: 'bg-blue-500/10' 
-    },
-    { 
-      label: 'Đánh Giá TB', 
-      value: (ratingOverview?.averageRating || 0).toFixed(1), 
-      icon: Star, 
-      color: 'text-amber-400', 
-      bg: 'bg-amber-500/10' 
-    },
-  ];
+  const fetchTabData = async () => {
+    if (!user?.id) return;
+    setLoadingData(true);
+    setItems([]);
+    try {
+      if (activeTab === 'all') {
+        const [completed, canceled, rejected] = await Promise.all([
+          technicianOrderService.getHistoryOrders(user.id).catch(() => []),
+          technicianOrderService.getCanceledOrders(user.id).catch(() => []),
+          technicianOrderService.getRejectedOrders(user.id).catch(() => [])
+        ]);
 
-  if (loading) {
+        const merged: ExtendedOrderDTO[] = [
+          ...(completed || []).map(o => ({ ...o, category: 'completed' as const })),
+          ...(canceled || []).map(o => ({ ...o, category: 'canceled' as const })),
+          ...(rejected || []).map(o => ({ ...o, category: 'rejected' as const }))
+        ];
+
+        // Sort by date desc
+        merged.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+        setItems(merged);
+      } else {
+        let res: ViewOrderDTO[] = [];
+        let cat: 'completed' | 'canceled' | 'rejected' = 'completed';
+
+        if (activeTab === 'completed') {
+          res = await technicianOrderService.getHistoryOrders(user.id);
+          cat = 'completed';
+        } else if (activeTab === 'canceled') {
+          res = await technicianOrderService.getCanceledOrders(user.id);
+          cat = 'canceled';
+        } else if (activeTab === 'rejected') {
+          res = await technicianOrderService.getRejectedOrders(user.id);
+          cat = 'rejected';
+        }
+
+        const mapped = (res || []).map(o => ({ ...o, category: cat }));
+        mapped.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+        setItems(mapped);
+      }
+    } catch (e) {
+      toast.error('Không thể tải dữ liệu');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  // Filter & Pagination Logic
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      if (startDate) {
+        const itemDate = new Date(item.orderDate);
+        itemDate.setHours(0, 0, 0, 0);
+        const filterStart = new Date(startDate);
+        filterStart.setHours(0, 0, 0, 0);
+        if (itemDate < filterStart) return false;
+      }
+      if (endDate) {
+        const itemDate = new Date(item.orderDate);
+        itemDate.setHours(0, 0, 0, 0);
+        const filterEnd = new Date(endDate);
+        filterEnd.setHours(0, 0, 0, 0);
+        if (itemDate > filterEnd) return false;
+      }
+      return true;
+    });
+  }, [items, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  
+  const currentItems = useMemo(() => {
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(startIdx, startIdx + itemsPerPage);
+  }, [filteredItems, currentPage, itemsPerPage]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleClearDateFilter = () => {
+    setStartDate('');
+    setEndDate('');
+    setCurrentPage(1);
+  };
+
+  const openDetailModal = async (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setLoadingDetail(true);
+    setOrderDetail(null);
+    try {
+      const res = await orderService.getOrderDetail(orderId);
+      // Ensure we extract the correct inner object if nested
+      const data = (res as any)?.value || (res as any)?.data || res;
+      setOrderDetail(data);
+    } catch (error) {
+      console.error(error);
+      toast.error('Không thể tải chi tiết đơn hàng');
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const closeDetailModal = () => {
+    setSelectedOrderId(null);
+    setOrderDetail(null);
+  };
+
+  // UI Helpers
+  const getBadgeStyle = (category: 'completed' | 'canceled' | 'rejected') => {
+     switch (category) {
+        case 'completed': return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+        case 'canceled': return "bg-rose-500/10 text-rose-500 border-rose-500/20";
+        case 'rejected': return "bg-orange-500/10 text-orange-500 border-orange-500/20";
+        default: return "bg-slate-500/10 text-slate-500 border-slate-500/20";
+     }
+  };
+
+  const getBadgeText = (category: 'completed' | 'canceled' | 'rejected') => {
+     switch (category) {
+        case 'completed': return "Hoàn thành";
+        case 'canceled': return "Đã hủy";
+        case 'rejected': return "Từ chối";
+        default: return "Chưa cập nhật";
+     }
+  };
+
+  const handleExportExcel = async () => {
+    if (!user?.id) return;
+    const toastId = toast.loading('Đang trích xuất dữ liệu...');
+    try {
+      const exportData = filteredItems.map((i) => ({
+        'Trạng Thái': getBadgeText(i.category),
+        'Mã Đơn': i.orderId,
+        'Dịch Vụ': i.serviceName || 'Dịch vụ',
+        'Tiêu Đề Công Việc': (i.title || 'Trống').replace(/,/g, ' - '),
+        'Khách Hàng': i.customerName?.replace(/,/g, ' - ') || 'Khách Vô Danh',
+        'SĐT Khách': i.customerPhone || 'Không cung cấp',
+        'Địa Chỉ': (i.address || 'Không rõ').replace(/,/g, ' - '),
+        'Tổng Tiền': i.price ? i.price.toLocaleString('vi-VN') + ' ₫' : '0 ₫',
+        'Ngày Tạo': i.orderDate ? format(new Date(i.orderDate), 'dd/MM/yyyy HH:mm') : 'Không rõ',
+      }));
+
+      if (exportData.length === 0) {
+        toast.error('Không có dữ liệu để xuất.', { id: toastId });
+        return;
+      }
+
+      const headers = Object.keys(exportData[0]).join(',');
+      const rows = exportData.map(obj => Object.values(obj).join(','));
+      const csvContent = '\uFEFF' + [headers, ...rows].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `LichSu_DonHang_${format(new Date(), 'ddMMyyyy')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success('Xuất file thành công!', { id: toastId });
+    } catch (e) {
+       toast.error('Lỗi khi xuất file.', { id: toastId });
+    }
+  };
+
+  if (loadingStats) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+      <div className="flex items-center justify-center h-screen bg-[#0a0b14]">
+        <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-2 md:p-6 space-y-8 pb-20 overflow-x-hidden">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-foreground tracking-tight uppercase">Lịch Sử Hoạt Động</h1>
-          <p className="text-muted-foreground text-sm mt-1 font-medium text-slate-500 uppercase tracking-widest">Xem lại các cột mốc công việc của bạn</p>
+    <div className="min-h-screen bg-[#0a0b14] text-slate-300 p-8 space-y-10 pb-32">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4">
+        <div className="flex items-center gap-12">
+          <h1 className="text-3xl font-black text-white tracking-tighter shadow-sm">LỊCH SỬ HOẠT ĐỘNG</h1>
         </div>
-        <button className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest border border-white/5 transition-all">
-          <Download size={16} />
-          Xuất Báo Cáo
-        </button>
-      </div>
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {summaryStats.map((stat, idx) => (
-          <motion.div 
-            key={idx}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.1 }}
-            className="bg-[#0f172a]/50 backdrop-blur-md rounded-3xl border border-white/5 p-8 shadow-xl relative overflow-hidden group min-h-[160px] flex flex-col justify-center"
+        
+        <div className="flex items-center gap-5">
+          <button 
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 px-6 py-3 bg-[#11121d] hover:bg-emerald-500 hover:text-white text-emerald-400 rounded-xl font-bold text-xs transition-all border border-emerald-500/20 shadow-2xl active:scale-95 group uppercase tracking-widest"
           >
-            <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-              <stat.icon size={84} />
-            </div>
-            <div className={cn("inline-flex p-4 rounded-2xl mb-4 w-fit", stat.bg)}>
-              <stat.icon className={cn("w-6 h-6", stat.color)} />
-            </div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</p>
-            <p className="text-4xl font-black text-foreground mt-2 tracking-tight">{stat.value}</p>
-          </motion.div>
-        ))}
+             <Download size={16} /> Xuất báo cáo
+          </button>
+        </div>
       </div>
 
-      {/* Tabs Layout */}
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5 w-fit">
-            <button 
-              onClick={() => setActiveTab('history')}
-              className={cn(
-                "px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'history' ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-500 hover:text-slate-300"
-              )}
-            >
-              Công việc
-            </button>
-            <button 
-              onClick={() => setActiveTab('reviews')}
-              className={cn(
-                "px-8 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'reviews' ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-500 hover:text-slate-300"
-              )}
-            >
-              Đánh giá
-            </button>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
+          <div className="space-y-6 relative z-10">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Lưu lượng nhận đơn</p>
+            <div className="flex items-end gap-4">
+              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalOrders}</span>
+              <div className="flex items-center gap-1.5 text-blue-400 mb-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full shadow-lg">
+                <span className="text-[10px] font-bold whitespace-nowrap">Đơn giao phó</span>
+              </div>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700">
+             <CheckCircle2 size={80} className="text-blue-500" />
           </div>
         </div>
 
-        {activeTab === 'history' ? (
-          <div className="flex flex-col gap-5 max-w-4xl">
-            {historyItems.length === 0 ? (
-              <div className="py-24 bg-slate-900/20 border border-dashed border-slate-800 rounded-[40px] flex flex-col items-center justify-center text-slate-500">
-                <div className="w-16 h-16 bg-slate-900/50 rounded-full flex items-center justify-center mb-6">
-                   <Clock className="w-8 h-8 opacity-20" />
-                </div>
-                <p className="text-xl font-bold text-slate-400 italic">Bạn chưa hoàn thành đơn hàng nào</p>
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] shadow-2xl shadow-black/40 overflow-hidden relative group">
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 relative z-10">Đánh giá độ uy tín</p>
+          <div className="flex items-center gap-6 relative z-10">
+            <span className="text-6xl font-black text-white leading-none tracking-tighter drop-shadow-xl">
+              {ratingOverview && ratingOverview.totalRating > 0 
+                ? ratingOverview.avgScore.toFixed(1) 
+                : (stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "5.0")}
+            </span>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const currentScore = (ratingOverview && ratingOverview.totalRating > 0) 
+                    ? ratingOverview.avgScore 
+                    : (stats.avgRating > 0 ? stats.avgRating : 5);
+                  return (
+                    <Star 
+                      key={star} 
+                      size={18} 
+                      className={cn(
+                        "fill-amber-400 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]",
+                        star > Math.round(currentScore) && "opacity-20 fill-transparent drop-shadow-none"
+                      )} 
+                    />
+                  );
+                })}
               </div>
-            ) : (
-              historyItems.map((item) => (
-                <div key={item.orderId} className="bg-[#1e293b]/50 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition-all shadow-xl shadow-black/20">
-                  <div className="p-4 sm:p-6 flex flex-col sm:flex-row gap-6">
-                    {/* 1. Nội dung text (Bên trái) */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 rounded text-[9px] font-black uppercase tracking-widest border border-emerald-500/20">
-                          Hoàn thành
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-700 uppercase tracking-widest italic">ID: #{item.orderId.substring(0, 5)}</span>
-                      </div>
-                      <h3 className="text-xl font-extrabold text-white mb-3 truncate tracking-tight">{item.title}</h3>
-                      
-                      {/* Thông tin khách hàng */}
-                      <div className="space-y-1.5">
-                        <p className="text-sm text-slate-400 flex items-center gap-2">
-                           <span className="font-bold text-slate-500 min-w-[70px]">Khách:</span> 
-                           <span className="text-slate-200 font-bold">{item.customerName}</span>
-                        </p>
-                        <p className="text-sm text-slate-400 flex items-center gap-2">
-                           <span className="font-bold text-slate-500 min-w-[70px]">SĐT:</span> 
-                           <a href={`tel:${item.customerPhone}`} className="text-blue-400 font-black tracking-widest hover:underline flex items-center gap-1">
-                             {item.customerPhone || 'Chưa có'}
-                             {item.customerPhone && <Phone size={12} className="ml-1" />}
-                           </a>
-                        </p>
-                        <p className="text-sm text-slate-400 flex items-start gap-2">
-                           <span className="font-bold text-slate-500 min-w-[70px] mt-0.5">Địa chỉ:</span> 
-                           <span className="text-slate-300 leading-tight font-medium">
-                             {item.address || 'Quận Sơn Trà, Đà Nẵng'}
-                           </span>
-                        </p>
-                        <p className="text-[11px] font-black text-slate-500/80 uppercase tracking-[0.2em] pt-2 flex items-center gap-2">
-                           <Calendar className="w-3 h-3 text-blue-500" />
-                           {new Date(item.orderDate).toLocaleDateString('vi-VN')}
-                        </p>
-                      </div>
-                    </div>
+              <p className="text-[9px] text-amber-400/80 font-bold uppercase tracking-widest">Từ {ratingOverview?.totalRating || 0} lượt phản hồi</p>
+            </div>
+          </div>
+           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:-rotate-12 group-hover:scale-110 transition-all duration-700">
+             <Star size={80} className="text-amber-500 fill-amber-500" />
+          </div>
+        </div>
 
-                    {/* 2. Hình ảnh sự cố (Bên phải) */}
-                    <div className="w-full sm:w-24 h-48 sm:h-24 bg-slate-800 rounded-xl flex items-center justify-center text-emerald-500 shrink-0 border border-emerald-500/10 overflow-hidden">
-                      <CheckCircle2 className="w-10 h-10 opacity-30" />
-                    </div>
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] flex items-center gap-8 shadow-2xl shadow-black/40 group relative overflow-hidden">
+          <div className="relative w-24 h-24 flex-shrink-0 z-10">
+            <svg className="w-full h-full -rotate-90 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+              <circle cx="48" cy="48" r="40" className="stroke-[#1a1b26] stroke-[8] fill-transparent" />
+              <circle
+                cx="48" cy="48" r="40"
+                className="stroke-emerald-400 stroke-[8] fill-transparent"
+                strokeDasharray={251.2}
+                strokeDashoffset={251.2 * (1 - (stats.totalOrders > 0 ? stats.totalCompleted / stats.totalOrders : 0))}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
+              {stats.totalOrders > 0 ? Math.round((stats.totalCompleted / stats.totalOrders) * 100) : 0}%
+            </div>
+          </div>
+          <div className="space-y-3 z-10">
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tỷ lệ hoàn thành nhiệm vụ</p>
+            <div className="space-y-1">
+               <p className="text-2xl font-black text-white tracking-tight">{stats.totalCompleted} <span className="text-sm font-bold text-slate-500">ĐƠN ĐÃ HOÀN THÀNH</span></p>
+               <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest border-t border-white/10 pt-2 w-max mt-2">Tổng nhận: {stats.totalOrders}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="space-y-6 pt-6">
+         
+         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 border-b border-white/[0.05] pb-4">
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-4 overflow-x-auto custom-scrollbar pb-2">
+               {[
+                 { id: 'all', label: 'Tất cả', icon: Activity },
+                 { id: 'completed', label: 'Hoàn thành', icon: CheckCircle2 },
+                 { id: 'canceled', label: 'Đã hủy', icon: XCircle },
+                 { id: 'rejected', label: 'Từ chối', icon: ShieldAlert },
+               ].map((tab) => (
+                  <button
+                     key={tab.id}
+                     onClick={() => setActiveTab(tab.id as TabType)}
+                     className={cn(
+                        "flex items-center gap-2.5 px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap shadow-xl border focus:outline-none",
+                        activeTab === tab.id 
+                           ? "bg-blue-600 border-blue-500 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]" 
+                           : "bg-[#11121d] border-transparent text-slate-500 hover:text-slate-300 hover:bg-[#1a1b26]"
+                     )}
+                  >
+                     <tab.icon size={16} className={cn(activeTab === tab.id ? "text-white" : "text-slate-600")} />
+                     <span>{tab.label}</span>
+                  </button>
+               ))}
+            </div>
+
+            {/* Actions & Filters */}
+            <div className="flex flex-wrap items-center gap-4 shrink-0">
+               {/* Date Range Picker */}
+               <div className="flex items-center gap-2 bg-[#11121d] px-3 py-2 rounded-2xl border border-white/[0.05] shadow-xl">
+                 <div className="flex items-center gap-2 text-xs font-bold">
+                   <span className="text-slate-500 ml-2 uppercase text-[10px] tracking-widest">Từ</span>
+                   <input 
+                     type="date" 
+                     value={startDate}
+                     onChange={(e) => setStartDate(e.target.value)}
+                     className="bg-[#1a1b26] border border-white/10 rounded-lg px-2 py-1.5 text-slate-300 outline-none focus:border-blue-500"
+                     style={{ colorScheme: 'dark' }}
+                   />
+                 </div>
+                 <div className="flex items-center gap-2 text-xs font-bold">
+                   <span className="text-slate-500 uppercase text-[10px] tracking-widest">Đến</span>
+                   <input 
+                     type="date" 
+                     value={endDate}
+                     onChange={(e) => setEndDate(e.target.value)}
+                     className="bg-[#1a1b26] border border-white/10 rounded-lg px-2 py-1.5 text-slate-300 outline-none focus:border-blue-500"
+                     style={{ colorScheme: 'dark' }}
+                   />
+                 </div>
+                 {(startDate || endDate) && (
+                   <button 
+                     onClick={handleClearDateFilter}
+                     className="p-1.5 text-slate-500 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors ml-1"
+                     title="Xóa bộ lọc"
+                   >
+                     <X size={16} />
+                   </button>
+                 )}
+               </div>
+
+               <button 
+                  onClick={fetchTabData}
+                  disabled={loadingData}
+                  className="flex items-center justify-center w-12 h-12 bg-[#11121d] rounded-[16px] border border-white/[0.05] text-slate-400 hover:text-white transition-all active:scale-95 shadow-xl"
+                  title="Làm mới dữ liệu"
+               >
+                  <RotateCw size={18} className={cn(loadingData && "animate-spin text-blue-500")} />
+               </button>
+            </div>
+         </div>
+
+         {/* List Render */}
+         {loadingData ? (
+             <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Đang tải dữ liệu...</p>
+             </div>
+         ) : (
+           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-10">
+             {currentItems.length === 0 ? (
+                <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[32px] bg-[#11121d]/50">
+                   <FileText size={48} className="mx-auto text-slate-600 mb-4" />
+                   <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">Không có đơn hàng nào phù hợp với điều kiện tìm kiếm.</p>
+                </div>
+             ) : (
+               <>
+                 {/* Table-like List */}
+                 <div className="overflow-x-auto">
+                   <table className="w-full text-left whitespace-nowrap">
+                     <thead>
+                       <tr className="border-b border-white/10 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                         <th className="pb-3 px-4">Mã đơn</th>
+                         <th className="pb-3 px-4">Khách hàng</th>
+                         <th className="pb-3 px-4">Dịch vụ</th>
+                         <th className="pb-3 px-4">Ngày tạo</th>
+                         <th className="pb-3 px-4">Tổng tiền</th>
+                         <th className="pb-3 px-4">Trạng thái</th>
+                         <th className="pb-3 px-4 text-center">Thao tác</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-white/[0.02]">
+                       {currentItems.map((item) => (
+                         <tr key={item.orderId} className="group hover:bg-[#11121d] transition-colors duration-200">
+                           <td className="py-4 px-4">
+                             <div className="flex items-center gap-2">
+                               <span className="font-bold text-slate-300">
+                                 #{item.orderId.slice(0, 8).toUpperCase()}
+                               </span>
+                             </div>
+                           </td>
+                           <td className="py-4 px-4">
+                             <div className="flex items-center gap-2">
+                               <div className="w-8 h-8 rounded-full bg-[#1a1b26] flex items-center justify-center border border-white/10 shrink-0">
+                                 <UserIcon size={14} className="text-slate-400" />
+                               </div>
+                               <span className="font-bold text-white text-sm">{item.customerName || 'Ẩn danh'}</span>
+                             </div>
+                           </td>
+                           <td className="py-4 px-4">
+                             <span className="text-sm font-semibold text-slate-300">{item.serviceName || item.title || 'Dịch vụ'}</span>
+                           </td>
+                           <td className="py-4 px-4">
+                             <span className="text-sm text-slate-400 font-medium">
+                               {item.orderDate ? format(new Date(item.orderDate), 'dd/MM/yyyy HH:mm') : '-'}
+                             </span>
+                           </td>
+                           <td className="py-4 px-4">
+                             <span className="font-bold text-white text-sm">
+                               {item.price ? `${item.price.toLocaleString('vi-VN')} ₫` : '-'}
+                             </span>
+                           </td>
+                           <td className="py-4 px-4">
+                             <span className={cn("px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border", getBadgeStyle(item.category))}>
+                               {getBadgeText(item.category)}
+                             </span>
+                           </td>
+                           <td className="py-4 px-4 text-center">
+                             <button
+                               onClick={() => openDetailModal(item.orderId)}
+                               className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all shadow-sm active:scale-95 border border-blue-500/20"
+                               title="Xem chi tiết"
+                             >
+                               <Eye size={16} />
+                             </button>
+                           </td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+
+                 {/* Pagination */}
+                 {totalPages > 1 && (
+                   <div className="flex items-center justify-between pt-6 border-t border-white/5">
+                     <p className="text-xs font-bold text-slate-500">
+                       Hiển thị trang <span className="text-white">{currentPage}</span> / {totalPages} (Tổng số {filteredItems.length} đơn)
+                     </p>
+                     <div className="flex items-center gap-2">
+                       <button
+                         onClick={() => handlePageChange(currentPage - 1)}
+                         disabled={currentPage === 1}
+                         className="p-2 rounded-lg bg-[#11121d] border border-white/10 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                       >
+                         <ChevronLeft size={16} />
+                       </button>
+                       {Array.from({ length: totalPages }).map((_, i) => {
+                         const page = i + 1;
+                         // Show max 5 page buttons
+                         if (totalPages > 5 && (page < currentPage - 2 || page > currentPage + 2)) {
+                           if (page === 1 || page === totalPages) {
+                             return <span key={page} className="text-slate-600 px-1">...</span>;
+                           }
+                           return null;
+                         }
+                         return (
+                           <button
+                             key={page}
+                             onClick={() => handlePageChange(page)}
+                             className={cn(
+                               "w-8 h-8 rounded-lg text-xs font-bold transition-all",
+                               currentPage === page
+                                 ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
+                                 : "bg-[#11121d] border border-white/10 text-slate-400 hover:bg-[#1a1b26] hover:text-white"
+                             )}
+                           >
+                             {page}
+                           </button>
+                         );
+                       })}
+                       <button
+                         onClick={() => handlePageChange(currentPage + 1)}
+                         disabled={currentPage === totalPages}
+                         className="p-2 rounded-lg bg-[#11121d] border border-white/10 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                       >
+                         <ChevronRight size={16} />
+                       </button>
+                     </div>
+                   </div>
+                 )}
+               </>
+             )}
+           </div>
+         )}
+      </div>
+
+      {/* Order Detail Modal */}
+      <AnimatePresence>
+        {selectedOrderId && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[#0f172a] border border-white/10 rounded-[32px] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-[#11121d]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                    <FileText size={20} />
                   </div>
-
-                  {/* Phần tóm tắt dịch vụ */}
-                  <div className="px-4 sm:px-6 pb-4">
-                    <div className="bg-slate-950/40 border border-slate-800/50 p-4 rounded-xl flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">Dịch vụ đã thực hiện</p>
-                        <p className="text-sm text-slate-400 font-bold">{item.serviceName}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">Trạng thái</p>
-                        <p className="text-xs font-black text-emerald-500 uppercase flex items-center gap-1">
-                          <CheckCircle2 size={12} /> Thành công
-                        </p>
-                      </div>
-                    </div>
+                  <div>
+                    <h3 className="font-black text-white text-lg tracking-tight">Chi tiết đơn hàng</h3>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">#{selectedOrderId.slice(0, 8).toUpperCase()}</p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {ratings.length === 0 && (
-              <p className="text-center py-10 text-slate-500 font-medium">Chưa có đánh giá nào từ khách hàng</p>
-            )}
-            <AnimatePresence mode="popLayout">
-              {ratings.map((review, idx) => (
-                <motion.div 
-                  key={review.ratingId}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: idx * 0.1 }}
-                  className="bg-[#0f172a]/50 backdrop-blur-md rounded-[32px] border border-white/5 p-8 shadow-xl group hover:border-blue-500/30 transition-all"
+                <button 
+                  onClick={closeDetailModal}
+                  className="w-8 h-8 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-500 flex items-center justify-center transition-colors"
                 >
-                  <div className="flex flex-col md:flex-row justify-between gap-6 mb-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                        <UserIcon className="w-7 h-7 text-slate-500" />
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                {loadingDetail ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                    <span className="text-xs font-bold text-slate-500 uppercase">Đang tải dữ liệu...</span>
+                  </div>
+                ) : orderDetail ? (
+                  <div className="space-y-6">
+                    {/* Basic Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-[#1a1b26] p-4 rounded-2xl border border-white/5">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Dịch vụ</p>
+                        <p className="font-bold text-white text-sm">{orderDetail.serviceName || orderDetail.title}</p>
                       </div>
-                      <div>
-                        <h4 className="text-xl font-black text-foreground tracking-tight uppercase">{review.customerName}</h4>
-                        <div className="flex items-center gap-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">
-                          <span>{new Date(review.createdAt).toLocaleDateString('vi-VN')}</span>
+                      <div className="bg-[#1a1b26] p-4 rounded-2xl border border-white/5">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Thời gian tạo</p>
+                        <p className="font-bold text-white text-sm">{format(new Date(orderDetail.orderDate), 'dd/MM/yyyy HH:mm')}</p>
+                      </div>
+                    </div>
+
+                    {/* Customer Info */}
+                    <div className="bg-[#11121d] rounded-2xl p-5 border border-white/5 space-y-4">
+                      <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest border-b border-white/5 pb-2">Thông tin Khách Hàng</h4>
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-[#1a1b26] flex items-center justify-center text-slate-400 border border-white/10 shrink-0">
+                          <UserIcon size={20} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-base">{orderDetail.customerName || 'Khách hàng'}</p>
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">{orderDetail.customerPhone || 'Chưa cung cấp SĐT'}</p>
                         </div>
                       </div>
+                      <div className="flex items-start gap-3 mt-3 pt-3 border-t border-white/5">
+                        <MapPin size={16} className="text-slate-500 shrink-0 mt-0.5" />
+                        <p className="text-sm font-medium text-slate-300 leading-tight">{orderDetail.address}</p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-amber-400/10 px-5 py-2.5 rounded-2xl border border-amber-400/20 h-fit">
-                      <Star size={20} className="fill-amber-400 text-amber-400" />
-                      <span className="text-xl font-black text-amber-500">{review.score}</span>
-                    </div>
-                  </div>
-                  
-                  <blockquote className="text-base text-slate-300 leading-relaxed font-medium italic relative pl-4 border-l-2 border-blue-500/20">
-                    <span className="text-5xl text-blue-500/10 absolute -top-6 -left-2 font-serif select-none">"</span>
-                    {review.feedback || 'Không có bình luận'}
-                  </blockquote>
 
-                  <div className="mt-8 pt-6 border-t border-white/5 flex justify-end items-center">
-                    <button className="flex items-center gap-2 text-[10px] font-black text-slate-500 hover:text-blue-400 uppercase tracking-widest transition-colors">
-                      <ThumbsUp size={14} />
-                      Phản hồi hữu ích
-                    </button>
+                    {/* Description */}
+                    <div className="bg-[#11121d] rounded-2xl p-5 border border-white/5">
+                      <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-3">Mô tả sự cố / Ghi chú</h4>
+                      <p className="text-sm text-slate-300 italic bg-[#1a1b26] p-4 rounded-xl border border-white/5 leading-relaxed">
+                        {orderDetail.description || 'Không có mô tả chi tiết từ khách hàng.'}
+                      </p>
+                    </div>
+
+                    {/* Attachments if any */}
+                    {orderDetail.ImageUrls && orderDetail.ImageUrls.length > 0 && (
+                      <div className="bg-[#11121d] rounded-2xl p-5 border border-white/5">
+                        <h4 className="text-[10px] font-black text-amber-400 uppercase tracking-widest border-b border-white/5 pb-2 mb-3">Hình ảnh đính kèm</h4>
+                        <div className="flex gap-3 overflow-x-auto pb-2 custom-scrollbar">
+                          {orderDetail.ImageUrls.map((url, i) => (
+                            <img key={i} src={url} alt={`Evidence ${i}`} className="h-24 w-24 object-cover rounded-xl border border-white/10" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                ) : (
+                  <div className="py-10 text-center text-slate-500">Lỗi không thể lấy chi tiết đơn hàng</div>
+                )}
+              </div>
+            </motion.div>
           </div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   );
 }

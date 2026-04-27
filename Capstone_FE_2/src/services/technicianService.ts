@@ -65,9 +65,18 @@ const technicianService = {
   },
 
   // === STATISTIC ===
-  // GET /api/technician/statistic/{technicianId}/dashboard-summary
-  getDashboardSummary: async (technicianId: string): Promise<any> => {
-    const res = await api.get(`/technician/statistic/${technicianId}/dashboard-summary`);
+  getTotalOrders: async (technicianId: string): Promise<number> => {
+    const res = await api.get(`/technician/statistic/${technicianId}/total`);
+    return res.data;
+  },
+
+  getAvgRating: async (technicianId: string): Promise<number> => {
+    const res = await api.get(`/technician/statistic/${technicianId}/ratings/avg`);
+    return res.data;
+  },
+
+  getTotalCompleted: async (technicianId: string): Promise<number> => {
+    const res = await api.get(`/technician/statistic/${technicianId}/completed/total`);
     return res.data;
   },
 };

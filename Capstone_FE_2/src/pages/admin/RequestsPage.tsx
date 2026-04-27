@@ -181,7 +181,7 @@ export default function RequestsPage() {
               createdAt: user.createdAt,
             } satisfies AccountItem
           })
-          .filter((item): item is AccountItem => item !== null)
+          .filter((item): item is NonNullable<typeof item> => item !== null) as AccountItem[]
 
         if (!mounted) return
         setAccounts(mapped)

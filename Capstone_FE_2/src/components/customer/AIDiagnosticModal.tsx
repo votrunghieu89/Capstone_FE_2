@@ -6,8 +6,18 @@ import {
   DollarSign, Wrench, ArrowRight,
   Info
 } from 'lucide-react';
-import aiService, { AIDiagnosisResponse } from '@/services/aiService';
+import aiService from '@/services/aiService';
 import toast from 'react-hot-toast';
+
+interface AIDiagnosisResponse {
+  diagnosis: string;
+  severity: string;
+  estimated_cost_min: number;
+  estimated_cost_max: number;
+  safety_warning?: string;
+  suggested_actions: string[];
+  recommended_category: string;
+}
 
 interface AIDiagnosticModalProps {
   isOpen: boolean;
@@ -40,8 +50,14 @@ export function AIDiagnosticModal({ isOpen, onClose, initialQuery = '' }: AIDiag
     setLoading(true);
     setResult(null);
     try {
-      const data = await aiService.diagnose(description, selectedImage || undefined);
-      setResult(data);
+      const prompt = `Phân tích sự cố sau và trả lời dưới dạng JSON với các trường: diagnosis, severity (low/medium/high/critical), estimated_cost_min, estimated_cost_max, safety_warning, suggested_actions (mảng các bước), recommended_category. Sự cố: "${description}"\nTrả lời bằng JSON thuần túy không có markdown.`;
+      const raw = await aiService.chat(prompt);
+      try {
+        const data = JSON.parse(raw) as AIDiagnosisResponse;
+        setResult(data);
+      } catch {
+        setResult({ diagnosis: raw, severity: 'medium', estimated_cost_min: 0, estimated_cost_max: 0, suggested_actions: [], recommended_category: 'Kỹ thuật' });
+      }
       toast.success('AI đã chẩn đoán xong sự cố!');
     } catch (err) {
       console.error('Diagnosis error:', err);
@@ -176,7 +192,7 @@ export function AIDiagnosticModal({ isOpen, onClose, initialQuery = '' }: AIDiag
               <div className="space-y-4">
                 <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest">Các bước gợi ý thực hiện</h4>
                 <div className="grid grid-cols-1 gap-2">
-                  {result.suggested_actions.map((action, idx) => (
+                  {result.suggested_actions.map((action: string, idx: number) => (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-white/3 rounded-xl border border-white/5">
                       <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center text-xs font-bold">{idx + 1}</div>
                       <span className="text-sm text-slate-300 font-medium">{action}</span>

@@ -13,9 +13,11 @@ import {
   User,
   ChevronDown,
   ClipboardList,
-  CheckCircle
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
+import technicianOrderService from '@/services/technicianOrderService';
 
 const menuItems = [
   { href: '/technician', label: 'Bảng Điều Khiển', icon: LayoutDashboard },
@@ -26,26 +28,64 @@ const menuItems = [
     children: [
       { href: '/technician/don-hang/dang-cho', label: 'Yêu Cầu Mới', icon: FileText },
       { href: '/technician/don-hang/da-tiep-nhan', label: 'Đã Tiếp Nhận', icon: CheckCircle },
-      { href: '/technician/don-hang/dang-thuc-hien', label: 'Đơn Thực Hiện', icon: Briefcase },
+      { href: '/technician/don-hang/dang-thuc-hien', label: 'Đang Thực Hiện', icon: Briefcase },
     ]
   },
   { href: '/technician/chat', label: 'Liên hệ', icon: MessageSquare },
   { href: '/technician/lich-su', label: 'Lịch Sử', icon: TrendingUp },
-  { href: '/technician/ho-so', label: 'Profile', icon: Settings },
+  { href: '/technician/ho-so', label: 'Profile', icon: User },
 ];
 
 export function Sidebar({ isOpen }: { isOpen: boolean }) {
   const location = useLocation();
   const { user, isOnline } = useAuthStore();
-  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
+  const [counts, setCounts] = useState({
+    confirming: 0,
+    confirmed: 0,
+    inProgress: 0,
+  });
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({
+    orders: location.pathname.includes('/technician/don-hang'),
+    history: location.pathname.includes('/technician/lich-su')
+  });
+
+  useEffect(() => {
+    if (user?.id) {
+      loadCounts();
+    }
+  }, [user?.id]);
+
+  const loadCounts = async () => {
+    if (!user?.id) return;
+    try {
+      const [confirming, confirmed, inProgress] = await Promise.all([
+        technicianOrderService.getConfirmingOrders(user.id),
+        technicianOrderService.getConfirmedOrders(user.id),
+        technicianOrderService.getInProgressOrder(user.id)
+      ]);
+      
+      setCounts({
+        confirming: Array.isArray(confirming) ? confirming.length : 0,
+        confirmed: Array.isArray(confirmed) ? confirmed.length : 0,
+        inProgress: inProgress ? (Array.isArray(inProgress) ? (Array.isArray(inProgress) ? inProgress.length : 1) : 1) : 0
+      });
+    } catch (err) {
+      console.error('Failed to load sidebar counts:', err);
+    }
+  };
 
   // Auto-expand if on a sub-route
   useEffect(() => {
-    const isOrderRoute = location.pathname.includes('/technician/don-hang');
-    if (isOrderRoute) {
-      setIsOrdersOpen(true);
-    }
+    setOpenMenus(prev => ({
+      ...prev,
+      orders: prev.orders || location.pathname.includes('/technician/don-hang'),
+      history: prev.history || location.pathname.includes('/technician/lich-su')
+    }));
   }, [location.pathname]);
+
+  const toggleMenu = (id: string) => {
+    setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   return (
     <aside
@@ -71,15 +111,16 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
           {menuItems.map((item) => {
             if (item.children) {
               const Icon = item.icon;
-              const isChildActive = item.children.some(child => location.pathname === child.href);
+              const isChildActive = item.children.some(child => location.pathname === child.href || location.search.includes(child.href.split('?')[1] || 'never_match'));
+              const isOpen = item.id ? openMenus[item.id] : false;
               
               return (
                 <div key={item.label} className="space-y-1">
                   <button
-                    onClick={() => setIsOrdersOpen(!isOrdersOpen)}
+                    onClick={() => item.id && toggleMenu(item.id)}
                     className={cn(
                       'w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-bold group',
-                      isChildActive && !isOrdersOpen
+                      isChildActive && !isOpen
                         ? 'bg-blue-600/10 text-blue-400'
                         : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                     )}
@@ -88,15 +129,16 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
                     <span>{item.label}</span>
                     <ChevronDown className={cn(
                       "ml-auto w-4 h-4 transition-transform duration-300",
-                      isOrdersOpen ? "rotate-180" : ""
+                      isOpen ? "rotate-180" : ""
                     )} />
                   </button>
 
-                  {isOrdersOpen && (
+                  {isOpen && (
                     <div className="space-y-1 ml-4 pl-4 border-l border-slate-800/50">
                       {item.children.map((child) => {
                         const ChildIcon = child.icon;
-                        const isActive = location.pathname === child.href;
+                        const isActive = location.pathname === child.href.split('?')[0] && 
+                          (child.href.includes('?') ? location.search.includes(child.href.split('?')[1]) : true);
                         
                         return (
                           <Link
@@ -111,6 +153,21 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
                           >
                             <ChildIcon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-600")} />
                             <span>{child.label}</span>
+                            {child.href.includes('dang-cho') && counts.confirming > 0 && (
+                              <span className="ml-auto bg-emerald-900/40 border border-emerald-500/20 text-rose-500 text-[10px] px-1.5 py-0.5 rounded-md font-black">
+                                {counts.confirming}
+                              </span>
+                            )}
+                            {child.href.includes('da-tiep-nhan') && counts.confirmed > 0 && (
+                              <span className="ml-auto bg-emerald-900/40 border border-emerald-500/20 text-rose-500 text-[10px] px-1.5 py-0.5 rounded-md font-black">
+                                {counts.confirmed}
+                              </span>
+                            )}
+                            {child.href.includes('dang-thuc-hien') && counts.inProgress > 0 && (
+                              <span className="ml-auto bg-emerald-900/40 border border-emerald-500/20 text-rose-500 text-[10px] px-1.5 py-0.5 rounded-md font-black">
+                                {counts.inProgress}
+                              </span>
+                            )}
                           </Link>
                         );
                       })}

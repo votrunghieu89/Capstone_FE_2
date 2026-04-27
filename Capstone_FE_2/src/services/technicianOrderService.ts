@@ -76,6 +76,25 @@ const technicianOrderService = {
     const res = await api.post('/technician/order/reject', dto);
     return res.data;
   },
+
+  // GET /api/technician/order/location/technician/{technicianId}
+  getTechnicianLocation: async (technicianId: string): Promise<{ address: string, cityName: string }> => {
+    const res = await api.get(`/technician/order/location/technician/${technicianId}`);
+    return res.data;
+  },
+
+  // GET /api/technician/order/location/order/{orderId}
+  getOrderLocation: async (orderId: string): Promise<{ address: string, cityName: string }> => {
+    const res = await api.get(`/technician/order/location/order/${orderId}`);
+    return res.data;
+  },
+
+  // GET /api/technician/order/detail/{orderId}
+  // Chi tiết đơn hàng (có xử lý ảnh/video qua AWS S3)
+  getOrderDetail: async (orderId: string) => {
+    const res = await api.get(`/technician/order/detail/${orderId}`);
+    return res.data;
+  },
 };
 
 export default technicianOrderService;

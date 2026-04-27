@@ -66,7 +66,6 @@ export interface StatisticItemDTO {
 
 // Matches BE: Capstone_2_BE.DTOs.Technician.Statistic.RatingOverviewDTO
 export interface RatingOverviewDTO {
-  averageRating: number;
-  totalRatings: number;
-  distribution: Record<number, number>;
+  avgScore: number;
+  totalRating: number;
 }
