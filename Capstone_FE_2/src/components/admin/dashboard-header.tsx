@@ -20,13 +20,7 @@ export function DashboardHeader({ title, description }: DashboardHeaderProps) {
         )}
       </div>
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Tìm kiếm..."
-            className="pl-9 w-[240px] bg-[#15284d] border-slate-700 text-slate-100 placeholder:text-slate-400"
-          />
-        </div>
+
         <Button variant="outline" size="icon" className="relative border-slate-700 bg-[#15284d] text-slate-100 hover:bg-[#1b3361]">
           <Bell className="h-4 w-4" />
           <Badge className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 text-[10px] bg-[#1e3a8a] text-white">

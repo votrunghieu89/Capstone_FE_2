@@ -417,18 +417,18 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
 
         // ✅ TẠO PAYLOAD VỚI CITYID/SERVICEID ĐÚNG
         const orderData = {
-        customerId: user.id,
-        technicianId: tech.technicianId || tech.TechnicianId,
-        serviceId: selectedServiceId,
-        title: title.trim() || 'Yêu cầu sửa chữa',
-        description: desc.trim(),
-        address: address.trim(),
-        cityId: resolvedCityId,
-        latitude,
-        longitude,
-        imageFiles: imageFiles,
-        videoFile: videoFiles.length > 0 ? videoFiles[0] : undefined
-            };  
+            customerId: user.id,
+            technicianId: tech.technicianId || tech.TechnicianId,
+            serviceId: selectedServiceId,
+            title: title.trim() || 'Yêu cầu sửa chữa',
+            description: desc.trim(),
+            address: address.trim(),
+            cityId: resolvedCityId,
+            latitude,
+            longitude,
+            imageFiles: imageFiles,
+            videoFile: videoFiles.length > 0 ? videoFiles[0] : undefined
+        };
 
         // ✅ DEBUG LOG
         console.group('🔍 DEBUG ORDER DATA');

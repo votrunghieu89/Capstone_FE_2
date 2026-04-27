@@ -26,13 +26,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Lock, LockOpen, Search } from "lucide-react"
-import type { UserDetailItem, UserItem } from "@/types/admin"
 
 type AccountRole = "nguoi-dung" | "ky-thuat-vien"
 
 type AccountItem = {
   id: string
-  fullName: string
   email: string
   phone: string
   role: AccountRole
@@ -45,69 +43,6 @@ const roleMap: Record<AccountRole, { label: string; className: string }> = {
   "nguoi-dung": { label: "Người dùng", className: "bg-[#0d2747] text-[#5eb3ff] border-[#1b436f]" },
   "ky-thuat-vien": { label: "Kỹ thuật viên", className: "bg-[#33250f] text-[#f8ba4b] border-[#7b5a22]" },
 }
-
-const seedAccounts: AccountItem[] = [
-  {
-    id: "u1",
-    fullName: "Quyet",
-    email: "p@gmail.com",
-    phone: "0123456789",
-    role: "ky-thuat-vien",
-    isActive: true,
-    isVerified: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "u2",
-    fullName: "quyết",
-    email: "a@gmail.com",
-    phone: "0123456788",
-    role: "ky-thuat-vien",
-    isActive: true,
-    isVerified: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "u3",
-    fullName: "Trần Văn H",
-    email: "h@gmail.com",
-    phone: "0912345678",
-    role: "nguoi-dung",
-    isActive: true,
-    isVerified: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "u4",
-    fullName: "Hồ SĨ T",
-    email: "trieu@gmail.com",
-    phone: "0981112222",
-    role: "ky-thuat-vien",
-    isActive: false,
-    isVerified: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "u5",
-    fullName: "Bùi Quyết",
-    email: "quyet123@gmail.com",
-    phone: "0933334444",
-    role: "ky-thuat-vien",
-    isActive: true,
-    isVerified: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "u6",
-    fullName: "Đỗ Đạt",
-    email: "dat@gmail.com",
-    phone: "0901010101",
-    role: "nguoi-dung",
-    isActive: false,
-    isVerified: true,
-    createdAt: new Date().toISOString(),
-  },
-]
 
 function normalizeRole(role?: string): AccountRole | null {
   const value = (role || "").trim().toLowerCase()
@@ -131,34 +66,49 @@ export default function RequestsPage() {
   const [selectedAccount, setSelectedAccount] = useState<AccountItem | null>(null)
 
   useEffect(() => {
-    const mapped = seedAccounts.reduce<AccountItem[]>((acc, user) => {
-      const role = normalizeRole(user.role)
-      if (!role) return acc
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem("accessToken")
 
-      acc.push({
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone || "--",
-        role,
-        isActive: user.isActive,
-        isVerified: true,
-        createdAt: user.createdAt,
-      })
+        const res = await fetch("http://localhost:5271/api/admin/users", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
 
-      return acc
-    }, [])
+        const data = await res.json()
 
-    setAccounts(mapped)
-    setIsLoading(false)
+        const mapped: AccountItem[] = data.map((u: any) => {
+          const role = normalizeRole(u.role)
+
+          return {
+            id: u.id,
+            email: u.email,
+            phone: u.phoneNumber || "--",
+            role: role || "nguoi-dung",
+            isActive: u.isActive === 1,
+            isVerified: true,
+            createdAt: u.createAt,
+          }
+        })
+
+        setAccounts(mapped)
+      } catch (err) {
+        console.error("Fetch users error:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchUsers()
   }, [])
 
   const filteredAccounts = useMemo(() => {
     return accounts.filter((account) => {
       const q = searchQuery.trim().toLowerCase()
+
       const matchesSearch =
         q.length === 0 ||
-        account.fullName.toLowerCase().includes(q) ||
         account.email.toLowerCase().includes(q) ||
         account.phone.toLowerCase().includes(q)
 
@@ -175,7 +125,7 @@ export default function RequestsPage() {
     setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: nextActive } : a)))
   }
 
-  const handleOpenDetail = async (account: AccountItem) => {
+  const handleOpenDetail = (account: AccountItem) => {
     setSelectedAccount(account)
     setIsDetailOpen(true)
   }
@@ -195,10 +145,6 @@ export default function RequestsPage() {
 
           {selectedAccount && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
-              <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase">Họ tên</p>
-                <p className="text-base leading-tight font-semibold text-slate-100">{selectedAccount.fullName}</p>
-              </div>
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase">Vai trò</p>
                 <p className="text-base text-slate-100">{roleMap[selectedAccount.role].label}</p>
@@ -263,82 +209,84 @@ export default function RequestsPage() {
         <Card className="border border-slate-800 bg-[#0b111f] shadow-sm overflow-hidden rounded-2xl">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-[#10172b] border-b border-slate-800">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="text-sm font-semibold text-slate-300 h-14 min-w-[190px]">Họ tên</TableHead>
-                  <TableHead className="text-sm font-semibold text-slate-300 h-14 min-w-[240px]">Email</TableHead>
-                  <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[180px]">Vai trò</TableHead>
-                  <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[190px]">Trạng thái</TableHead>
-                  <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[170px]">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
+              <Table>
+                <TableHeader className="bg-[#10172b] border-b border-slate-800">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="text-sm font-semibold text-slate-300 h-14 min-w-[240px]">Email</TableHead>
+                    <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[180px]">Vai trò</TableHead>
+                    <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[190px]">Trạng thái</TableHead>
+                    <TableHead className="text-sm font-semibold text-slate-300 h-14 text-center min-w-[170px]">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
 
-              <TableBody>
-                {isLoading && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-slate-400 py-8">
-                      Đang tải dữ liệu...
-                    </TableCell>
-                  </TableRow>
-                )}
-                {filteredAccounts.map((account) => (
-                  <TableRow
-                    key={account.id}
-                    className="hover:bg-[#111b32] border-b border-slate-800/80 transition-colors cursor-pointer"
-                    onClick={() => handleOpenDetail(account)}
-                  >
-                    <TableCell className="text-[15px] font-medium text-slate-100 py-4 leading-none">{account.fullName}</TableCell>
-                    <TableCell className="text-sm text-slate-400 max-w-[220px] truncate py-4 leading-none">
-                      {account.email}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className={`font-semibold text-xs px-2.5 py-0.5 rounded-md ${roleMap[account.role].className}`}>
-                        {roleMap[account.role].label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className={
-                          account.isActive
-                            ? "font-semibold text-xs rounded-md px-2.5 py-0.5 bg-[#0f3c2f] text-[#3fdf95] border-[#1a6f4f]"
-                            : "font-semibold text-xs rounded-md px-2.5 py-0.5 bg-[#421216] text-[#ff5656] border-[#8e222b]"
-                        }
-                      >
-                        {account.isActive ? "Đang hoạt động" : "Đang bị khóa"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          handleToggleAccountActive(account.id)
-                        }}
-                        className={
-                          account.isActive
-                            ? "h-9 min-w-[94px] border-[#5f3b15] bg-[#18161c] text-[#f0a342] hover:text-[#f7b659] hover:bg-[#221c20]"
-                            : "h-9 min-w-[94px] border-[#12606c] bg-[#111e2b] text-[#66d5e6] hover:text-[#8de8f2] hover:bg-[#16293a]"
-                        }
-                      >
-                        {account.isActive ? <Lock className="h-4 w-4 mr-1" /> : <LockOpen className="h-4 w-4 mr-1" />}
-                        {account.isActive ? "Khóa" : "Mở khóa"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                <TableBody>
+                  {isLoading && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-slate-400 py-8">
+                        Đang tải dữ liệu...
+                      </TableCell>
+                    </TableRow>
+                  )}
 
-                {!isLoading && filteredAccounts.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-slate-400 py-8">
-                      Không có tài khoản phù hợp
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  {filteredAccounts.map((account) => (
+                    <TableRow
+                      key={account.id}
+                      className="hover:bg-[#111b32] border-b border-slate-800/80 transition-colors cursor-pointer"
+                      onClick={() => handleOpenDetail(account)}
+                    >
+                      <TableCell className="text-sm text-slate-400 py-4">{account.email}</TableCell>
+
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={`w-[140px] justify-center text-center font-semibold text-xs px-2.5 py-0.5 rounded-md ${roleMap[account.role].className}`}
+                        >
+                          {roleMap[account.role].label}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={`w-[150px] justify-center text-center font-semibold text-xs rounded-md px-2.5 py-0.5 ${account.isActive
+                              ? "bg-[#0f3c2f] text-[#3fdf95] border-[#1a6f4f]"
+                              : "bg-[#421216] text-[#ff5656] border-[#8e222b]"
+                            }`}
+                        >
+                          {account.isActive ? "Đang hoạt động" : "Đang bị khóa"}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleToggleAccountActive(account.id)
+                          }}
+                          className={
+                            account.isActive
+                              ? "h-9 min-w-[94px] border-[#5f3b15] bg-[#18161c] text-[#f0a342] hover:text-[#f7b659] hover:bg-[#221c20]"
+                              : "h-9 min-w-[94px] border-[#12606c] bg-[#111e2b] text-[#66d5e6] hover:text-[#8de8f2] hover:bg-[#16293a]"
+                          }
+                        >
+                          {account.isActive ? <Lock className="h-4 w-4 mr-1" /> : <LockOpen className="h-4 w-4 mr-1" />}
+                          {account.isActive ? "Khóa" : "Mở khóa"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+
+                  {!isLoading && filteredAccounts.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-slate-400 py-8">
+                        Không có tài khoản phù hợp
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
