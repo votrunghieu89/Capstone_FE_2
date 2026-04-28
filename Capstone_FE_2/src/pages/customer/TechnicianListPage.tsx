@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Search, Star, MapPin, CheckCircle, Filter, Camera, Video, X, Loader2, Navigation, LoaderCircle, Wrench, MapPin as LocationPin, Building2, Briefcase, MessageSquareText } from 'lucide-react';
+import { Search, Star, MapPin, CheckCircle, Filter, Camera, X, Loader2, Navigation, LoaderCircle, Wrench, MapPin as LocationPin, Building2, Briefcase, MessageSquareText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +43,25 @@ const parseLatLng = (value: unknown) => {
     return Number.isFinite(num) ? num : null;
 };
 
+const normalizeTechStatus = (tech: any): 'online' | 'offline' | 'busy' => {
+    const raw = String(tech?.status || tech?.Status || '').trim().toLowerCase();
+    if (raw === 'busy') return 'busy';
+    if (raw === 'offline') return 'offline';
+    if (raw === 'online') return 'online';
+
+    if (tech?.isOnline === true || tech?.IsOnline === true || tech?.isOnline === 1 || tech?.IsOnline === 1) {
+        return 'online';
+    }
+    return 'offline';
+};
+
+const isDemoTech = (tech: any) => String(tech?.technicianId || tech?.TechnicianId || '').startsWith('demo-');
+const isBookableTech = (tech: any) => normalizeTechStatus(tech) === 'online' && !isDemoTech(tech);
+
+const getTechYears = (tech: any) => Number(tech?.yearOfExperience ?? tech?.YearOfExperience ?? 0);
+
+const getTechEstimatedTime = (tech: any) => Number(tech?.estimatedTime ?? tech?.EstimatedTime ?? NaN);
+
 const buildAddressQuery = (address: string, cityName: string) => {
     const cleanedAddress = decodeMojibake(address).trim();
     const cleanedCity = decodeMojibake(cityName).trim();
@@ -73,6 +92,179 @@ const comparableCityText = (value: string) =>
         .replace(/^tp\.?\s+/i, '')
         .replace(/^tinh\s+/i, '')
         .trim();
+
+const demoTechnicians = [
+    {
+        technicianId: 'demo-dn-01',
+        serviceId: 'demo-service-dien-lanh',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Nguyễn Văn Minh',
+        serviceName: 'Điện lạnh',
+        cityName: 'Đà Nẵng',
+        address: 'Hải Châu, Đà Nẵng',
+        rating: 4.9,
+        ratingCount: 24,
+        yearOfExperience: 6,
+        estimatedTime: 18,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Chuyên sửa máy lạnh, vệ sinh định kỳ, nạp gas và xử lý lỗi làm lạnh yếu. Phản hồi nhanh trong khu vực nội thành.',
+        tags: ['Máy lạnh', 'Vệ sinh', 'Nạp gas', 'Khẩn cấp']
+    },
+    {
+        technicianId: 'demo-dn-02',
+        serviceId: 'demo-service-dien-nuoc',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Trần Thị Hạnh',
+        serviceName: 'Điện nước',
+        cityName: 'Đà Nẵng',
+        address: 'Thanh Khê, Đà Nẵng',
+        rating: 4.7,
+        ratingCount: 18,
+        yearOfExperience: 5,
+        estimatedTime: 24,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Xử lý rò rỉ nước, thay vòi, lắp thiết bị vệ sinh và sửa chữa hệ thống điện nước dân dụng.',
+        tags: ['Điện dân dụng', 'Nước rò rỉ', 'Lắp đặt']
+    },
+    {
+        technicianId: 'demo-dn-03',
+        serviceId: 'demo-service-it-laptop',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Lê Quốc Bảo',
+        serviceName: 'IT / Laptop',
+        cityName: 'Đà Nẵng',
+        address: 'Sơn Trà, Đà Nẵng',
+        rating: 5.0,
+        ratingCount: 41,
+        yearOfExperience: 9,
+        estimatedTime: 12,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Cài đặt phần mềm, tối ưu máy chậm, thay linh kiện, vệ sinh laptop và hỗ trợ sự cố mạng nội bộ.',
+        tags: ['Laptop', 'Phần mềm', 'Mạng', 'Vệ sinh']
+    },
+    {
+        technicianId: 'demo-dn-04',
+        serviceId: 'demo-service-dien-gia-dung',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Phạm Gia Huy',
+        serviceName: 'Điện gia dụng',
+        cityName: 'Đà Nẵng',
+        address: 'Ngũ Hành Sơn, Đà Nẵng',
+        rating: 4.8,
+        ratingCount: 29,
+        yearOfExperience: 7,
+        estimatedTime: 16,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Sửa ổ cắm, đèn, quạt, aptomat và xử lý sự cố chập điện trong gia đình.',
+        tags: ['Ổ cắm', 'Đèn', 'Aptomat', 'Chập điện']
+    },
+    {
+        technicianId: 'demo-dn-05',
+        serviceId: 'demo-service-dien-lanh',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Võ Thanh Tùng',
+        serviceName: 'Điện lạnh',
+        cityName: 'Đà Nẵng',
+        address: 'Liên Chiểu, Đà Nẵng',
+        rating: 4.6,
+        ratingCount: 15,
+        yearOfExperience: 4,
+        estimatedTime: 28,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Bảo dưỡng điều hòa, vệ sinh dàn lạnh, kiểm tra quạt gió và khắc phục lỗi không mát.',
+        tags: ['Bảo dưỡng', 'Điều hòa', 'Dàn lạnh']
+    },
+    {
+        technicianId: 'demo-dn-06',
+        serviceId: 'demo-service-it-mang',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Đặng Khánh Linh',
+        serviceName: 'IT / Mạng',
+        cityName: 'Đà Nẵng',
+        address: 'Cẩm Lệ, Đà Nẵng',
+        rating: 4.9,
+        ratingCount: 33,
+        yearOfExperience: 8,
+        estimatedTime: 20,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Lắp đặt modem, xử lý wifi yếu, tối ưu mạng gia đình và hỗ trợ máy tính mất kết nối.',
+        tags: ['WiFi', 'Router', 'Mạng nội bộ', 'Máy tính']
+    },
+    {
+        technicianId: 'demo-dn-07',
+        serviceId: 'demo-service-dien-lanh',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Nguyễn Đức Anh',
+        serviceName: 'Điện lạnh',
+        cityName: 'Đà Nẵng',
+        address: 'Hải Châu, Đà Nẵng',
+        rating: 4.8,
+        ratingCount: 36,
+        yearOfExperience: 10,
+        estimatedTime: 14,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Chuyên sửa máy lạnh inverter, thay block, xử lý xì gas và bảo trì hệ thống lạnh gia đình.',
+        tags: ['Inverter', 'Block', 'Xì gas', 'Bảo trì']
+    },
+    {
+        technicianId: 'demo-dn-08',
+        serviceId: 'demo-service-dien-nuoc',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Phan Thị Mai',
+        serviceName: 'Điện nước',
+        cityName: 'Đà Nẵng',
+        address: 'Thanh Khê, Đà Nẵng',
+        rating: 4.7,
+        ratingCount: 21,
+        yearOfExperience: 6,
+        estimatedTime: 19,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Sửa đường ống, thay sen vòi, lắp máy bơm và xử lý sự cố điện nước dân dụng.',
+        tags: ['Ống nước', 'Sen vòi', 'Máy bơm', 'Dân dụng']
+    },
+    {
+        technicianId: 'demo-dn-09',
+        serviceId: 'demo-service-it-mang',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Trần Minh Khoa',
+        serviceName: 'IT / Mạng',
+        cityName: 'Đà Nẵng',
+        address: 'Sơn Trà, Đà Nẵng',
+        rating: 5.0,
+        ratingCount: 27,
+        yearOfExperience: 7,
+        estimatedTime: 11,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Cấu hình router, đi dây mạng, khắc phục chập chờn wifi và cài máy tính văn phòng.',
+        tags: ['Router', 'Wifi', 'Cài máy', 'Văn phòng']
+    },
+    {
+        technicianId: 'demo-dn-10',
+        serviceId: 'demo-service-dien-gia-dung',
+        cityId: 'demo-city-da-nang',
+        technicianName: 'Lê Thùy Dương',
+        serviceName: 'Điện gia dụng',
+        cityName: 'Đà Nẵng',
+        address: 'Ngũ Hành Sơn, Đà Nẵng',
+        rating: 4.9,
+        ratingCount: 30,
+        yearOfExperience: 8,
+        estimatedTime: 17,
+        status: 'online',
+        avatarUrl: '',
+        description: 'Lắp quạt trần, sửa đèn, thay ổ cắm, kiểm tra aptomat và sửa điện gia đình.',
+        tags: ['Quạt trần', 'Đèn', 'Ổ cắm', 'Aptomat']
+    }
+];
 
 function InfoItem({ label, value }: { label: string; value: string }) {
     const getIcon = () => {
@@ -108,6 +300,7 @@ export default function TechnicianListPage() {
     const [cities, setCities] = useState<CityDTO[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAutoFinding, setIsAutoFinding] = useState(false);
+    const [forceDemoMode, setForceDemoMode] = useState(true);
 
     const normalizeText = (v: any) => String(v || '').trim().toLowerCase();
 
@@ -179,14 +372,13 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
         fetchData();
     }, [activeCategory]);
 
-    const filtered = technicians.filter(t => {
+    const filtered = [...technicians, ...demoTechnicians].filter(t => {
         const name = (t.technicianName || t.TechnicianName || '').toLowerCase();
         const spec = (t.serviceName || t.ServiceName || '').toLowerCase();
         const searchLower = search.toLowerCase();
 
         const matchSearch = name.includes(searchLower) || spec.includes(searchLower);
 
-        // If not 'All', check if tags or description contain category
         const matchCategory = activeCategory === 'Tất cả' ||
             normalizeText(t.serviceName || t.ServiceName) === normalizeText(activeCategory);
 
@@ -195,12 +387,25 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
 
     return (
         <div className="space-y-6">
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-                <h1 className="text-2xl font-bold text-white">Danh sách Kỹ thuật viên</h1>
-                <p className="text-zinc-400 mt-1 text-sm">Tìm và chọn thợ sửa chữa phù hợp với nhu cầu của bạn</p>
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.03] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.25)] md:p-6"
+            >
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                    <div>
+                        <p className="text-[11px] uppercase tracking-[0.28em] text-primary/80 font-semibold">Kỹ thuật viên</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-white mt-1">Danh sách Kỹ thuật viên</h1>
+                        <p className="text-zinc-400 mt-2 text-sm max-w-2xl">Tìm và chọn thợ sửa chữa phù hợp với nhu cầu của bạn. Xem nhanh kinh nghiệm, đánh giá và trạng thái để chọn đúng người.</p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                        <span className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5">{filtered.length} kỹ thuật viên</span>
+                        <span className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5">{activeCategory}</span>
+                    </div>
+                </div>
             </motion.div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 md:flex-row">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                     <Input
@@ -229,12 +434,12 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                             }
                         }}
                         placeholder="Tìm theo tên, dịch vụ... (Enter để tìm)"
-                        className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-zinc-500 focus:border-primary"
+                        className="pl-9 h-11 bg-white/5 border-white/10 text-white placeholder:text-zinc-500 focus:border-primary/50 rounded-xl"
                     />
                 </div>
                 <Button
                     variant="outline"
-                    className="border-white/10 bg-white/5 text-zinc-300 hover:text-white hover:bg-white/10 gap-2"
+                    className="border-white/10 bg-white/5 text-zinc-300 hover:text-white hover:bg-white/10 gap-2 h-11 rounded-xl px-4"
                     onClick={async () => {
                         try {
                             setIsLoading(true);
@@ -252,10 +457,10 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                 </Button>
             </div>
 
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <button
                     onClick={() => setActiveCategory('Tất cả')}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === 'Tất cả'
+                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === 'Tất cả'
                         ? 'bg-primary text-white shadow-lg shadow-primary/30'
                         : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
                         }`}
@@ -264,7 +469,7 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                 </button>
                 {services.map(ser => (
                     <button key={ser.id} onClick={() => setActiveCategory(ser.serviceName)}
-                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === ser.serviceName
+                        className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === ser.serviceName
                             ? 'bg-primary text-white shadow-lg shadow-primary/30'
                             : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
                             }`}>
@@ -311,54 +516,99 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                     {filtered.map((tech, index) => (
-                        <motion.div key={tech.technicianId || tech.TechnicianId || index}
-                            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.06 }} whileHover={{ y: -4 }}
-                            className="group bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-primary/20 rounded-2xl p-5 transition-all duration-300">
+                        <motion.div
+                            key={`${tech.technicianId || tech.TechnicianId || 'tech'}-${tech.serviceId || tech.ServiceId || 'service'}-${tech.cityId || tech.CityId || 'city'}-${index}`}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.06 }}
+                            whileHover={{ y: -4 }}
+                            className="group relative overflow-hidden rounded-3xl border border-blue-500/20 bg-[#0f1627] p-5 shadow-[0_12px_40px_rgba(0,0,0,0.18)] transition-all duration-300 hover:border-blue-400/40 hover:bg-[#121c33]"
+                        >
+                            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-blue-400/70 to-transparent opacity-80" />
 
                             <div className="flex items-start gap-4">
                                 <div className="relative flex-shrink-0">
-                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/30 to-blue-500/20 flex items-center justify-center text-xl font-bold text-white overflow-hidden">
+                                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500/30 to-cyan-400/20 text-xl font-bold text-white ring-1 ring-blue-400/20">
                                         {tech.avatarUrl ? (
                                             <img src={tech.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
                                         ) : (
                                             (tech.fullName && tech.fullName[0]) || (tech.name && tech.name[0]) || 'T'
                                         )}
                                     </div>
-                                    <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${tech.isOnline ? 'bg-green-500' : 'bg-zinc-500'} rounded-full border-2 border-[#02050b]`} />
+                                    <span
+                                        className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#02050b] ${normalizeTechStatus(tech) === 'online'
+                                            ? 'bg-green-500'
+                                            : normalizeTechStatus(tech) === 'busy'
+                                                ? 'bg-amber-500'
+                                                : 'bg-zinc-500'
+                                            }`}
+                                        title={normalizeTechStatus(tech) === 'online' ? 'Online' : normalizeTechStatus(tech) === 'busy' ? 'Busy' : 'Offline'}
+                                    />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                        <h3 className="font-semibold text-white truncate">{tech.technicianName || tech.TechnicianName}</h3>
-                                        <CheckCircle className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <h3 className="truncate text-[15px] font-bold text-white">{tech.technicianName || tech.TechnicianName}</h3>
+                                            <p className="mt-1 truncate text-xs text-zinc-400">{tech.serviceName || tech.ServiceName || 'Dịch vụ chuyên nghiệp'}</p>
+                                        </div>
+                                        <CheckCircle className="h-4 w-4 flex-shrink-0 text-blue-400" />
                                     </div>
-                                    <p className="text-xs text-zinc-400 mt-0.5 truncate">{tech.serviceName || tech.ServiceName || 'Dịch vụ chuyên nghiệp'}</p>
-                                    <div className="flex items-center gap-1 mt-1.5">
-                                        <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-                                        <span className="text-sm font-bold text-white">{tech.averageRating || tech.AverageRating || 5.0}</span>
-                                        <span className="text-xs text-zinc-500">({tech.ratingCount || tech.RatingCount || 0} đánh giá)</span>
+
+                                    <div className="mt-3 flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-sm">
+                                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                                        <span className="font-bold text-white">{tech.averageRating || tech.AverageRating || tech.rating || 5.0}</span>
+                                        <span className="text-xs text-zinc-500">({tech.ratingCount || tech.RatingCount || tech.reviewCount || 0})</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="mt-4 space-y-2">
-                                <p className="text-xs text-zinc-400 line-clamp-2">Kinh nghiệm: {tech.orderCount || tech.OrderCount || 0} đơn hàng thành công</p>
-                                <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                                    <MapPin className="w-3 h-3 flex-shrink-0" />
-                                    <span>{tech.address || tech.Address || 'Đà Nẵng'}</span>
+                            <div className="mt-4 grid grid-cols-1 gap-2.5 text-sm text-zinc-300">
+                                <div className="flex items-center justify-between rounded-2xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+                                    <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">Kinh nghiệm</span>
+                                    <span className="font-semibold text-white">{getTechYears(tech) > 0 ? `${getTechYears(tech)} năm` : 'Chưa cập nhật'}</span>
+                                </div>
+                                <div className="flex items-center justify-between rounded-2xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+                                    <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">Trạng thái</span>
+                                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${normalizeTechStatus(tech) === 'online' ? 'bg-green-500/10 text-green-400' : normalizeTechStatus(tech) === 'busy' ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-500/10 text-zinc-400'}`}>
+                                        {normalizeTechStatus(tech) === 'online' ? 'Online' : normalizeTechStatus(tech) === 'busy' ? 'Busy' : 'Offline'}
+                                    </span>
+                                </div>
+                                {Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 && (
+                                    <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+                                        <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">Ước tính đến</span>
+                                        <span className="font-semibold text-white">{getTechEstimatedTime(tech)} phút</span>
+                                    </div>
+                                )}
+                                <div className="flex items-start gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+                                    <MapPin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-zinc-500" />
+                                    <span className="text-sm text-zinc-300">{tech.address || tech.Address || 'Đà Nẵng'}</span>
                                 </div>
                             </div>
 
-                            <div className="flex gap-1.5 mt-3 flex-wrap">
+                            <div className="mt-3 flex flex-wrap gap-1.5">
                                 {(tech.tags || ['Dịch vụ sửa chữa']).map((tag: string) => (
-                                    <span key={tag} className="px-2 py-0.5 bg-primary/10 text-primary-light rounded-full text-[10px] font-medium">{tag}</span>
+                                    <span key={tag} className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-medium text-primary-light">{tag}</span>
                                 ))}
                             </div>
 
                             <Dialog>
                                 <DialogTrigger asChild>
-                                    <Button className="w-full mt-4 h-9 text-sm font-semibold bg-primary hover:bg-primary-dark text-white rounded-lg shadow-md shadow-primary/20">
-                                        <CheckCircle className="w-4 h-4 mr-1.5" /> Đặt thợ
+                                    <Button
+                                        disabled={!isBookableTech(tech)}
+                                        title={!isBookableTech(tech)
+                                            ? (isDemoTech(tech)
+                                                ? 'Thợ demo chỉ dùng để test giao diện, không thể đặt'
+                                                : (normalizeTechStatus(tech) === 'busy' ? 'Thợ hiện đang bận, chưa thể đặt' : 'Thợ hiện offline, chưa thể đặt'))
+                                            : 'Đặt thợ'}
+                                        className="mt-4 h-11 w-full rounded-xl bg-primary font-semibold text-white shadow-md shadow-primary/20 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <CheckCircle className="mr-1.5 h-4 w-4" />
+                                        {!isBookableTech(tech)
+                                            ? (isDemoTech(tech)
+                                                ? 'Demo - không đặt'
+                                                : (normalizeTechStatus(tech) === 'busy' ? 'Thợ đang bận' : 'Thợ offline'))
+                                            : 'Đặt thợ'}
                                     </Button>
                                 </DialogTrigger>
                                 <BookTechnicianDialog tech={tech} />
@@ -516,6 +766,7 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
         const candidateLat = parseLatLng(resolvedLocation?.lat);
         const candidateLng = parseLatLng(resolvedLocation?.lon);
 
+
         if (candidateLat === null || candidateLng === null) {
             toast.error('Không xác định được tọa độ từ địa chỉ và thành phố');
             return;
@@ -531,6 +782,19 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             query: resolvedLocation?.query
         });
         toast.success('📍 Đã ghim vị trí từ địa chỉ!');
+    };
+
+    const handleTestGeocoding = async () => {
+        if (!address.trim()) {
+            toast.error('Vui lòng nhập địa chỉ trước');
+            return;
+        }
+        const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
+        if (resolvedLocation?.lat && resolvedLocation?.lon) {
+            toast.success('Đã lấy kết quả geocoding');
+        } else {
+            toast.error('Không lấy được tọa độ từ địa chỉ và thành phố');
+        }
     };
 
     const handleSubmit = async () => {
@@ -574,6 +838,12 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             return;
         }
 
+        if (isDemoTech(tech)) {
+            toast.success('Đang chạy chế độ demo: thợ test chỉ hiển thị giao diện, không gửi đơn thật.');
+            navigate('/customer/orders?status=pending');
+            return;
+        }
+
         setIsSubmitting(true);
 
         // ✅ TẠO PAYLOAD ĐÚNG CHO ENDPOINT ĐẶT ĐƠN TỰ ĐỘNG
@@ -587,6 +857,7 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             address: address.trim(),
             latitude: resolvedLatitude.toString(),
             longitude: resolvedLongitude.toString(),
+            estimatedTime: Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 ? getTechEstimatedTime(tech) : 110,
             imageFiles,
             videoFile: videoFiles.length > 0 ? videoFiles[0] : undefined
         };
@@ -643,179 +914,149 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
     const mapSrc = mapToIframeUrl(latitude, longitude, resolvedDisplayAddress || address);
 
     return (
-        <DialogContent className="sm:max-w-[540px] bg-[#0a1122] border-white/10 text-white max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-                <DialogTitle className="text-xl">
-                    Đặt Thợ: {tech.technicianName || tech.TechnicianName}
-                </DialogTitle>
-                <p className="text-sm text-zinc-400">
-                    {tech.serviceName || tech.ServiceName} · ⭐ {tech.avgScore || tech.AvgScore || 5.0}
-                </p>
-            </DialogHeader>
+        <DialogContent className="w-[98vw] sm:max-w-[1180px] bg-[#0a1122] border border-white/10 text-white max-h-[90vh] overflow-y-auto rounded-3xl p-0 shadow-2xl shadow-black/50">
+            <div className="border-b border-white/10 bg-gradient-to-r from-white/5 to-transparent px-6 py-5">
+                <DialogHeader className="space-y-2">
+                    <DialogTitle className="text-2xl font-semibold tracking-tight">
+                        Đặt Thợ: {tech.technicianName || tech.TechnicianName}
+                    </DialogTitle>
+                    <p className="text-sm text-zinc-400">
+                        {tech.serviceName || tech.ServiceName} · ⭐ {tech.avgScore || tech.AvgScore || 5.0}
+                    </p>
+                </DialogHeader>
+            </div>
 
-            <div className="space-y-4 mt-2">
-                {/* ✅ DROPDOWN CHỌN SERVICE */}
-                <div className="space-y-1.5">
-                    <Label>Loại dịch vụ <span className="text-red-400">*</span></Label>
-                    <select
-                        value={selectedServiceId}
-                        onChange={e => setSelectedServiceId(e.target.value)}
-                        className="w-full h-10 bg-white/5 border border-white/10 rounded-md px-3 text-white text-sm focus:ring-1 focus:ring-primary outline-none"
-                    >
-                        <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
-                        {services.map(s => (
-                            <option key={s.id} value={s.id} className="bg-[#0a1122]">
-                                {s.serviceName}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Tiêu đề */}
-                <div className="space-y-1.5">
-                    <Label>Tiêu đề</Label>
-                    <Input
-                        value={title}
-                        onChange={e => setTitle(e.target.value)}
-                        placeholder="Vd: Điều hòa không mát"
-                        className="bg-white/5 border-white/10 text-white"
-                    />
-                </div>
-
-                {/* Mô tả */}
-                <div className="space-y-1.5">
-                    <Label>Mô tả chi tiết <span className="text-red-400">*</span></Label>
-                    <Textarea
-                        value={desc}
-                        onChange={e => setDesc(e.target.value)}
-                        rows={3}
-                        placeholder="Mô tả rõ sự cố để thợ chuẩn bị phù hợp..."
-                        className="bg-white/5 border-white/10 text-white resize-none"
-                    />
-                </div>
-
-                {/* Upload ảnh / video */}
-                <div className="space-y-1.5">
-                    <Label>Hình ảnh & Video</Label>
-                    <input ref={imageRef} type="file" accept="image/*" multiple onChange={handleImages} className="hidden" />
-                    <input ref={videoRef} type="file" accept="video/*" multiple onChange={handleVideos} className="hidden" />
-                    <div className="flex gap-2">
-                        <Button type="button" variant="outline"
-                            className="flex-1 bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30"
-                            onClick={() => imageRef.current?.click()}>
-                            <Camera className="w-4 h-4 mr-2" /> Chọn ảnh
-                        </Button>
-                        <Button type="button" variant="outline"
-                            className="flex-1 bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30"
-                            onClick={() => videoRef.current?.click()}>
-                            <Video className="w-4 h-4 mr-2" /> Chọn video
-                        </Button>
-                    </div>
-                    {(imagePreviews.length > 0 || videoPreviews.length > 0) && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                            {imagePreviews.map((src, i) => (
-                                <div key={i} className="relative group w-14 h-14">
-                                    <img src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
-                                    <button type="button"
-                                        onClick={() => {
-                                            setImagePreviews(p => p.filter((_, j) => j !== i));
-                                            setImageFiles(p => p.filter((_, j) => j !== i));
-                                        }}
-                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                        <X size={8} />
-                                    </button>
-                                </div>
-                            ))}
-                            {videoPreviews.map((src, i) => (
-                                <div key={i} className="relative group w-14 h-14">
-                                    <video src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
-                                    <button type="button"
-                                        onClick={() => {
-                                            setVideoPreviews(p => p.filter((_, j) => j !== i));
-                                            setVideoFiles(p => p.filter((_, j) => j !== i));
-                                        }}
-                                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                        <X size={8} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Thành phố + địa chỉ nhập thủ công */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="px-6 py-6">
+                <div className="grid gap-7 lg:grid-cols-1">
+                    <div className="space-y-6">
+                    {/* ✅ DROPDOWN CHỌN SERVICE */}
                     <div className="space-y-1.5">
-                        <Label>Thành phố <span className="text-red-400">*</span></Label>
+                        <Label>Loại dịch vụ <span className="text-red-400">*</span></Label>
+                        <select
+                            value={selectedServiceId}
+                            onChange={e => setSelectedServiceId(e.target.value)}
+                            className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-white text-sm focus:ring-1 focus:ring-primary outline-none"
+                        >
+                            <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
+                            {services.map(s => (
+                                <option key={s.id} value={s.id} className="bg-[#0a1122]">
+                                    {s.serviceName}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Tiêu đề */}
+                    <div className="space-y-1.5">
+                        <Label>Tiêu đề</Label>
                         <Input
-                            value={cityText}
-                            onChange={e => setCityText(e.target.value)}
-                            placeholder="Ví dụ: Đà Nẵng"
-                            className="bg-white/5 border-white/10 text-white text-sm"
+                            value={title}
+                            onChange={e => setTitle(e.target.value)}
+                            placeholder="Vd: Điều hòa không mát"
+                            className="h-11 rounded-2xl bg-white/5 border-white/10 text-white"
                         />
-                        <p className="text-[10px] text-zinc-500">Nhập tay tên thành phố để hệ thống tự ghim vị trí chính xác hơn.</p>
                     </div>
+
+                    {/* Mô tả */}
                     <div className="space-y-1.5">
-                        <Label className="flex items-center gap-1.5">
-                            <MapPin size={13} className="text-primary-light" />
-                            Địa chỉ <span className="text-red-400">*</span>
-                        </Label>
-                        <div className="flex gap-2">
-                            <Input
-                                value={address}
-                                onChange={e => setAddress(e.target.value)}
-                                placeholder="Ví dụ: 123 Hoàng Diệu"
-                                className="flex-1 bg-white/5 border-white/10 text-white text-sm"
-                            />
-                            <Button type="button" variant="outline" size="sm"
-                                className="flex-shrink-0 bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30 px-3"
-                                onClick={handleGetLocation}
-                                title="Xác định vị trí từ địa chỉ">
-                                <MapPin size={15} />
+                        <Label>Mô tả chi tiết <span className="text-red-400">*</span></Label>
+                        <Textarea
+                            value={desc}
+                            onChange={e => setDesc(e.target.value)}
+                            rows={5}
+                            placeholder="Mô tả rõ sự cố để thợ chuẩn bị phù hợp..."
+                            className="rounded-2xl bg-white/5 border-white/10 text-white resize-none"
+                        />
+                    </div>
+
+                    {/* Upload ảnh / video */}
+                    <div className="space-y-1.5">
+                        <Label>Hình ảnh</Label>
+                        <input ref={imageRef} type="file" accept="image/*" multiple onChange={handleImages} className="hidden" />
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <Button type="button" variant="outline"
+                                className="flex-1 h-11 rounded-2xl bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30"
+                                onClick={() => imageRef.current?.click()}>
+                                <Camera className="w-4 h-4 mr-2" /> Chọn ảnh
                             </Button>
                         </div>
-                        <p className="text-[10px] text-zinc-500">Bấm nút này để ghim vị trí từ thành phố + địa chỉ đã nhập.</p>
+                        {(imagePreviews.length > 0 || videoPreviews.length > 0) && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {imagePreviews.map((src, i) => (
+                                    <div key={i} className="relative group w-14 h-14">
+                                        <img src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
+                                        <button type="button"
+                                            onClick={() => {
+                                                setImagePreviews(p => p.filter((_, j) => j !== i));
+                                                setImageFiles(p => p.filter((_, j) => j !== i));
+                                            }}
+                                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                            <X size={8} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {videoPreviews.map((src, i) => (
+                                    <div key={i} className="relative group w-14 h-14">
+                                        <video src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
+                                        <button type="button"
+                                            onClick={() => {
+                                                setVideoPreviews(p => p.filter((_, j) => j !== i));
+                                                setVideoFiles(p => p.filter((_, j) => j !== i));
+                                            }}
+                                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                            <X size={8} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
+
                 </div>
 
-                {/* Bản đồ + tọa độ */}
-                <div className="space-y-2">
-                    <div className="rounded-xl overflow-hidden border border-white/10" style={{ height: 220 }}>
-                        <iframe
-                            title="map"
-                            src={mapSrc}
-                            width="100%"
-                            height="220"
-                            style={{ border: 0, display: 'block' }}
-                            loading="lazy"
-                            referrerPolicy="no-referrer-when-downgrade"
-                        />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                            <div className="text-zinc-500 mb-1">Thành phố</div>
-                            <div className="text-white font-semibold">{cityText || 'Chưa nhập'}</div>
+                <div className="space-y-6">
+                    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 space-y-4">
+                        {/* Thành phố + địa chỉ nhập thủ công */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label>Thành phố <span className="text-red-400">*</span></Label>
+                                <Input
+                                    value={cityText}
+                                    onChange={e => setCityText(e.target.value)}
+                                    placeholder="Ví dụ: Đà Nẵng"
+                                    className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
+                                />
+                                <p className="text-[10px] text-zinc-500">Nhập tay tên thành phố của bạn.</p>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="flex items-center gap-1.5">
+                                    <MapPin size={13} className="text-primary-light" />
+                                    Địa chỉ <span className="text-red-400">*</span>
+                                </Label>
+                                <Input
+                                    value={address}
+                                    onChange={e => setAddress(e.target.value)}
+                                    placeholder="Ví dụ: 123 Hoàng Diệu"
+                                    className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
+                                />
+                                <p className="text-[10px] text-zinc-500">Nhập địa chỉ chi tiết nơi cần sửa chữa.</p>
+                            </div>
                         </div>
-                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                            <div className="text-zinc-500 mb-1">Tọa độ</div>
-                            <div className="text-white font-semibold">{latitude}, {longitude}</div>
-                        </div>
-                        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-                            <div className="text-zinc-500 mb-1">Địa chỉ ghim</div>
-                            <div className="text-white font-semibold line-clamp-2">{resolvedDisplayAddress || address || 'Chưa có địa chỉ'}</div>
-                        </div>
-                    </div>
-                </div>
 
-                <Button
-                    className="w-full bg-primary hover:bg-primary-dark text-white font-bold h-11 flex items-center justify-center gap-2"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}>
-                    {isSubmitting
-                        ? <><Loader2 size={16} className="animate-spin" /> Đang gửi...</>
-                        : <><CheckCircle size={16} /> Hoàn thành — Đặt lịch sửa chữa</>
-                    }
-                </Button>
+
+                    </div>
+
+                    <Button
+                        className="w-full h-12 rounded-2xl bg-primary hover:bg-primary-dark text-white font-bold flex items-center justify-center gap-2"
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}>
+                        {isSubmitting
+                            ? <><Loader2 size={16} className="animate-spin" /> Đang gửi...</>
+                            : <><CheckCircle size={16} /> Hoàn thành — Đặt lịch sửa chữa</>
+                        }
+                    </Button>
+                </div>
+            </div>
             </div>
         </DialogContent>
     );
@@ -828,7 +1069,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const navigate = useNavigate();
 
     const [selectedService, setSelectedService] = useState('');
-    const [selectedCity, setSelectedCity] = useState('');
+    const [cityText, setCityText] = useState('Đà Nẵng');
     const [title, setTitle] = useState('');
     const [desc, setDesc] = useState('');
     const [address, setAddress] = useState('');
@@ -840,11 +1081,13 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [rejectedTechIds, setRejectedTechIds] = useState<string[]>([]);
     const [foundTech, setFoundTech] = useState<any>(null);
+    const [selectedCityId, setSelectedCityId] = useState('');
     const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
+    const [searchReason, setSearchReason] = useState('');
 
     const resetAutoFindForm = () => {
         setSelectedService('');
-        setSelectedCity('');
+        setCityText('Đà Nẵng');
         setTitle('');
         setDesc('');
         setAddress('');
@@ -857,7 +1100,14 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setRejectedTechIds([]);
         setFoundTech(null);
         setSearchStatus('idle');
+        setSearchReason('');
     };
+
+    const handleCloseAutoFind = () => {
+        onClose();
+    };
+
+    const renderOnlyOnline = (items: any[]) => items.filter((t: any) => normalizeTechStatus(t) === 'online');
 
     const addLocalOrder = (status: 'Pending Confirmation') => {
         if (!user?.id || !foundTech) return;
@@ -880,8 +1130,11 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             title: title.trim() || 'Đặt thợ tự động',
             description: desc,
             address,
+            cityName: cityText,
             status,
             createdAt: new Date().toISOString(),
+            EstimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
+            estimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
             source: 'autofind-local'
         });
 
@@ -890,62 +1143,45 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
     const handleStartSearch = async () => {
         if (!user?.id) return toast.error('Vui lòng đăng nhập!');
-        if (!selectedService || !selectedCity || !desc || !address) return toast.error('Vui lòng điền đủ thông tin!');
-        console.log('🔍 AutoFind payload before submit', { selectedService, selectedCity, title, desc, address, latitude, longitude });
+        if (!selectedService || !cityText.trim() || !desc || !address) return toast.error('Vui lòng điền đủ thông tin!');
+        console.log('🔍 AutoFind payload before submit', { selectedService, cityText, title, desc, address, latitude, longitude });
 
         const fallbackFindByFilter = async () => {
-            // 1) Ưu tiên BE filter theo service + city
-            const listByServiceAndCity = await technicianCatalogService.filterTechnicians({
-                serviceId: selectedService,
-                cityId: selectedCity
-            });
-            const techniciansByServiceAndCity = Array.isArray(listByServiceAndCity)
-                ? listByServiceAndCity
-                : (listByServiceAndCity?.items || listByServiceAndCity?.data || []);
+            const selectedServiceObj = services.find((s: ServiceDTO) => s.id === selectedService);
+            const selectedServiceName = normalizeText(selectedServiceObj?.serviceName || '');
+            const selectedCityName = normalizeText(cityText || 'Đà Nẵng');
+            const isDanang = selectedCityName.includes('da nang') || selectedCityName.includes('danang');
 
-            let finalCandidates = techniciansByServiceAndCity;
+            const allRes = await technicianCatalogService.getAllTechnicians();
+            const allTechs = Array.isArray(allRes) ? allRes : (allRes?.items || allRes?.data || []);
 
-            // 2) fallback BE filter chỉ theo service
-            if (finalCandidates.length === 0) {
-                const listByServiceOnly = await technicianCatalogService.filterTechnicians({
-                    serviceId: selectedService
-                });
-                finalCandidates = Array.isArray(listByServiceOnly)
-                    ? listByServiceOnly
-                    : (listByServiceOnly?.items || listByServiceOnly?.data || []);
-            }
-
-            // 3) fallback FE: lấy all rồi tự lọc (đồng bộ khi BE filter lệch dữ liệu)
-            if (finalCandidates.length === 0) {
-                const allRes = await technicianCatalogService.getAllTechnicians();
-                const allTechs = Array.isArray(allRes) ? allRes : (allRes?.items || allRes?.data || []);
-                const selectedServiceObj = services.find((s: ServiceDTO) => s.id === selectedService);
-                const selectedServiceName = (selectedServiceObj?.serviceName || '').toLowerCase().trim();
-
-                finalCandidates = allTechs.filter((t: any) => {
+            const matched = allTechs
+                .filter((t: any) => renderOnlyOnline([t]).length > 0)
+                .filter((t: any) => {
+                    const techCityName = normalizeText(t.cityName || t.CityName || t.city || t.City || 'Đà Nẵng');
+                    const techServiceName = normalizeText(t.serviceName || t.ServiceName || '');
                     const techServiceId = t.serviceId || t.ServiceId;
-                    const techServiceName = (t.serviceName || t.ServiceName || '').toLowerCase().trim();
-                    const techCityId = t.cityId || t.CityId;
-
-                    const serviceMatch = (techServiceId && techServiceId === selectedService) ||
+                    const serviceOk = (techServiceId && String(techServiceId) === String(selectedService)) ||
+                        techServiceName.includes(selectedServiceName) ||
                         (selectedServiceName && techServiceName === selectedServiceName);
-                    const cityMatch = !selectedCity || (techCityId && techCityId === selectedCity);
-                    return serviceMatch && cityMatch;
+                    const cityOk = isDanang ? (techCityName.includes('da nang') || techCityName.includes('danang')) : techCityName.includes(selectedCityName);
+                    return serviceOk && cityOk;
                 });
 
-                if (finalCandidates.length === 0) {
-                    // fallback cuối: chỉ match service, bỏ city
-                    finalCandidates = allTechs.filter((t: any) => {
-                        const techServiceId = t.serviceId || t.ServiceId;
-                        const techServiceName = (t.serviceName || t.ServiceName || '').toLowerCase().trim();
-                        return (techServiceId && techServiceId === selectedService) ||
-                            (selectedServiceName && techServiceName === selectedServiceName);
-                    });
-                }
+            if (matched.length === 0) {
+                setSearchReason(`Không có thợ khớp ${selectedServiceName || 'dịch vụ'} tại ${cityText || 'Đà Nẵng'}.`);
+                return false;
             }
+            const firstTech = matched[0];
 
-            const firstTech = finalCandidates[0];
-            if (!firstTech) return false;
+            const etaMinutes = Number(firstTech.estimatedTime || firstTech.EstimatedTime || 110);
+            const etaStart = new Date();
+            const etaEnd = new Date(etaStart.getTime() + etaMinutes * 60 * 1000);
+            const formatHourMinute = (date: Date) => {
+                const h = String(date.getHours()).padStart(2, '0');
+                const m = String(date.getMinutes()).padStart(2, '0');
+                return `${h}h${m}`;
+            };
 
             setFoundTech({
                 ...firstTech,
@@ -960,9 +1196,13 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                 avatarURL: firstTech.avatarURL || firstTech.AvatarURL || firstTech.avatarUrl || firstTech.AvatarUrl,
                 phone: firstTech.phone || firstTech.Phone || '',
                 address: firstTech.address || firstTech.Address || '',
-                city: firstTech.city || firstTech.City || ''
+                city: firstTech.city || firstTech.City || '',
+                estimatedTime: etaMinutes,
+                EstimatedTime: etaMinutes,
+                etaWindow: `${formatHourMinute(etaStart)}-${formatHourMinute(etaEnd)}`
             });
             setSearchStatus('found');
+            setSearchReason('');
             toast.success('Đã tìm thợ theo dữ liệu hiện có');
             return true;
         };
@@ -970,52 +1210,17 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setIsSearching(true);
         setSearchStatus('searching');
         try {
-            // Ưu tiên flow autofind theo backend
-            await autoFindService.findTechnicians(user.id, {
-                customerId: user.id,
-                serviceId: selectedService,
-                cityId: selectedCity,
-                latitude,
-                longitude,
-                description: desc
-            });
-
-            const res = await autoFindService.checkAcceptance(user.id);
-            if (res && (res.id || res.technicianId || res.TechnicianId)) {
-                setFoundTech({
-                    ...res,
-                    technicianId: res.technicianId || res.TechnicianId || res.id,
-                    fullName: res.fullName || res.FullName || res.name,
-                    name: res.name || res.fullName || res.FullName,
-                    specialty: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
-                    serviceName: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
-                    rating: res.score || res.Score || res.avgScore || res.AvgScore || 5,
-                    orderCount: res.orderCount || res.OrderCount || 0,
-                    ratingCount: res.ratingCount || res.RatingCount || 0,
-                    avatarURL: res.avatarURL || res.AvatarURL || res.avatarUrl || res.AvatarUrl,
-                    phone: res.phone || res.Phone || '',
-                    address: res.address || res.Address || '',
-                    city: res.city || res.City || ''
-                });
-                setSearchStatus('found');
-                return;
-            }
-
             const ok = await fallbackFindByFilter();
-            if (!ok) setSearchStatus('not_found');
-        } catch (err) {
-            console.error(err);
-            try {
-                const ok = await fallbackFindByFilter();
-                if (!ok) {
-                    setSearchStatus('not_found');
-                    toast.error('Không tìm thấy thợ phù hợp lúc này');
-                }
-            } catch (fallbackErr) {
-                console.error(fallbackErr);
+            if (!ok) {
                 setSearchStatus('not_found');
+                if (!searchReason) setSearchReason('Không có thợ khớp với dịch vụ và thành phố bạn chọn.');
                 toast.error('Không tìm thấy thợ phù hợp lúc này');
             }
+        } catch (err) {
+            console.error(err);
+            setSearchStatus('not_found');
+            setSearchReason('Có lỗi khi tìm thợ. Vui lòng thử lại hoặc đổi dịch vụ/thành phố.');
+            toast.error('Không tìm thấy thợ phù hợp lúc này');
         } finally {
             setIsSearching(false);
             setTimeout(() => setIsTransitioning(false), 500);
@@ -1034,22 +1239,40 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         // Không tạo local rejected order ở phía customer.
         // Rejected orders chỉ hiển thị khi technician từ chối order thật từ backend.
 
+        const selectedServiceObj = services.find((s: ServiceDTO) => s.id === selectedService);
+        const selectedServiceName = normalizeText(selectedServiceObj?.serviceName || '');
+        const selectedCityName = normalizeText(cityText || 'Đà Nẵng');
+        const matchesService = (t: any) => {
+            const techServiceId = t.serviceId || t.ServiceId;
+            const techServiceName = normalizeText(t.serviceName || t.ServiceName || '');
+            return (techServiceId && String(techServiceId) === String(selectedService)) ||
+                techServiceName.includes(selectedServiceName) ||
+                (selectedServiceName && techServiceName === selectedServiceName);
+        };
+        const matchesCity = (t: any) => {
+            const techCityName = normalizeText(t.cityName || t.CityName || t.city || t.City || 'Đà Nẵng');
+            const selectedIsDanang = selectedCityName.includes('da nang') || selectedCityName.includes('danang');
+            return !cityText || (selectedIsDanang ? (techCityName.includes('da nang') || techCityName.includes('danang')) : techCityName.includes(selectedCityName));
+        };
+
         const fallbackNextTechnician = async () => {
             const listByServiceAndCity = await technicianCatalogService.filterTechnicians({
                 serviceId: selectedService,
-                cityId: selectedCity
+                cityId: undefined
             });
             const firstList = Array.isArray(listByServiceAndCity)
                 ? listByServiceAndCity
                 : (listByServiceAndCity?.items || listByServiceAndCity?.data || []);
 
-            let candidates = firstList;
+            let candidates = firstList.filter((t: any) => matchesService(t) && matchesCity(t));
             if (candidates.length === 0) {
                 const listByServiceOnly = await technicianCatalogService.filterTechnicians({ serviceId: selectedService });
-                candidates = Array.isArray(listByServiceOnly)
+                candidates = (Array.isArray(listByServiceOnly)
                     ? listByServiceOnly
-                    : (listByServiceOnly?.items || listByServiceOnly?.data || []);
+                    : (listByServiceOnly?.items || listByServiceOnly?.data || [])).filter((t: any) => matchesService(t) && matchesCity(t));
             }
+
+            if (candidates.length === 0) return false;
 
             const nextTech = candidates.find((t: any) => {
                 const tid = t.technicianId || t.TechnicianId || t.id;
@@ -1072,7 +1295,9 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                 avatarURL: nextTech.avatarURL || nextTech.AvatarURL || nextTech.avatarUrl || nextTech.AvatarUrl,
                 phone: nextTech.phone || nextTech.Phone || '',
                 address: nextTech.address || nextTech.Address || '',
-                city: nextTech.city || nextTech.City || ''
+                city: nextTech.city || nextTech.City || '',
+                estimatedTime: nextTech.estimatedTime || nextTech.EstimatedTime || 110,
+                EstimatedTime: nextTech.estimatedTime || nextTech.EstimatedTime || 110
             });
             setSearchStatus('found');
             setIsTransitioning(false);
@@ -1082,10 +1307,20 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
         try {
             // Re-find lại để backend tính đề xuất mới theo cùng tiêu chí
+            const normalizedCityText = cityText.trim().toLowerCase();
+            const cityIdForRefind = selectedCityId || cities.find((c: CityDTO) => {
+                const cityName = String(c.cityName || '').trim().toLowerCase();
+                return cityName === normalizedCityText || cityName.includes(normalizedCityText) || normalizedCityText.includes(cityName);
+            })?.id || '';
+
+            if (!cityIdForRefind) {
+                throw new Error('Không xác định được cityId để tìm lại thợ');
+            }
+
             await autoFindService.findTechnicians(user.id, {
                 customerId: user.id,
                 serviceId: selectedService,
-                cityId: selectedCity,
+                cityId: cityIdForRefind,
                 latitude,
                 longitude,
                 description: desc
@@ -1094,7 +1329,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             const res = await autoFindService.checkAcceptance(user.id);
             if (res && (res.id || res.technicianId || res.TechnicianId)) {
                 const nextBackendId = String(res.id || res.technicianId || res.TechnicianId);
-                if (nextBackendId && nextBackendId !== String(rejectedTechId) && !rejectedTechIds.includes(nextBackendId)) {
+                const backendOk = nextBackendId && nextBackendId !== String(rejectedTechId) && !rejectedTechIds.includes(nextBackendId);
+                if (backendOk && matchesService(res) && matchesCity(res)) {
                     setFoundTech({
                         ...res,
                         technicianId: res.technicianId || res.TechnicianId || res.id,
@@ -1122,6 +1358,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
             setFoundTech(null);
             setSearchStatus('not_found');
+            setSearchReason('Không còn thợ nào khác khớp với dịch vụ và thành phố bạn chọn.');
             setIsTransitioning(false);
             try { await autoFindService.clearSession(user.id); } catch { }
             toast.success('Đã từ chối. Không còn thợ phù hợp để đề xuất thêm.');
@@ -1143,7 +1380,18 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         if (!foundTech || !user) return;
         setIsTransitioning(true);
         try {
-            const resolvedLocation = await geocodingService.resolveAddressToLocation(address, selectedCity).catch(() => null);
+            const normalizedCityText = cityText.trim().toLowerCase();
+            const resolvedCityId = selectedCityId || cities.find((c: CityDTO) => {
+                const cityName = String(c.cityName || '').trim().toLowerCase();
+                return cityName === normalizedCityText || cityName.includes(normalizedCityText) || normalizedCityText.includes(cityName);
+            })?.id || '';
+
+            if (!resolvedCityId) {
+                toast.error('Không xác định được cityId hợp lệ, vui lòng chọn lại thành phố');
+                return;
+            }
+
+            const resolvedLocation = await geocodingService.resolveAddressToLocation(address, cityText).catch(() => null);
             const resolvedLatitude = resolvedLocation?.lat || latitude;
             const resolvedLongitude = resolvedLocation?.lon || longitude;
             const resolvedAddress = resolvedLocation?.display_name || address;
@@ -1157,12 +1405,13 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                 customerId: user.id,
                 technicianId: foundTech.id || foundTech.technicianId || foundTech.TechnicianId,
                 serviceId: selectedService,
-                cityId: selectedCity,
+                cityId: resolvedCityId,
                 title: title.trim() || 'Đặt thợ tự động',
                 description: desc,
                 address: resolvedAddress,
                 latitude: resolvedLatitude,
                 longitude: resolvedLongitude,
+                estimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
                 status: 'Pending Confirmation'
             });
 
@@ -1172,10 +1421,27 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             toast.success('Đặt thợ thành công!');
             onClose();
             navigate('/customer/orders?status=pending');
-        } catch (err) {
+        } catch (err: any) {
+            const responseData = err?.response?.data;
+            const errorMessage = responseData?.message || err?.message || 'Đặt thợ thất bại';
+            console.error('AutoFind place order failed', {
+                error: err,
+                responseData,
+                payload: {
+                    customerId: user?.id,
+                    technicianId: foundTech?.id || foundTech?.technicianId || foundTech?.TechnicianId,
+                    serviceId: selectedService,
+                    cityText,
+                    selectedCityId,
+                    latitude,
+                    longitude,
+                    estimatedTime: foundTech?.estimatedTime || foundTech?.EstimatedTime || 110
+                }
+            });
+
             // fallback frontend-only: vẫn tạo local order để hiện ở trang pending
             addLocalOrder('Pending Confirmation');
-            toast.success('Đã lưu đơn chờ xác nhận (tạm thời).');
+            toast.error(`${errorMessage} - Đã lưu đơn tạm trên giao diện.`);
             onClose();
             navigate('/customer/orders?status=pending');
         } finally {
@@ -1184,145 +1450,151 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     };
 
     return (
-        <DialogContent className="sm:max-w-[760px] bg-[#0a1122] border-white/10 text-white">
-            <DialogHeader className="flex-row items-center justify-between">
-                <DialogTitle>Tìm kỹ thuật viên tự động</DialogTitle>
-                <Button variant="ghost" size="sm" onClick={resetAutoFindForm} className="text-zinc-400 hover:text-white hover:bg-white/5">
-                    Đóng
-                </Button>
-            </DialogHeader>
-
-            {searchStatus === 'idle' && (
-                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                        <Label>Loại dịch vụ</Label>
-                        <select
-                            value={selectedService}
-                            onChange={e => setSelectedService(e.target.value)}
-                            className="w-full h-10 bg-white/5 border border-white/10 rounded-md px-3 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        >
-                            <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
-                            {services.map((s: ServiceDTO) => <option key={s.id} value={s.id} className="bg-[#0a1122]">{s.serviceName}</option>)}
-                        </select>
+        <DialogContent showCloseButton={false} className="sm:max-w-[860px] overflow-hidden border border-white/10 bg-[#07101f] p-0 text-white shadow-2xl">
+            <div className="border-b border-white/10 bg-gradient-to-r from-blue-600/20 via-primary/15 to-cyan-500/10 px-6 py-5">
+                <DialogHeader className="flex-row items-start justify-between gap-4 space-y-0">
+                    <div>
+                        <DialogTitle className="text-xl font-bold">Tìm kỹ thuật viên tự động</DialogTitle>
+                        <p className="mt-1 text-sm text-zinc-400">
+                            Hệ thống sẽ quét và ghép thợ phù hợp nhất theo dịch vụ, thành phố và vị trí của bạn.
+                        </p>
                     </div>
-
-                    <div className="space-y-1.5">
-                        <Label>Thành phố</Label>
-                        <select
-                            value={selectedCity}
-                            onChange={e => setSelectedCity(e.target.value)}
-                            className="w-full h-10 bg-white/5 border border-white/10 rounded-md px-3 text-sm focus:ring-1 focus:ring-primary outline-none"
-                        >
-                            <option value="" className="bg-[#0a1122]">Chọn thành phố...</option>
-                            {cities.map((city: CityDTO) => (
-                                <option key={city.id} value={city.id} className="bg-[#0a1122]">
-                                    {city.cityName}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="space-y-1.5 md:col-span-2">
-                        <Label>Tiêu đề</Label>
-                        <Input
-                            placeholder="Ví dụ: Điều hòa không mát"
-                            value={title}
-                            onChange={e => setTitle(e.target.value)}
-                            className="bg-white/5 border-white/10"
-                        />
-                    </div>
-
-                    <div className="space-y-1.5 md:col-span-2">
-                        <Label>Mô tả sự cố</Label>
-                        <Textarea
-                            placeholder="Mô tả ngắn gọn vấn đề của bạn..."
-                            value={desc}
-                            onChange={e => setDesc(e.target.value)}
-                            className="bg-white/5 border-white/10 min-h-[96px]"
-                        />
-                    </div>
-
-                    <div className="space-y-1.5 md:col-span-2">
-                        <Label>Địa chỉ</Label>
-                        <Input
-                            placeholder="Nhập địa chỉ của bạn..."
-                            value={address}
-                            onChange={e => setAddress(e.target.value)}
-                            className="bg-white/5 border-white/10"
-                        />
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <Label>Latitude</Label>
-                        <Input type="text" value={latitude} onChange={e => setLatitude(e.target.value)} className="bg-white/5 border-white/10" />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label>Longitude</Label>
-                        <Input type="text" value={longitude} onChange={e => setLongitude(e.target.value)} className="bg-white/5 border-white/10" />
-                    </div>
-
-                    <div className="md:col-span-2 pt-1">
-                        <Button onClick={handleStartSearch} className="w-full bg-primary hover:bg-primary-dark font-bold py-6" disabled={isSearching}>
-                            {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={resetAutoFindForm} className="h-9 rounded-full border-white/10 bg-white/5 px-4 text-xs font-semibold text-white hover:bg-white/10">
+                            Reset
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={handleCloseAutoFind} className="h-9 w-9 rounded-full border border-white/10 bg-white/5 p-0 text-zinc-300 hover:bg-white/10 hover:text-white">
+                            X
                         </Button>
                     </div>
-                </div>
-            )}
+                </DialogHeader>
+            </div>
 
-            {searchStatus === 'searching' && (
-                <div className="py-12 flex flex-col items-center justify-center text-center space-y-6">
-                    <div className="relative">
-                        <div className="w-24 h-24 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <Navigation className="w-8 h-8 text-primary animate-pulse" />
+            <div className="max-h-[78vh] overflow-y-auto px-6 py-5">
+                {searchStatus === 'idle' && (
+                    <div className="space-y-5">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <Label className="text-zinc-300">Loại dịch vụ</Label>
+                                <select
+                                    value={selectedService}
+                                    onChange={e => setSelectedService(e.target.value)}
+                                    className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-primary/50"
+                                >
+                                    <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
+                                    {services.map((s: ServiceDTO) => <option key={s.id} value={s.id} className="bg-[#0a1122]">{s.serviceName}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-zinc-300">Thành phố</Label>
+                                <Input
+                                    placeholder="Nhập thành phố..."
+                                    value={cityText}
+                                    onChange={e => setCityText(e.target.value)}
+                                    className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-zinc-500 focus:border-primary/50"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5 md:col-span-2">
+                                <Label className="text-zinc-300">Tiêu đề</Label>
+                                <Input
+                                    placeholder="Ví dụ: Điều hòa không mát"
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-zinc-500 focus:border-primary/50"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5 md:col-span-2">
+                                <Label className="text-zinc-300">Mô tả sự cố</Label>
+                                <Textarea
+                                    placeholder="Mô tả ngắn gọn vấn đề của bạn..."
+                                    value={desc}
+                                    onChange={e => setDesc(e.target.value)}
+                                    className="min-h-[110px] rounded-xl border-white/10 bg-white/5 text-white placeholder:text-zinc-500 focus:border-primary/50"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5 md:col-span-2">
+                                <Label className="text-zinc-300">Địa chỉ</Label>
+                                <Input
+                                    placeholder="Nhập địa chỉ của bạn..."
+                                    value={address}
+                                    onChange={e => setAddress(e.target.value)}
+                                    className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-zinc-500 focus:border-primary/50"
+                                />
+                            </div>
+
                         </div>
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold">Đang tìm thợ gần bạn...</h3>
-                        <p className="text-zinc-400 text-sm mt-2">Hệ thống đang kết nối với các kỹ thuật viên rảnh nhất trong khu vực của bạn.</p>
-                    </div>
-                    <Button variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-400/10" onClick={() => setSearchStatus('idle')}>
-                        Hủy tìm kiếm
-                    </Button>
-                </div>
-            )}
 
-            {searchStatus === 'found' && foundTech && (
-                <div className="py-6 space-y-6">
-                    <div className="text-center">
-                        <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                        <h3 className="text-2xl font-bold">Đã tìm thấy thợ!</h3>
-                        <p className="text-zinc-400">Kỹ thuật viên <b>{foundTech.fullName || foundTech.name}</b> đã sẵn sàng.</p>
-                    </div>
-
-                    {isTransitioning ? (
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                            <div className="flex flex-col items-center justify-center text-center py-10 space-y-4 min-h-[420px]">
-                                <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <p className="text-lg font-semibold text-white">Đang xử lý...</p>
-                                    <p className="text-sm text-zinc-400 mt-1">Chuẩn bị hiển thị thợ tiếp theo</p>
+                                    <p className="text-sm font-semibold text-white">Sẵn sàng tìm thợ phù hợp</p>
+                                    <p className="mt-1 text-xs text-zinc-500">Kết quả sẽ ưu tiên khu vực gần bạn và dịch vụ đúng nhu cầu.</p>
                                 </div>
+                                <Button onClick={handleStartSearch} className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-primary-dark" disabled={isSearching}>
+                                    {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
+                                </Button>
                             </div>
                         </div>
-                    ) : (
-                        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 lg:p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-center">
-                                <div className="flex flex-col items-center justify-center text-center gap-4 px-2">
-                                    <div className="w-56 md:w-60 h-[330px] md:h-[380px] rounded-[30px] overflow-hidden bg-primary/20 flex items-center justify-center text-5xl font-bold text-white shadow-lg shadow-black/20 shrink-0 ring-1 ring-white/10">
+                    </div>
+                )}
+
+                {searchStatus === 'searching' && (
+                    <div className="flex min-h-[420px] flex-col items-center justify-center gap-6 text-center">
+                        <div className="relative">
+                            <div className="h-24 w-24 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <Navigation className="h-8 w-8 text-primary animate-pulse" />
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-white">Đang tìm thợ gần bạn...</h3>
+                            <p className="mt-2 max-w-md text-sm text-zinc-400">Hệ thống đang kiểm tra thợ phù hợp nhất theo dịch vụ, khu vực và trạng thái rảnh.</p>
+                        </div>
+                        <Button variant="ghost" className="rounded-xl text-red-400 hover:bg-red-400/10 hover:text-red-300" onClick={() => setSearchStatus('idle')}>
+                            Hủy tìm kiếm
+                        </Button>
+                    </div>
+                )}
+
+                {searchStatus === 'found' && foundTech && (
+                    <div className="space-y-5">
+                        <div className="rounded-2xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-center sm:px-5">
+                            <CheckCircle className="mx-auto mb-2 h-14 w-14 text-green-500" />
+                            <h3 className="text-2xl font-bold text-white">Đã tìm thấy thợ!</h3>
+                            <p className="mt-1 text-sm text-zinc-400">Kỹ thuật viên <b className="text-white">{foundTech.fullName || foundTech.name}</b> đã sẵn sàng.</p>
+                        </div>
+
+                        {isTransitioning ? (
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                                <div className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center">
+                                    <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                                    <div>
+                                        <p className="text-lg font-semibold text-white">Đang xử lý...</p>
+                                        <p className="mt-1 text-sm text-zinc-400">Chuẩn bị hiển thị thợ tiếp theo</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid gap-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 lg:grid-cols-[280px_1fr] lg:p-6">
+                                <div className="flex flex-col items-center gap-4 text-center">
+                                    <div className="flex h-60 w-56 items-center justify-center overflow-hidden rounded-[32px] bg-primary/20 text-5xl font-bold text-white ring-1 ring-white/10 md:h-[380px] md:w-60">
                                         {foundTech.avatarURL ? (
-                                            <img src={foundTech.avatarURL} alt="avatar" className="w-full h-full object-cover" />
+                                            <img src={foundTech.avatarURL} alt="avatar" className="h-full w-full object-cover" />
                                         ) : (
                                             (foundTech.fullName || foundTech.name || 'T')[0]
                                         )}
                                     </div>
-                                    <div className="space-y-1 w-full max-w-[320px]">
+                                    <div className="space-y-1 px-2">
                                         <div className="flex items-center justify-center gap-2">
-                                            <MessageSquareText className="w-4 h-4 text-primary" />
-                                            <p className="font-bold text-lg md:text-xl text-white leading-tight truncate">{foundTech.fullName || foundTech.name || 'Tech AC 01'}</p>
+                                            <MessageSquareText className="h-4 w-4 text-primary" />
+                                            <p className="truncate text-xl font-bold text-white">{foundTech.fullName || foundTech.name || 'Tech AC 01'}</p>
                                         </div>
                                         <div className="flex items-center justify-center gap-1 text-sm text-zinc-400">
-                                            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+                                            <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
                                             <span>{foundTech.rating || 5.0}</span>
                                             <span>·</span>
                                             <span>{foundTech.ratingCount || 0} đánh giá</span>
@@ -1334,37 +1606,42 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                                     <InfoItem label="Dịch vụ" value={foundTech.serviceName || foundTech.specialty || 'Kỹ thuật viên'} />
                                     <InfoItem label="Địa chỉ" value={foundTech.address || 'Chưa cập nhật'} />
                                     <InfoItem label="Thành phố" value={normalizeCityName(foundTech.city || 'Đà Nẵng')} />
-                                    <InfoItem label="Kinh nghiệm" value={`${foundTech.orderCount || 0} đơn đã xử lý`} />
-                                    <InfoItem label="Lượt đánh giá" value={`${foundTech.ratingCount || 0} đánh giá`} />
+                                    <InfoItem label="Kinh nghiệm" value={getTechYears(foundTech) > 0 ? `${getTechYears(foundTech)} năm` : 'Chưa cập nhật'} />
+                                    <InfoItem label="Thời gian ước tính" value={foundTech.etaWindow || (Number.isFinite(getTechEstimatedTime(foundTech)) && getTechEstimatedTime(foundTech) > 0 ? `${getTechEstimatedTime(foundTech)} phút` : 'Chưa cập nhật')} />
                                 </div>
                             </div>
+                        )}
 
-                            <div className="flex gap-3 mt-6">
-                                <Button variant="outline" className="flex-1 border-white/10" onClick={handleRejectTechnician} disabled={isSearching || isTransitioning}>
+                        {!isTransitioning && (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <Button variant="outline" className="h-11 rounded-xl border-white/10 bg-white/5 font-semibold text-white hover:bg-white/10" onClick={handleRejectTechnician} disabled={isSearching || isTransitioning}>
                                     {isSearching ? 'Đang lấy thợ khác...' : 'Từ chối thợ này'}
                                 </Button>
-                                <Button className="flex-1 bg-green-600 hover:bg-green-700 font-bold" onClick={handleConfirmBooking} disabled={isTransitioning}>Xác nhận đặt lịch</Button>
+                                <Button className="h-11 rounded-xl bg-green-600 font-bold text-white hover:bg-green-700" onClick={handleConfirmBooking} disabled={isTransitioning}>
+                                    Xác nhận đặt lịch
+                                </Button>
                             </div>
-                        </div>
-                    )}
-                </div>
-            )}
+                        )}
+                    </div>
+                )}
 
-            {searchStatus === 'not_found' && (
-                <div className="py-12 text-center space-y-6">
-                    <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
-                        <X className="w-10 h-10 text-red-500" />
+                {searchStatus === 'not_found' && (
+                    <div className="flex min-h-[360px] flex-col items-center justify-center gap-6 text-center">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500/10">
+                            <X className="h-10 w-10 text-red-500" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-white">Không tìm thấy thợ rảnh</h3>
+                            <p className="mt-2 text-sm text-zinc-400">Hiện tại không có kỹ thuật viên nào rảnh trong khu vực này. Bạn có muốn thử lại không?</p>
+                            {searchReason && <p className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-200">{searchReason}</p>}
+                        </div>
+                        <div className="flex w-full gap-3 sm:w-auto">
+                            <Button variant="outline" className="h-11 flex-1 rounded-xl border-white/10 bg-white/5 font-semibold text-white hover:bg-white/10" onClick={handleCloseAutoFind}>Đóng</Button>
+                            <Button className="h-11 flex-1 rounded-xl bg-primary font-semibold text-white hover:bg-primary-dark" onClick={handleStartSearch}>Thử lại ngay</Button>
+                        </div>
                     </div>
-                    <div>
-                        <h3 className="text-xl font-bold">Không tìm thấy thợ rảnh</h3>
-                        <p className="text-zinc-400 text-sm mt-2">Hiện tại không có kỹ thuật viên nào rảnh trong khu vực này. Bạn có muốn thử lại không?</p>
-                    </div>
-                    <div className="flex gap-3">
-                        <Button variant="outline" className="flex-1 border-white/10" onClick={resetAutoFindForm}>Đóng</Button>
-                        <Button className="flex-1 bg-primary" onClick={handleStartSearch}>Thử lại ngay</Button>
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
         </DialogContent>
     );
 }

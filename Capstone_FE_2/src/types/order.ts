@@ -22,6 +22,7 @@ export interface ViewOrderDTO {
   orderDate: string;
   address: string;
   price: number;
+  estimatedTime?: number;
 }
 
 // Matches BE: Capstone_2_BE.DTOs.Technician.Orders.ViewOrderDetailDTO

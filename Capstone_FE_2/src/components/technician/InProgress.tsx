@@ -54,6 +54,28 @@ export function InProgress() {
     }
   };
 
+  const formatEtaHm = (minutesRaw: any) => {
+    const m = Number(minutesRaw);
+    if (!Number.isFinite(m) || m <= 0) return '';
+    if (m < 60) return `${m}p`;
+    return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}p`;
+  };
+
+  const formatEtaWindow = (minutesRaw: any, baseRaw: any) => {
+    const m = Number(minutesRaw);
+    if (!Number.isFinite(m) || m <= 0) return '';
+
+    const now = new Date();
+    const baseDate = baseRaw ? new Date(baseRaw) : null;
+    const base = baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate : now;
+
+    const doneAt = new Date(base.getTime() + m * 60 * 1000);
+    const donePlus20 = new Date(doneAt.getTime() + 20 * 60 * 1000);
+
+    const hm = (d: Date) => `${d.getHours()}h${String(d.getMinutes()).padStart(2, '0')}`;
+    return `${hm(doneAt)} - ${hm(donePlus20)}`;
+  };
+
   const loadInProgress = async () => {
     try {
       setLoading(true);
@@ -234,10 +256,17 @@ export function InProgress() {
                           <User size={12}/> ID: #{job.orderId.slice(-6)}
                        </div>
                     </div>
-                    <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-2xl flex items-center gap-3">
-                       <Clock className="text-amber-500" size={16} />
-                       <p className="text-[11px] font-black text-white uppercase tracking-tighter">HẠN: 17:00</p>
-                    </div>
+                    {formatEtaHm((job as any)?.estimatedTime) && (
+                      <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-2xl flex flex-col items-start gap-0.5">
+                        <div className="flex items-center gap-2">
+                          <Clock className="text-amber-500" size={16} />
+                          <p className="text-[11px] font-black text-white uppercase tracking-tighter">ƯỚC TÍNH: {formatEtaHm((job as any)?.estimatedTime)}</p>
+                        </div>
+                        {formatEtaWindow((job as any)?.estimatedTime, (job as any)?.orderDate) && (
+                          <p className="text-[10px] text-amber-200/90">Dự kiến xong: {formatEtaWindow((job as any)?.estimatedTime, (job as any)?.orderDate)}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Compact Cards */}

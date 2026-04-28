@@ -11,7 +11,7 @@ export default function ChatWidget() {
   const [rooms, setRooms] = useState<any[]>([]);
   const [activeRoom, setActiveRoom] = useState<any | null>(null);
   const [text, setText] = useState('');
-  const { connection, messages, setMessages } = useChatSignalR();
+  const { messages, setMessages, joinRoom } = useChatSignalR();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch Rooms when opened
@@ -30,12 +30,13 @@ export default function ChatWidget() {
     if (activeRoom) {
       const roomId = activeRoom.roomId || activeRoom.RoomId || activeRoom.id;
       if (!roomId) return;
-      chatService.getAllMessages(roomId, 1, 50).then(res => {
+      chatService.getAllMessages(roomId, 1, 50).then(async res => {
         const rawMsgs = Array.isArray(res) ? res : (res.items || res.data || []);
         setMessages(rawMsgs.reverse()); // Assume older messages first
+        await joinRoom(String(roomId));
       }).catch(err => console.error('Lỗi tải tin nhắn:', err));
     }
-  }, [activeRoom]);
+  }, [activeRoom, joinRoom]);
 
   // Auto-scroll
   useEffect(() => {

@@ -11,11 +11,12 @@ import chatService, { ChatRoom, ChatMessage } from '@/services/chatService';
 import { useChatSignalR } from '@/hooks/useChatSignalR';
 
 export default function ContactTechnicianPage() {
-    const { user } = useAuthStore();
+    const { user, isAuthenticated, token } = useAuthStore();
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
     const focusTechId = queryParams.get('techId') || '';
     const [rooms, setRooms] = useState<any[]>([]);
+    const [unreadByRoom, setUnreadByRoom] = useState<Record<string, number>>({});
 
     const dedupeRooms = (list: any[]) => {
         const map = new Map<string, any>();
@@ -37,13 +38,14 @@ export default function ContactTechnicianPage() {
         }
         return Array.from(map.values());
     };
+
     const [activeRoom, setActiveRoom] = useState<any>(null);
     const [inputMsg, setInputMsg] = useState('');
     const [isLoadingRooms, setIsLoadingRooms] = useState(true);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [mediaPreviews, setMediaPreviews] = useState<{ url: string; type: 'image' | 'video'; name: string }[]>([]);
 
-    const { messages, setMessages, connection } = useChatSignalR();
+    const { messages, setMessages, connection, joinRoom } = useChatSignalR();
 
     const imageInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +55,9 @@ export default function ContactTechnicianPage() {
     const otherPartyIdOf = (room: any) => String(room?.otherPartyId || room?.OtherPartyId || room?.technicianId || room?.TechnicianId || room?.otherId || room?.OtherId || room?.userB || '').trim();
     const otherPartyNameOf = (room: any) => room?.otherPartyName || room?.OtherPartyName || room?.userName || room?.UserName || room?.technicianName || room?.TechnicianName || 'Kỹ thuật viên';
     const lastUpdateOf = (room: any) => room?.lastUpdate || room?.LastUpdate || room?.lastMessageTime || room?.LastMessageTime;
+    const roomUnreadOf = (room: any) => Number(room?.unreadCount ?? room?.UnreadCount ?? room?.unread ?? room?.Unread ?? 0);
+    const messageReadOf = (msg: any) => Boolean(msg?.isRead ?? msg?.IsRead ?? msg?.read ?? msg?.Read);
+    const roomCountedUnreadOf = (roomId: string) => unreadByRoom[roomId] ?? roomUnreadOf(roomId ? rooms.find((r: any) => String(roomIdOf(r)) === String(roomId)) : null);
     const normalizeMessages = (raw: any[]) => (raw || []).map((m: any) => ({
         id: m?.id || m?.Id || m?.messengerId || m?.MessengerId,
         senderId: m?.senderId || m?.SenderId,
@@ -61,11 +66,48 @@ export default function ContactTechnicianPage() {
         avatarUrl: m?.avatarUrl || m?.AvatarUrl,
         imageUrls: m?.imageUrls || m?.ImageUrls || [],
         videoUrl: m?.videoUrl || m?.VideoUrl,
+        isRead: messageReadOf(m),
     }));
+
+    const syncRoomList = async (preferRoomId?: string, preferOtherId?: string) => {
+        if (!user?.id) return [] as any[];
+        const refreshed = await chatService.getAllRooms(user.id);
+        const refreshedList = dedupeRooms(refreshed?.items || refreshed || []);
+        setRooms(refreshedList);
+
+        const preferredRoom =
+            (preferRoomId && refreshedList.find((r: any) => String(roomIdOf(r)) === String(preferRoomId))) ||
+            (preferOtherId && refreshedList.find((r: any) => otherPartyIdOf(r) === preferOtherId)) ||
+            refreshedList[0] ||
+            null;
+
+        if (preferredRoom) {
+            setActiveRoom(preferredRoom);
+            setUnreadByRoom(prev => ({
+                ...prev,
+                [String(roomIdOf(preferredRoom) || '')]: 0
+            }));
+            setLastSyncedRoomId(String(roomIdOf(preferredRoom) || ''));
+            activeRoomRef.current = preferredRoom;
+        }
+
+        return refreshedList;
+    };
+
+    const markActiveRoomAsRead = async (room: any) => {
+        const roomId = roomIdOf(room);
+        if (!user?.id || !roomId) return;
+        try {
+            await chatService.markAsRead(String(roomId), String(user.id));
+            setUnreadByRoom(prev => ({ ...prev, [String(roomId)]: 0 }));
+        } catch (err) {
+            console.error('markAsRead error', err);
+        }
+    };
 
     // 1. Fetch Rooms
     useEffect(() => {
-        if (!user?.id) return;
+        if (!user?.id || !isAuthenticated || !token) return;
         const fetchRooms = async () => {
             setIsLoadingRooms(true);
             try {
@@ -80,12 +122,17 @@ export default function ContactTechnicianPage() {
                     } else {
                         const createRes = await chatService.getOrCreateRoom(user.id, focusTechId);
                         const newRoomId = createRes?.roomId || createRes?.RoomId || createRes?.id || createRes?.Id;
-                        if (newRoomId) {
-                            const refreshed = await chatService.getAllRooms(user.id);
-                            const refreshedList = dedupeRooms(refreshed?.items || refreshed || []);
-                            setRooms(refreshedList);
-                            const createdRoom = refreshedList.find((r: any) => String(roomIdOf(r)) === String(newRoomId)) || refreshedList.find((r: any) => otherPartyIdOf(r) === focusTechId) || refreshedList[0];
-                            setActiveRoom(createdRoom || null);
+                        const refreshed = await chatService.getAllRooms(user.id);
+                        const refreshedList = dedupeRooms(refreshed?.items || refreshed || []);
+                        setRooms(refreshedList);
+
+                        const picked = refreshedList.find((r: any) => String(roomIdOf(r)) === String(newRoomId))
+                            || refreshedList.find((r: any) => otherPartyIdOf(r) === focusTechId)
+                            || null;
+
+                        setActiveRoom(picked || null);
+                        if (picked) {
+                            setUnreadByRoom(prev => ({ ...prev, [String(roomIdOf(picked) || '')]: 0 }));
                         }
                     }
                 } else if (list?.[0]) {
@@ -112,21 +159,52 @@ export default function ContactTechnicianPage() {
                 const res = await chatService.getAllMessages(roomId);
                 const list = res?.items || res?.data || res || [];
                 setMessages(normalizeMessages(list));
-            } catch (err) {
-                console.error(err);
+                await joinRoom(String(roomId));
+                await markActiveRoomAsRead(activeRoom); 
+            } catch (err: any) {
+                const status = err?.response?.status;
+                if (status !== 404) {
+                    console.error(err);
+                }
+                setMessages([]);
             } finally {
                 setIsLoadingMessages(false);
             }
         };
         fetchMessages();
-    }, [activeRoom, setMessages]);
+    }, [activeRoom, setMessages, joinRoom]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        const handler = (message: any) => {
+            const roomId = String(message?.roomId || message?.RoomId || message?.roomID || '');
+            if (!roomId) return;
+            if (String(roomIdOf(activeRoom)) === roomId) return;
+            setUnreadByRoom(prev => ({
+                ...prev,
+                [roomId]: (prev[roomId] || 0) + 1
+            }));
+            setRooms(prev => prev.map(r => String(roomIdOf(r)) === roomId ? { ...r, lastMessage: message?.content || message?.Content || r.lastMessage, lastUpdate: new Date().toISOString() } : r));
+        };
+        if (connection) {
+            connection.on('ChatMessage', handler);
+        }
+        return () => {
+            if (connection) connection.off?.('ChatMessage', handler as any);
+        };
+    }, [connection, activeRoom, user?.id]);
 
     // 3. Scroll to bottom
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [messages]);
+
+        const roomId = roomIdOf(activeRoom);
+        if (roomId && messages.length > 0) {
+            setUnreadByRoom(prev => ({ ...prev, [String(roomId)]: 0 }));
+        }
+    }, [messages, activeRoom]);
 
     const sendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -137,21 +215,13 @@ export default function ContactTechnicianPage() {
         if (!content && mediaPreviews.length === 0) return;
 
         try {
-            // Text Message
+            const receiverId = otherPartyIdOf(activeRoom);
+            if (!receiverId) {
+                toast.error('Không tìm thấy người nhận trong phòng chat');
+                return;
+            }
+
             if (content) {
-                const receiverId = otherPartyIdOf(activeRoom);
-                if (!receiverId) {
-                    toast.error('Không tìm thấy người nhận trong phòng chat');
-                    return;
-                }
-
-                await chatService.insertMessage({
-                    senderId: user.id,
-                    receiverId,
-                    content
-                } as any);
-
-                // Optimistic update for immediate UI feedback
                 setMessages((prev: any[]) => ([
                     ...prev,
                     {
@@ -162,15 +232,31 @@ export default function ContactTechnicianPage() {
                     }
                 ]));
                 setInputMsg('');
+
+                await chatService.insertMessage({
+                    senderId: user.id,
+                    receiverId,
+                    content
+                } as any);
             }
-            
-            // Media support (Mock for now, normally uploads first)
+
             if (mediaPreviews.length > 0) {
-                toast.success("Tính năng gửi ảnh đang được cập nhật!");
+                toast.success('Tính năng gửi ảnh đang được cập nhật!');
                 setMediaPreviews([]);
             }
+
+            const refreshed = await chatService.getAllRooms(user.id);
+            const refreshedList = dedupeRooms(refreshed?.items || refreshed || []);
+            setRooms(refreshedList);
+            const focused = refreshedList.find((r: any) => String(roomIdOf(r)) === String(roomId)) || refreshedList.find((r: any) => otherPartyIdOf(r) === receiverId) || null;
+            if (focused) {
+                setActiveRoom(focused);
+                await markActiveRoomAsRead(focused);
+            }
+            setUnreadByRoom(prev => ({ ...prev, [String(roomId)]: 0 }));
         } catch (err) {
-            toast.error("Gửi tin nhắn thất bại");
+            console.error('sendMessage error', err);
+            toast.error('Gửi tin nhắn thất bại');
         }
     };
 
@@ -213,7 +299,11 @@ export default function ContactTechnicianPage() {
                                 return (
                                 <div
                                     key={roomId}
-                                    onClick={() => setActiveRoom(room)}
+                                    onClick={async () => {
+                                        setActiveRoom(room);
+                                        setUnreadByRoom(prev => ({ ...prev, [roomId]: 0 }));
+                                        await markActiveRoomAsRead(room);
+                                    }}
                                     className={`flex items-center gap-3 p-4 cursor-pointer transition-colors border-l-2 ${activeRoomId === roomId ? 'bg-[#050b18] border-primary' : 'border-transparent hover:bg-white/5'}`}
                                 >
                                     <div className="relative flex-shrink-0">
@@ -224,13 +314,22 @@ export default function ContactTechnicianPage() {
                                         </Avatar>
                                     </div>
                                     <div className="flex-1 overflow-hidden">
-                                        <div className="flex justify-between items-baseline mb-1">
-                                            <h4 className="font-semibold text-white truncate text-sm">{otherPartyNameOf(room) || 'Phòng trò chuyện'}</h4>
-                                            <span className="text-[10px] text-zinc-500 flex-shrink-0">
-                                                {lastUpdateOf(room) ? new Date(lastUpdateOf(room)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                            </span>
+                                        <div className="flex justify-between items-start mb-1 gap-2">
+                                            <h4 className={`truncate text-sm ${((unreadByRoom[roomId] || roomUnreadOf(room)) > 0) ? 'font-bold text-white' : 'font-semibold text-white'}`}>
+                                                {otherPartyNameOf(room) || 'Phòng trò chuyện'}
+                                            </h4>
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                                {((unreadByRoom[roomId] || roomUnreadOf(room)) > 0) && (
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_0_2px_rgba(239,68,68,0.15)]" />
+                                                )}
+                                                <span className="text-[10px] text-zinc-500">
+                                                    {lastUpdateOf(room) ? new Date(lastUpdateOf(room)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <p className="text-xs text-zinc-400 truncate">{room.lastMessage || room.LastMessage || 'Chưa có tin nhắn'}</p>
+                                        <p className={`text-xs truncate ${((unreadByRoom[roomId] || roomUnreadOf(room)) > 0) ? 'text-zinc-200 font-semibold' : 'text-zinc-400'}`}>
+                                            {room.lastMessage || room.LastMessage || 'Chưa có tin nhắn'}
+                                        </p>
                                     </div>
                                 </div>
                             );
@@ -269,12 +368,19 @@ export default function ContactTechnicianPage() {
                                     <div className="flex justify-center"><Loader2 className="animate-spin text-primary w-5 h-5" /></div>
                                 )}
                                 <AnimatePresence initial={false}>
-                                    {messages.map((msg) => {
+                                    {messages.map((msg, idx) => {
                                         const senderId = msg.senderId || msg.SenderId;
                                         const isMe = String(senderId) === String(user?.id);
+                                        const stableBase = String(
+                                            msg.id ||
+                                            msg.Id ||
+                                            `${senderId || 'unknown'}-${msg.createdAt || msg.CreatedAt || msg.time || 'na'}`
+                                        );
+                                        const stableKey = `${stableBase}-${idx}`;
+                                        const isUnreadIncoming = !isMe && !messageReadOf(msg);
                                         return (
                                             <motion.div
-                                                key={msg.id || Math.random()}
+                                                key={stableKey}
                                                 initial={{ opacity: 0, scale: 0.95 }}
                                                 animate={{ opacity: 1, scale: 1 }}
                                                 className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
@@ -284,9 +390,9 @@ export default function ContactTechnicianPage() {
                                                         <AvatarFallback className="text-[10px]">T</AvatarFallback>
                                                     </Avatar>
                                                 )}
-                                                <div className={`max-w-[70%] rounded-2xl overflow-hidden shadow-lg ${isMe ? 'bg-primary text-white rounded-br-sm' : 'bg-white/10 text-zinc-200 border border-white/5 rounded-bl-sm'}`}>
+                                                <div className={`max-w-[70%] rounded-2xl overflow-hidden shadow-lg ${isMe ? 'bg-primary text-white rounded-br-sm' : 'bg-white/10 text-zinc-200 border border-white/5 rounded-bl-sm'} ${isUnreadIncoming ? 'ring-1 ring-red-500/40' : ''}`}>
                                                     <div className="px-5 py-3">
-                                                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content || msg.text}</p>
+                                                        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isUnreadIncoming ? 'font-semibold' : ''}`}>{msg.content || msg.text}</p>
                                                         <p className={`text-[10px] mt-1.5 text-right opacity-60`}>
                                                             {new Date(msg.createdAt || msg.time || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                         </p>

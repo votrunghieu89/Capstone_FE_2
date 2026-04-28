@@ -49,8 +49,19 @@ const useAuthStore = create<AuthState>()(
       },
 
       register: async (data: any) => {
-        // Stub for now to satisfy TS errors in AuthModal
-        console.log('Register logic should be implemented in authService first:', data);
+        const payload = {
+          email: String(data.email || '').trim().toLowerCase(),
+          password: String(data.password || ''),
+          fullName: String(data.fullName || '').trim(),
+          phoneNumber: String(data.phone || data.phoneNumber || '').trim(),
+        };
+
+        if (!payload.email || !payload.password || !payload.fullName) {
+          throw new Error('Vui lòng nhập đầy đủ thông tin đăng ký');
+        }
+
+        await authService.saveRegisterInfo(payload);
+        await authService.confirmRegisterCustomer(payload.email);
       },
 
       logout: () => {

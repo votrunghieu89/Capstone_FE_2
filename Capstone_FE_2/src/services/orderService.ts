@@ -69,10 +69,13 @@ const orderService = {
     if (typeof data.cityId === 'string' && data.cityId) formData.append('CityId', data.cityId);
     if (typeof data.latitude === 'number') formData.append('Latitude', String(data.latitude));
     if (typeof data.longitude === 'number') formData.append('Longitude', String(data.longitude));
-    if (data.videoUrl) formData.append('videoUrl', data.videoUrl);
+
+    if (data.videoUrl) {
+      formData.append('videoUrl', data.videoUrl, data.videoUrl.name);
+    }
 
     if (data.images && data.images.length > 0) {
-      data.images.forEach(img => formData.append('ImageUrls', img));
+      data.images.forEach((img) => formData.append('ImageUrls', img, img.name));
     }
 
     const res = await api.put(`/customer/order/update`, formData, {
