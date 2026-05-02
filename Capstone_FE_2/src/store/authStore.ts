@@ -44,6 +44,7 @@ const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
         localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('accountId', data.id);
         // Set cookie for cross-port login to Admin panel
         document.cookie = `token=${data.accessToken}; path=/; max-age=86400; SameSite=Lax`;
       },
@@ -67,6 +68,7 @@ const useAuthStore = create<AuthState>()(
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('accountId');
         document.cookie = 'token=; path=/; max-age=0';
       },
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, User } from 'lucide-react';
+import { MessageCircle, X, Send, User, CircleDot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '@/store/authStore';
 import { useChatSignalR } from '@/hooks/useChatSignalR';
@@ -11,8 +11,25 @@ export default function ChatWidget() {
   const [rooms, setRooms] = useState<any[]>([]);
   const [activeRoom, setActiveRoom] = useState<any | null>(null);
   const [text, setText] = useState('');
-  const { messages, setMessages, joinRoom } = useChatSignalR();
+  const [unreadRoomIds, setUnreadRoomIds] = useState<Set<string>>(new Set());
+  const { messages, setMessages, joinRoom, notifications } = useChatSignalR();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const getRoomId = (room: any) => String(room?.roomId || room?.RoomId || room?.id || '');
+
+  const markRoomAsRead = async (roomId: string) => {
+    if (!roomId || !user?.id) return;
+    setUnreadRoomIds(prev => {
+      const next = new Set(prev);
+      next.delete(roomId);
+      return next;
+    });
+    try {
+      await chatService.markAsRead(roomId, user.id);
+    } catch (err) {
+      console.error('Lỗi đánh dấu đã đọc:', err);
+    }
+  };
 
   // Fetch Rooms when opened
   useEffect(() => {
@@ -20,16 +37,21 @@ export default function ChatWidget() {
       chatService.getAllRooms(user.id, 1, 20).then(res => {
         // Backend returns either an array or an object with paginated items
         const rawRooms = Array.isArray(res) ? res : (res.items || res.data || []);
-        setRooms(rawRooms);
+        setRooms(rawRooms.map((room: any) => ({
+          ...room,
+          hasUnread: unreadRoomIds.has(getRoomId(room)) || !!room.hasUnread,
+        })));
       }).catch(err => console.error('Lỗi tải phòng chat:', err));
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, unreadRoomIds]);
 
   // Fetch Messages when a room is active
   useEffect(() => {
     if (activeRoom) {
-      const roomId = activeRoom.roomId || activeRoom.RoomId || activeRoom.id;
+      const roomId = getRoomId(activeRoom);
       if (!roomId) return;
+      setMessages([]);
+      markRoomAsRead(roomId);
       chatService.getAllMessages(roomId, 1, 50).then(async res => {
         const rawMsgs = Array.isArray(res) ? res : (res.items || res.data || []);
         setMessages(rawMsgs.reverse()); // Assume older messages first
@@ -37,6 +59,37 @@ export default function ChatWidget() {
       }).catch(err => console.error('Lỗi tải tin nhắn:', err));
     }
   }, [activeRoom, joinRoom]);
+
+  // Track unread rooms from realtime notifications
+  useEffect(() => {
+    if (!notifications.length) return;
+
+    notifications.forEach((latest) => {
+      const roomId = String(latest?.RoomId || latest?.roomId || latest?.roomID || latest?.roomid || latest?.room || '');
+      const senderId = String(latest?.SenderId || latest?.senderId || latest?.senderID || '');
+      if (!roomId) return;
+
+      // Chỉ đánh dấu chưa đọc khi tin nhắn đến từ người khác và không phải phòng đang mở
+      if ((!activeRoom || getRoomId(activeRoom) !== roomId) && senderId !== String(user?.id || '')) {
+        setUnreadRoomIds(prev => {
+          const next = new Set(prev);
+          next.add(roomId);
+          return next;
+        });
+
+        setRooms(prev => prev.map(room => {
+          const currentRoomId = getRoomId(room);
+          if (currentRoomId !== roomId) return room;
+          return {
+            ...room,
+            hasUnread: true,
+            lastMessage: latest?.Content || latest?.content || room.lastMessage || room.LastMessage,
+            lastMessageTime: latest?.CreatedAt || latest?.createdAt || room.lastMessageTime || room.LastMessageTime,
+          };
+        }));
+      }
+    });
+  }, [notifications, activeRoom, user?.id]);
 
   // Auto-scroll
   useEffect(() => {
@@ -102,23 +155,32 @@ export default function ChatWidget() {
                 // Room List
                 rooms.length > 0 ? (
                   rooms.map(room => {
-                    const roomId = room.roomId || room.RoomId || room.id;
+                    const roomId = getRoomId(room);
                     const userName = room.userName || room.UserName || `Phòng Chat #${String(roomId || '').substring(0, 6)}`;
                     const lastMessage = room.lastMessage || room.LastMessage || 'Chưa có tin nhắn';
+                    const hasUnread = unreadRoomIds.has(roomId) || !!room.hasUnread;
 
                     return (
                       <div 
                         key={roomId} 
-                        onClick={() => setActiveRoom(room)}
-                        className="p-3 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer border border-white/5 transition flex items-center gap-3"
+                        onClick={() => {
+                          setActiveRoom(room);
+                          void markRoomAsRead(roomId);
+                        }}
+                        className="p-3 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer border border-white/5 transition flex items-center gap-3 relative"
                       >
-                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary-light">
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary-light relative">
                           <User size={18} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm truncate">{userName}</p>
+                          <p className="font-semibold text-sm truncate flex items-center gap-2">
+                            {userName}
+                          </p>
                           <p className="text-xs text-text-secondary truncate">{lastMessage}</p>
                         </div>
+                        {hasUnread && (
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-red-500 ring-2 ring-bg-card" />
+                        )}
                       </div>
                     );
                   })
@@ -128,11 +190,11 @@ export default function ChatWidget() {
               ) : (
                 // Messages List
                 messages.map((msg, idx) => {
-                  const isMine = msg.senderId === user.id;
+                  const isMine = String(msg.senderId || msg.SenderId || '') === String(user.id);
                   return (
                     <div key={idx} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[75%] p-3 rounded-2xl text-sm ${isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-white/10 text-white rounded-tl-sm'}`}>
-                        {msg.content}
+                        {msg.content || msg.Content}
                       </div>
                     </div>
                   );

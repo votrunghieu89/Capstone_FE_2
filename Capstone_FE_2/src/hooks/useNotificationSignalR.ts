@@ -27,12 +27,13 @@ export function useNotificationSignalR() {
 
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5271/api';
     const hubBase = String(apiBase).replace(/\/api\/?$/, '');
-    const hubUrl = import.meta.env.VITE_SIGNALR_NOTIFICATION_URL || `${hubBase}/hubs/notification`;
+    const hubUrl = import.meta.env.VITE_SIGNALR_NOTIFICATION_URL || `${hubBase}/NotificationHub`;
+    const accessToken = localStorage.getItem('accessToken') || localStorage.getItem('token') || '';
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(`${hubUrl}?AccountId=${user.id}`, {
         skipNegotiation: false,
         transport: signalR.HttpTransportType.WebSockets,
-        accessTokenFactory: () => localStorage.getItem('token') || localStorage.getItem('accessToken') || ''
+        accessTokenFactory: () => accessToken
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .build();

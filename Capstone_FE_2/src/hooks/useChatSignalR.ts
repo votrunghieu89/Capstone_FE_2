@@ -3,6 +3,7 @@ import * as signalR from '@microsoft/signalr';
 import useAuthStore from '@/store/authStore';
 
 type ChatListener = (message: any) => void;
+type NotificationListener = (message: any) => void;
 
 const resolveHubBaseUrl = () => {
   const backend = (import.meta.env.VITE_BACKEND_URL || '').trim().replace(/\/$/, '');
@@ -14,21 +15,53 @@ const resolveHubBaseUrl = () => {
   return `${window.location.protocol}//${window.location.hostname}:5271`;
 };
 
+const resolveAccountId = () => {
+  const direct = localStorage.getItem('accountId') || localStorage.getItem('userId') || localStorage.getItem('id');
+  if (direct) return direct;
+
+  try {
+    const raw = localStorage.getItem('fastfix-auth-storage');
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.state?.user?.id;
+    return userId ? String(userId) : '';
+  } catch {
+    return '';
+  }
+};
+
 let sharedConnection: signalR.HubConnection | null = null;
 let sharedConnecting: Promise<signalR.HubConnection | null> | null = null;
-let sharedRoomId: string | null = null;
+const sharedRoomIds = new Set<string>();
 const listeners = new Set<ChatListener>();
+const notificationListeners = new Set<NotificationListener>();
 
 async function ensureSharedConnection() {
+  const accountId = resolveAccountId();
+  const currentAccountId = (sharedConnection as any)?._fastfixAccountId;
+  if (sharedConnection && currentAccountId && currentAccountId !== accountId) {
+    try {
+      await sharedConnection.stop();
+    } catch {
+      // ignore
+    }
+    sharedConnection = null;
+    sharedRoomIds.clear();
+  }
+
   if (sharedConnection && sharedConnection.state !== signalR.HubConnectionState.Disconnected) {
     return sharedConnection;
   }
   if (sharedConnecting) return sharedConnecting;
 
   sharedConnecting = (async () => {
-    const hubUrl = `${resolveHubBaseUrl()}/hubs/chat`;
+    const hubUrl = new URL(`${resolveHubBaseUrl()}/ChatHub`);
+    if (accountId) {
+      hubUrl.searchParams.set('AccountId', accountId);
+    }
+
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(hubUrl, {
+      .withUrl(hubUrl.toString(), {
         accessTokenFactory: () => localStorage.getItem('accessToken') || localStorage.getItem('token') || '',
         withCredentials: true,
       })
@@ -40,10 +73,15 @@ async function ensureSharedConnection() {
       listeners.forEach((listener) => listener(message));
     });
 
+    connection.on('NewMessageNotification', (message: any) => {
+      notificationListeners.forEach((listener) => listener(message));
+      listeners.forEach((listener) => listener(message));
+    });
+
     connection.onreconnected(async () => {
-      if (sharedRoomId) {
+      for (const roomId of sharedRoomIds) {
         try {
-          await connection.invoke('JoinRoom', sharedRoomId);
+          await connection.invoke('JoinRoom', roomId);
         } catch {
           // ignore
         }
@@ -53,11 +91,12 @@ async function ensureSharedConnection() {
     connection.onclose(() => {
       if (sharedConnection === connection) {
         sharedConnection = null;
-        sharedRoomId = null;
+        sharedRoomIds.clear();
       }
     });
 
     await connection.start();
+    (connection as any)._fastfixAccountId = accountId;
     sharedConnection = connection;
     return connection;
   })();
@@ -73,6 +112,7 @@ export function useChatSignalR(roomId?: string) {
   const { user } = useAuthStore();
   const [connection, setConnection] = useState<signalR.HubConnection | null>(sharedConnection);
   const [messages, setMessages] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const roomRef = useRef<string | undefined>(roomId);
   const isConnected = connection?.state === signalR.HubConnectionState.Connected;
 
@@ -87,21 +127,12 @@ export function useChatSignalR(roomId?: string) {
     const conn = await ensureSharedConnection();
     if (!conn || conn.state !== signalR.HubConnectionState.Connected) return;
 
-    if (sharedRoomId === rid) {
-      setConnection(conn);
-      return;
+    const roomId = String(rid);
+    if (!sharedRoomIds.has(roomId)) {
+      await conn.invoke('JoinRoom', roomId);
+      sharedRoomIds.add(roomId);
     }
-
-    if (sharedRoomId && sharedRoomId !== rid) {
-      try {
-        await conn.invoke('LeaveRoom', sharedRoomId);
-      } catch {
-        // ignore
-      }
-    }
-
-    await conn.invoke('JoinRoom', String(rid));
-    sharedRoomId = String(rid);
+    roomRef.current = roomId;
     setConnection(conn);
   }, [user?.id]);
 
@@ -111,14 +142,51 @@ export function useChatSignalR(roomId?: string) {
     let mounted = true;
     const handler = (message: any) => {
       if (!mounted) return;
+
+      const messageRoomId = String(message?.RoomId || message?.roomId || message?.roomID || message?.roomid || '');
+      const activeRoomId = String(roomRef.current || '');
+
+      // Chỉ append message thuộc room đang mở để tránh lẫn tin giữa các phòng chat
+      if (activeRoomId && messageRoomId && activeRoomId !== messageRoomId) return;
+
       setMessages(prev => {
-        const key = String(message?.MessId || message?.messId || message?.id || message?.Id || '');
+        const newId = String(message?.MessId || message?.messId || message?.id || message?.Id || '');
+        const newContent = String(message?.Content || message?.content || '');
+        const newSenderId = String(message?.SenderId || message?.senderId || '');
+        const newCreatedAt = String(message?.CreateAt || message?.createdAt || '');
+
+        const isDuplicate = prev.some((m: any) => {
+          const oldId = String(m?.MessId || m?.messId || m?.id || m?.Id || '');
+          const oldContent = String(m?.Content || m?.content || '');
+          const oldSenderId = String(m?.SenderId || m?.senderId || '');
+          const oldCreatedAt = String(m?.CreateAt || m?.createdAt || '');
+
+          if (newId && oldId && newId === oldId) return true;
+
+          return (
+            newContent &&
+            oldContent === newContent &&
+            newSenderId === oldSenderId &&
+            Math.abs(new Date(newCreatedAt || Date.now()).getTime() - new Date(oldCreatedAt || Date.now()).getTime()) < 2000
+          );
+        });
+
+        if (isDuplicate) return prev;
+        return [...prev, message];
+      });
+    };
+
+    const notificationHandler = (message: any) => {
+      if (!mounted) return;
+      setNotifications(prev => {
+        const key = String(message?.MessId || message?.messId || message?.id || message?.Id || `${message?.RoomId || message?.roomId}-${Date.now()}`);
         if (key && prev.some((m: any) => String(m?.MessId || m?.messId || m?.id || m?.Id || '') === key)) return prev;
         return [...prev, message];
       });
     };
 
     listeners.add(handler);
+    notificationListeners.add(notificationHandler);
     void ensureSharedConnection().then((conn) => {
       if (mounted) setConnection(conn);
       if (conn && roomRef.current) {
@@ -129,6 +197,7 @@ export function useChatSignalR(roomId?: string) {
     return () => {
       mounted = false;
       listeners.delete(handler);
+      notificationListeners.delete(notificationHandler);
     };
   }, [joinRoom, user?.id]);
 
@@ -139,9 +208,9 @@ export function useChatSignalR(roomId?: string) {
     try {
       await conn.invoke('LeaveRoom', String(rid));
     } finally {
-      if (sharedRoomId === rid) sharedRoomId = null;
+      sharedRoomIds.delete(String(rid));
     }
   }, []);
 
-  return { connection, messages, setMessages, joinRoom, leaveRoom, isConnected };
+  return { connection, messages, notifications, setMessages, joinRoom, leaveRoom, isConnected };
 }

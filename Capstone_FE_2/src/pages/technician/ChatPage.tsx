@@ -30,9 +30,31 @@ interface Contact {
 }
 
 const roomIdOf = (room: any) => room?.id || room?.Id || room?.roomId || room?.RoomId;
-const otherPartyIdOf = (room: any) => String(room?.otherPartyId || room?.OtherPartyId || room?.technicianId || room?.TechnicianId || room?.otherId || room?.OtherId || room?.userA || room?.userB || '').trim();
-const otherPartyNameOf = (room: any) => room?.otherPartyName || room?.OtherPartyName || room?.userName || room?.UserName || room?.technicianName || room?.TechnicianName || room?.customerName || room?.CustomerName || 'Khách hàng';
+const otherPartyIdOf = (room: any, currentUserId?: string) => {
+  const candidates = [
+    room?.otherPartyId, room?.OtherPartyId,
+    room?.otherId, room?.OtherId,
+    room?.customerId, room?.CustomerId,
+    room?.technicianId, room?.TechnicianId,
+    room?.userA, room?.userB,
+  ].map((v) => String(v || '').trim()).filter(Boolean);
+
+  if (!currentUserId) return candidates[0] || '';
+  const match = candidates.find((id) => id !== String(currentUserId).trim());
+  return match || candidates[0] || '';
+};
+const otherPartyNameOf = (room: any) => room?.otherPartyName || room?.OtherPartyName || room?.userName || room?.UserName || room?.customerName || room?.CustomerName || room?.technicianName || room?.TechnicianName || 'Khách hàng';
 const lastUpdateOf = (room: any) => room?.lastUpdate || room?.LastUpdate || room?.lastMessageTime || room?.LastMessageTime;
+const normalizeRoomList = (list: any[], currentUserId?: string) => (list || []).map((r: any) => ({
+  id: String(roomIdOf(r) || ''),
+  name: otherPartyNameOf(r),
+  avatar: r?.avatarUrl || r?.AvatarUrl,
+  lastMessage: r?.lastMessage || r?.LastMessage || 'Chưa có tin nhắn',
+  time: lastUpdateOf(r) ? new Date(lastUpdateOf(r)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '',
+  unreadCount: Number(r?.unreadCount || r?.UnreadCount || 0),
+  isOnline: Boolean(r?.isOnline ?? r?.IsOnline ?? false),
+  otherPartyId: otherPartyIdOf(r, currentUserId),
+}));
 
 export default function ChatPage() {
   const { user } = useAuthStore();
@@ -44,7 +66,9 @@ export default function ChatPage() {
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { connection, setMessages: setSignalMessages, joinRoom } = useChatSignalR();
+  const isRefreshingRoomsRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
+  const { connection, notifications, setMessages: setSignalMessages, joinRoom } = useChatSignalR();
 
   const normalizeMessages = (raw: any[]) => (raw || []).map((m: any) => ({
     id: m?.id || m?.Id || m?.messengerId || m?.MessengerId || `${m?.senderId || m?.SenderId}-${m?.createdAt || m?.CreatedAt || Date.now()}`,
@@ -54,35 +78,37 @@ export default function ChatPage() {
     isRead: Boolean(m?.isRead ?? m?.IsRead ?? false)
   }));
 
-  const refreshRooms = async (preferRoomId?: string, preferOtherId?: string) => {
+  const refreshRooms = async (preferRoomId?: string, preferOtherId?: string, autoSelect = true) => {
     if (!user?.id) return [] as any[];
+
+    isRefreshingRoomsRef.current = true;
+    lastRefreshAtRef.current = Date.now();
     try {
+      console.group('🔍 [Technician] GET /api/chat/rooms/{accountId}');
+      console.log('accountId  :', String(user.id));
+      console.groupEnd();
+
       const res = await chatService.getAllRooms(user.id);
       const list = Array.isArray(res) ? res : (res?.items || res?.data || []);
-      const mapped = (list || []).map((r: any) => ({
-        id: String(roomIdOf(r) || ''),
-        name: otherPartyNameOf(r),
-        avatar: r?.avatarUrl || r?.AvatarUrl,
-        lastMessage: r?.lastMessage || r?.LastMessage || 'Chưa có tin nhắn',
-        time: lastUpdateOf(r) ? new Date(lastUpdateOf(r)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '',
-        unreadCount: Number(r?.unreadCount || r?.UnreadCount || 0),
-        isOnline: Boolean(r?.isOnline ?? r?.IsOnline ?? false),
-        technicianId: r?.technicianId || r?.TechnicianId || r?.otherPartyId || r?.OtherPartyId || r?.otherId || r?.OtherId,
-      }));
+      const mapped = normalizeRoomList(list, user.id);
 
       setContacts(mapped);
 
       const preferred = (preferRoomId && mapped.find((r) => r.id === String(preferRoomId)))
-        || (preferOtherId && mapped.find((r: any) => String(r.technicianId || '').trim() === String(preferOtherId).trim()))
+        || (preferOtherId && mapped.find((r: any) => String(r.otherPartyId || '').trim() === String(preferOtherId).trim()))
         || mapped[0]
         || null;
 
-      if (preferred) setSelectedContact(preferred);
+      if (preferred && autoSelect) setSelectedContact(preferred);
       return mapped;
-    } catch (err) {
-      console.error('Failed to load rooms', err);
+    } catch (err: any) {
+      if (err?.response?.status !== 404) {
+        console.error('Failed to load rooms', err);
+      }
       setContacts([]);
       return [] as any[];
+    } finally {
+      isRefreshingRoomsRef.current = false;
     }
   };
 
@@ -93,13 +119,70 @@ export default function ChatPage() {
     }
     const run = async () => {
       setIsLoadingRooms(true);
-      const list = await refreshRooms();
-      const preferredUnread = list.find((c: any) => Number(c.unreadCount || 0) > 0) || list[0] || null;
-      if (preferredUnread) setSelectedContact(preferredUnread);
+      const list = await refreshRooms(undefined, undefined, false);
+      // Chỉ chọn room đầu tiên khi chưa có room nào được chọn trước đó
+      if (!selectedContact && list.length > 0) {
+        setSelectedContact(list[0]);
+      }
       setIsLoadingRooms(false);
     };
     run();
-  }, [user?.id]);
+  }, [user?.id, selectedContact]);
+
+  useEffect(() => {
+    if (!user?.id || !connection) return;
+    const handler = async (message: any) => {
+      const roomId = String(message?.roomId || message?.RoomId || message?.roomID || '');
+      if (!roomId) return;
+
+      const currentRoomId = String(selectedContact?.id || '');
+      const isActiveRoom = currentRoomId && currentRoomId === roomId;
+
+      if (isActiveRoom) {
+        const normalizedIncoming: Message = {
+          id: String(message?.MessId || message?.messId || message?.id || message?.Id || `${roomId}-${Date.now()}`),
+          senderId: String(message?.SenderId || message?.senderId || ''),
+          content: String(message?.Content || message?.content || ''),
+          timestamp: new Date(message?.CreatedAt || message?.createdAt || Date.now()).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+          isRead: Boolean(message?.IsRead ?? message?.isRead ?? false),
+        };
+
+        setMessages((prev) => {
+          if (prev.some((m) => String(m.id) === String(normalizedIncoming.id))) return prev;
+          return [...prev, normalizedIncoming];
+        });
+        setSignalMessages((prev: any[]) => {
+          if (prev.some((m: any) => String(m?.id || m?.Id || m?.MessId) === String(normalizedIncoming.id))) return prev;
+          return [...prev, normalizedIncoming] as any;
+        });
+      } else {
+        // Chỉ tăng unread khi chưa mở phòng đó, không tự mở phòng chat
+        setContacts((prev) => prev.map((c: any) => String(c.id) === roomId
+          ? {
+              ...c,
+              unreadCount: Number(c.unreadCount || 0) + 1,
+              lastMessage: message?.content || message?.Content || c.lastMessage,
+            }
+          : c
+        ));
+      }
+
+      // làm mới danh sách nhưng không auto select room mới
+      await refreshRooms(undefined, undefined, false);
+    };
+
+    connection.on('ChatMessage', handler);
+    connection.on('NewMessageNotification', handler);
+    return () => {
+      connection.off('ChatMessage', handler as any);
+      connection.off('NewMessageNotification', handler as any);
+    };
+  }, [connection, user?.id, selectedContact?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !notifications?.length) return;
+    void refreshRooms(undefined, undefined, false);
+  }, [notifications.length, user?.id]);
 
   useEffect(() => {
     const roomId = selectedContact?.id;
@@ -135,23 +218,14 @@ export default function ChatPage() {
   const handleSend = async () => {
     if (!inputValue.trim() || !selectedContact || !user?.id) return;
 
-    const receiverId = selectedContact.technicianId || selectedContact.id;
+    const receiverId = (selectedContact as any).otherPartyId || selectedContact.id;
     if (!receiverId) {
       toast.error('Không xác định được người nhận');
       return;
     }
 
     const content = inputValue.trim();
-    const optimistic: Message = {
-      id: Date.now().toString(),
-      senderId: user.id,
-      content,
-      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-      isRead: false
-    };
-
-    setMessages(prev => [...prev, optimistic]);
-    setSignalMessages(prev => [...prev, optimistic] as any);
+    // Không append optimistic để tránh trùng tin với realtime event từ server
     setInputValue('');
 
     try {
@@ -160,10 +234,16 @@ export default function ChatPage() {
       await chatService.insertMessage({
         senderId: user.id,
         receiverId: String(receiverId),
-        content
-      });
-      await joinRoom(String(roomId));
-      await refreshRooms(roomId, String(receiverId));
+        content,
+      } as any);
+      const updatedRooms = await refreshRooms(roomId, String(receiverId));
+      const pickedRoom = updatedRooms.find((r: any) => String(r.id) === String(roomId)) || updatedRooms.find((r: any) => String(r.otherPartyId || '') === String(receiverId)) || null;
+      if (pickedRoom) {
+        setSelectedContact(pickedRoom);
+        await joinRoom(String(pickedRoom.id));
+      } else {
+        await joinRoom(String(roomId));
+      }
     } catch (err) {
       toast.error('Gửi tin nhắn thất bại');
     }
@@ -174,9 +254,15 @@ export default function ChatPage() {
   );
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col lg:flex-row bg-[#0f172a]/40 backdrop-blur-xl rounded-[40px] border border-white/5 overflow-hidden shadow-2xl animate-in fade-in duration-500">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="h-[calc(100vh-130px)] min-h-[620px] w-full max-w-[1320px] mx-auto flex flex-col">
+      <div className="mb-5 rounded-2xl border border-white/10 bg-gradient-to-br from-[#111a2d] to-[#0a1122] px-5 py-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Tin nhắn khách hàng</h1>
+        <p className="mt-1 text-xs md:text-sm text-zinc-400">Trao đổi trực tiếp để hỗ trợ và cập nhật tiến độ sửa chữa.</p>
+      </div>
+
+      <div className="flex-1 flex bg-[#0b1220] border border-white/10 rounded-[22px] overflow-hidden shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
       <div className={cn(
-        "w-full lg:w-[380px] border-r border-white/5 flex flex-col transition-all",
+        "w-full lg:w-[380px] border-r border-white/10 bg-[#0f1728] flex flex-col transition-all",
         selectedContact ? "hidden lg:flex" : "flex"
       )}>
         <div className="px-8 pt-4 pb-0">
@@ -199,7 +285,7 @@ export default function ChatPage() {
               placeholder="Tìm kiếm khách hàng..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900/50 border border-white/5 rounded-2xl py-3.5 pl-12 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all font-bold"
+              className="w-full bg-[#0b1323] border border-white/15 rounded-2xl py-3.5 pl-12 pr-4 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all font-bold"
             />
           </div>
         </div>
@@ -212,10 +298,13 @@ export default function ChatPage() {
           ) : filteredContacts.map((contact) => (
             <button
               key={contact.id}
-              onClick={() => setSelectedContact(contact)}
+              onClick={() => {
+                setSelectedContact(contact);
+                setContacts((prev) => prev.map((c) => c.id === contact.id ? { ...c, unreadCount: 0 } : c));
+              }}
               className={cn(
                 "w-full flex items-center gap-4 p-4 rounded-3xl transition-all group relative overflow-hidden",
-                selectedContact?.id === contact.id ? "bg-blue-600 shadow-xl shadow-blue-600/20" : "hover:bg-white/5"
+                selectedContact?.id === contact.id ? "bg-[#1d4ed8] shadow-xl shadow-blue-900/35" : "hover:bg-[#141f35]"
               )}
             >
               <div className="relative z-10">
@@ -260,7 +349,7 @@ export default function ChatPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="flex-1 flex flex-col bg-[#020617]/40"
+            className="flex-1 flex flex-col bg-gradient-to-b from-[#091427] to-[#0b1220]"
           >
             <div className="p-6 border-b border-white/5 flex items-center justify-between backdrop-blur-xl bg-[#0f172a]/20">
               <div className="flex items-center gap-4">
@@ -285,7 +374,7 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-[radial-gradient(circle_at_top,#142443_0%,#0b1220_55%,#0a1020_100%)]">
               {isLoadingMessages && (
                 <div className="flex justify-center"><Loader2 className="animate-spin text-primary w-5 h-5" /></div>
               )}
@@ -304,7 +393,7 @@ export default function ChatPage() {
                     <div className={cn("max-w-[75%] space-y-2", isMine ? "items-end" : "items-start")}>
                       <div className={cn(
                         "px-5 py-4 rounded-[32px] text-sm font-bold leading-relaxed shadow-2xl transition-transform hover:scale-[1.02]",
-                        isMine ? "bg-blue-600 text-white rounded-tr-none shadow-blue-600/10" : "bg-slate-800/80 text-slate-100 border border-white/5 rounded-tl-none"
+                        isMine ? "bg-gradient-to-br from-[#2f7dff] to-[#1d61e7] text-white rounded-tr-none border border-blue-400/30 shadow-blue-700/30" : "bg-[#14253f] text-zinc-100 border border-white/10 rounded-tl-none"
                       )}>
                         {msg.content}
                       </div>
@@ -374,6 +463,7 @@ export default function ChatPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </motion.div>
   );
 }

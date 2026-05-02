@@ -14,10 +14,7 @@ import useAuthStore from '@/store/authStore';
 import technicianCatalogService from '@/services/technicianCatalogService';
 import commonService, { ServiceDTO, CityDTO } from '@/services/commonService';
 import autoFindService from '@/services/autoFindService';
-import geocodingService from '@/services/geocodingService';
-
-const OSM_GEOCODE_URL = 'https://nominatim.openstreetmap.org/search';
-const OSM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+import { getAddressLocation } from '@/services/addressLocationService';
 
 const normalizeText = (value: string) =>
     value
@@ -38,9 +35,31 @@ const decodeMojibake = (value: string) => {
 
 const formatVietnameseCityLabel = (value: string) => decodeMojibake(value || 'Đà Nẵng');
 
+const OSM_GEOCODE_URL = 'https://nominatim.openstreetmap.org/search';
+const OSM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
+
 const parseLatLng = (value: unknown) => {
     const num = typeof value === 'string' ? Number(value) : Number(value ?? NaN);
     return Number.isFinite(num) ? num : null;
+};
+
+const resolveLocationFromAddress = async (inputAddress: string, inputCityText: string) => {
+    const address = inputAddress.trim();
+    const cityName = inputCityText.trim();
+
+    if (!address && !cityName) {
+        return null;
+    }
+
+    try {
+        return await getAddressLocation({
+            address,
+            cityName,
+        });
+    } catch (error) {
+        console.warn('resolveLocationFromAddress failed', error, { address, cityName });
+        return null;
+    }
 };
 
 const normalizeTechStatus = (tech: any): 'online' | 'offline' | 'busy' => {
@@ -74,8 +93,11 @@ const buildAddressQuery = (address: string, cityName: string) => {
 };
 
 const mapToIframeUrl = (latitude: string, longitude: string, label?: string) => {
-    const lat = parseLatLng(latitude) ?? 16.047079;
-    const lng = parseLatLng(longitude) ?? 108.20623;
+    const lat = parseLatLng(latitude);
+    const lng = parseLatLng(longitude);
+    if (lat === null || lng === null) {
+        return 'https://www.openstreetmap.org/export/embed.html?bbox=108.15,15.97,108.25,16.07&layer=mapnik';
+    }
     const delta = 0.01;
     const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
     const marker = `marker=${lat},${lng}`;
@@ -92,6 +114,15 @@ const comparableCityText = (value: string) =>
         .replace(/^tp\.?\s+/i, '')
         .replace(/^tinh\s+/i, '')
         .trim();
+
+const resolveTechnicianGuid = (tech: any) =>
+    String(
+        tech?.accountId || tech?.AccountId ||
+        tech?.userId || tech?.UserId ||
+        tech?.technicianId || tech?.TechnicianId ||
+        tech?.id || tech?.Id ||
+        ''
+    ).trim();
 
 const demoTechnicians = [
     {
@@ -301,37 +332,17 @@ export default function TechnicianListPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isAutoFinding, setIsAutoFinding] = useState(false);
     const [forceDemoMode, setForceDemoMode] = useState(true);
+    const [detailOpen, setDetailOpen] = useState(false);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [detailTech, setDetailTech] = useState<any>(null);
+    const [detailSourceTech, setDetailSourceTech] = useState<any>(null);
 
     const normalizeText = (v: any) => String(v || '').trim().toLowerCase();
 
-const getCityName = (cities: CityDTO[], cityId?: string, fallback = 'Đà Nẵng') => {
-    const found = cities.find(c => String(c.id) === String(cityId));
-    return found?.cityName || fallback;
-};
-
-const geocodeQuery = async (query: string) => {
-    const url = `${OSM_GEOCODE_URL}?format=jsonv2&limit=5&addressdetails=1&q=${encodeURIComponent(query)}`;
-    const res = await fetch(url, {
-        headers: {
-            'Accept': 'application/json',
-            'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8'
-        }
-    });
-    if (!res.ok) throw new Error('geocode_failed');
-    return await res.json();
-};
-
-const reverseGeocode = async (latitude: number, longitude: number) => {
-    const url = `${OSM_REVERSE_URL}?format=jsonv2&addressdetails=1&lat=${latitude}&lon=${longitude}`;
-    const res = await fetch(url, {
-        headers: {
-            'Accept': 'application/json',
-            'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8'
-        }
-    });
-    if (!res.ok) throw new Error('reverse_geocode_failed');
-    return await res.json();
-};
+    const getCityName = (cities: CityDTO[], cityId?: string, fallback = 'Đà Nẵng') => {
+        const found = cities.find(c => String(c.id) === String(cityId));
+        return found?.cityName || fallback;
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -354,13 +365,9 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                 setServices(serviceList);
                 setCities(cityList);
 
-                const selectedService = serviceList.find((s: ServiceDTO) =>
-                    normalizeText(s.serviceName) === normalizeText(activeCategory)
-                );
-                const techRes = activeCategory === 'Tất cả'
-                    ? await technicianCatalogService.getAllTechnicians()
-                    : await technicianCatalogService.filterTechnicians({ serviceId: selectedService?.id });
-
+                const response = await fetch('/api/customer/technicians/all');
+                if (!response.ok) throw new Error('Failed to load technicians');
+                const techRes = await response.json();
                 setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
             } catch (error) {
                 console.error("Failed to fetch data:", error);
@@ -371,6 +378,48 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
         };
         fetchData();
     }, [activeCategory]);
+
+    const openTechnicianDetail = async (tech: any) => {
+        const technicianId = String(tech?.technicianId || tech?.TechnicianId || tech?.id || tech?.Id || '').trim();
+        if (!technicianId) return;
+        setDetailOpen(true);
+        setDetailLoading(true);
+        setDetailSourceTech(tech);
+        setDetailTech(tech);
+        try {
+            const response = await fetch(`/api/technician/profile/${encodeURIComponent(technicianId)}`);
+            if (!response.ok) throw new Error('Failed to load technician detail');
+            const data = await response.json();
+            setDetailTech(data?.data || data);
+        } catch (error) {
+            console.error('Failed to fetch technician detail:', error);
+            toast.error('Không thể tải thông tin chi tiết kỹ thuật viên.');
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const closeTechnicianDetail = () => {
+        setDetailOpen(false);
+        setDetailTech(null);
+        setDetailSourceTech(null);
+        setDetailLoading(false);
+    };
+
+    const selectedCard = [...technicians, ...demoTechnicians].find((t: any) => {
+        const techId = String(t?.technicianId || t?.TechnicianId || t?.id || t?.Id || '').trim();
+        const detailId = String(detailSourceTech?.technicianId || detailSourceTech?.TechnicianId || detailSourceTech?.id || detailSourceTech?.Id || '').trim();
+        return techId && techId === detailId;
+    }) || detailSourceTech || null;
+
+    const detailCityName = detailTech?.cityName || detailTech?.CityName || detailTech?.city || detailTech?.City || selectedCard?.cityName || selectedCard?.CityName || selectedCard?.city || selectedCard?.City || '';
+    const detailStatus = normalizeTechStatus(selectedCard || detailSourceTech || detailTech);
+    const detailServiceName = selectedCard?.serviceName || selectedCard?.ServiceName || detailSourceTech?.serviceName || detailSourceTech?.ServiceName || detailTech?.serviceName || detailTech?.ServiceName || '';
+    const detailDescription = detailStatus === 'online'
+        ? `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang hoạt động`
+        : detailStatus === 'busy'
+            ? `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang bận`
+            : `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang không hoạt động`;
 
     const filtered = [...technicians, ...demoTechnicians].filter(t => {
         const name = (t.technicianName || t.TechnicianName || '').toLowerCase();
@@ -415,20 +464,10 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                             if (e.key !== 'Enter') return;
                             try {
                                 setIsLoading(true);
-                                if (!search.trim()) {
-                                    const techRes = activeCategory === 'Tất cả'
-                                        ? await technicianCatalogService.getAllTechnicians()
-                                        : await technicianCatalogService.filterTechnicians({
-                                            serviceId: services.find((s: ServiceDTO) => s.serviceName === activeCategory)?.id
-                                        });
-                                    setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
-                                } else {
-                                    const techRes = await technicianCatalogService.filterTechnicians({
-                                        serviceId: activeCategory === 'Tất cả' ? undefined : services.find((s: ServiceDTO) => s.serviceName === activeCategory)?.id,
-                                        technicianName: search.trim()
-                                    });
-                                    setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
-                                }
+                                const response = await fetch('/api/customer/technicians/all');
+                                if (!response.ok) throw new Error('Failed to load technicians');
+                                const techRes = await response.json();
+                                setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
                             } finally {
                                 setIsLoading(false);
                             }
@@ -443,10 +482,9 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                     onClick={async () => {
                         try {
                             setIsLoading(true);
-                            const techRes = await technicianCatalogService.filterTechnicians({
-                                serviceId: activeCategory === 'Tất cả' ? undefined : services.find((s: ServiceDTO) => s.serviceName === activeCategory)?.id,
-                                technicianName: search.trim() || undefined
-                            });
+                            const response = await fetch('/api/customer/technicians/all');
+                            if (!response.ok) throw new Error('Failed to load technicians');
+                            const techRes = await response.json();
                             setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
                         } finally {
                             setIsLoading(false);
@@ -555,10 +593,11 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                                         <CheckCircle className="h-4 w-4 flex-shrink-0 text-blue-400" />
                                     </div>
 
-                                    <div className="mt-3 flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-sm">
+                                    <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-sm">
                                         <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
                                         <span className="font-bold text-white">{tech.averageRating || tech.AverageRating || tech.rating || 5.0}</span>
                                         <span className="text-xs text-zinc-500">({tech.ratingCount || tech.RatingCount || tech.reviewCount || 0})</span>
+                                        <span className="ml-2 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-zinc-300">Đơn {tech.orderCount || tech.OrderCount || 0}</span>
                                     </div>
                                 </div>
                             </div>
@@ -592,27 +631,37 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                                 ))}
                             </div>
 
-                            <Dialog>
-                                <DialogTrigger asChild>
-                                    <Button
-                                        disabled={!isBookableTech(tech)}
-                                        title={!isBookableTech(tech)
-                                            ? (isDemoTech(tech)
-                                                ? 'Thợ demo chỉ dùng để test giao diện, không thể đặt'
-                                                : (normalizeTechStatus(tech) === 'busy' ? 'Thợ hiện đang bận, chưa thể đặt' : 'Thợ hiện offline, chưa thể đặt'))
-                                            : 'Đặt thợ'}
-                                        className="mt-4 h-11 w-full rounded-xl bg-primary font-semibold text-white shadow-md shadow-primary/20 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        <CheckCircle className="mr-1.5 h-4 w-4" />
-                                        {!isBookableTech(tech)
-                                            ? (isDemoTech(tech)
-                                                ? 'Demo - không đặt'
-                                                : (normalizeTechStatus(tech) === 'busy' ? 'Thợ đang bận' : 'Thợ offline'))
-                                            : 'Đặt thợ'}
-                                    </Button>
-                                </DialogTrigger>
-                                <BookTechnicianDialog tech={tech} />
-                            </Dialog>
+                            <div className="mt-4 flex gap-2">
+                                <Dialog>
+                                    <DialogTrigger asChild>
+                                        <Button
+                                            disabled={!isBookableTech(tech)}
+                                            title={!isBookableTech(tech)
+                                                ? (isDemoTech(tech)
+                                                    ? 'Thợ demo chỉ dùng để test giao diện, không thể đặt'
+                                                    : (normalizeTechStatus(tech) === 'busy' ? 'Thợ hiện đang bận, chưa thể đặt' : 'Thợ hiện offline, chưa thể đặt'))
+                                                : 'Đặt thợ'}
+                                            className="h-11 flex-1 rounded-xl bg-primary font-semibold text-white shadow-md shadow-primary/20 hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50"
+                                        >
+                                            <CheckCircle className="mr-1.5 h-4 w-4" />
+                                            {!isBookableTech(tech)
+                                                ? (isDemoTech(tech)
+                                                    ? 'Demo - không đặt'
+                                                    : (normalizeTechStatus(tech) === 'busy' ? 'Thợ đang bận' : 'Thợ offline'))
+                                                : 'Đặt thợ'}
+                                        </Button>
+                                    </DialogTrigger>
+                                    <BookTechnicianDialog tech={tech} />
+                                </Dialog>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-xl border-white/10 bg-white/5 px-4 font-semibold text-white hover:bg-white/10"
+                                    onClick={() => openTechnicianDetail(tech)}
+                                >
+                                    Chi tiết
+                                </Button>
+                            </div>
                         </motion.div>
                     ))}
                 </div>
@@ -624,6 +673,67 @@ const reverseGeocode = async (latitude: number, longitude: number) => {
                     <p>Không tìm thấy kỹ thuật viên phù hợp</p>
                 </div>
             )}
+
+            <Dialog open={detailOpen} onOpenChange={(open) => !open && closeTechnicianDetail()}>
+                <DialogContent className="max-w-5xl border-white/10 bg-[#0b1220] text-white md:max-w-[1200px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Chi tiết kỹ thuật viên</DialogTitle>
+                    </DialogHeader>
+                    {detailLoading ? (
+                        <div className="flex min-h-[300px] items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    ) : detailTech ? (
+                        <div className="grid gap-5 lg:grid-cols-[360px_1fr] items-start">
+                            <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-4 ">
+                            <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] bg-gradient-to-br from-blue-500/30 to-cyan-400/20 text-4xl font-bold text-white ring-1 ring-blue-400/20">
+                                    {detailTech.avatarUrl || detailTech.AvatarUrl || detailTech.avatarURL || detailTech.AvatarURL ? (
+                                        <img
+                                            src={detailTech.avatarUrl || detailTech.AvatarUrl || detailTech.avatarURL || detailTech.AvatarURL}
+                                            alt="avatar"
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        (detailTech.fullName || detailTech.TechnicianName || detailTech.technicianName || 'T')[0]
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 rounded-[28px] border border-white/10 bg-white/5 p-5 h-full">
+                                <div>
+                                    <h3 className="text-2xl font-bold text-white">{detailTech.fullName || detailTech.FullName || detailTech.technicianName || detailTech.TechnicianName || '—'}</h3>
+                                    <p className="mt-1 text-sm text-zinc-400">{detailTech.serviceName || detailTech.ServiceName || '—'}</p>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">⭐ {detailTech.averageRating || detailTech.AverageRating || 0}</span>
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">ĐG {detailTech.ratingCount || detailTech.RatingCount || detailTech.totalRating || detailTech.TotalRating || 0}</span>
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Đơn {detailTech.orderCount || detailTech.OrderCount || detailTech.totalOrders || detailTech.TotalOrders || 0}</span>
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">KN {detailTech.yearOfExperience || detailTech.YearOfExperience || detailTech.experiences || detailTech.Experiences || 0} năm</span>
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">Trạng thái {detailStatus || '—'}</span>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3"><span className="text-zinc-500">Số điện thoại: </span>{detailTech.phoneNumber || detailTech.PhoneNumber || '—'}</div>
+                                    <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3"><span className="text-zinc-500">Địa chỉ: </span>{detailTech.address || detailTech.Address || '—'}</div>
+                                    <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3"><span className="text-zinc-500">Thành phố: </span>{detailCityName || '—'}</div>
+                                    <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3"><span className="text-zinc-500">Dịch vụ: </span>{detailTech.serviceName || detailTech.ServiceName || '—'}</div>
+                                </div>
+
+                                <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3">
+                                    <span className="text-zinc-500">Trạng thái: </span>{detailStatus || '—'}
+                                </div>
+
+                                <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3">
+                                    <span className="text-zinc-500">Mô tả: </span>{detailDescription}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-10 text-center text-zinc-400">Không có dữ liệu chi tiết.</div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -637,8 +747,8 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
     const [desc, setDesc] = useState('');
     const [address, setAddress] = useState('');
     const [cityId, setCityId] = useState('');
-    const [latitude, setLatitude] = useState<string>("16.047079");
-    const [longitude, setLongitude] = useState<string>("108.20623");
+    const [latitude, setLatitude] = useState<string>('');
+    const [longitude, setLongitude] = useState<string>('');
     const [resolvedDisplayAddress, setResolvedDisplayAddress] = useState('');
     const [resolvedGeoMeta, setResolvedGeoMeta] = useState<{ source?: string; method?: string; confidence?: number; query?: string }>({});
     const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -732,44 +842,79 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             const city = comparableCityText(c.cityName || '');
             return city && normalizedAddress.includes(city);
         }) || null;
-        const payloadCity = (inputCityText || cityFromAddress?.cityName || cityText || '').trim();
+
+        const matchedCityText = inputCityText.trim() || cityFromAddress?.cityName || cityText || '';
         const payloadAddress = inputAddress.trim();
+        const payloadCity = matchedCityText.trim();
+        const query = buildAddressQuery(payloadAddress, payloadCity);
+
+        const normalizeResult = (apiResult: any, source = 'unknown') => {
+            const lat = apiResult?.lat ?? apiResult?.latitude;
+            const lon = apiResult?.lon ?? apiResult?.lng ?? apiResult?.longitude;
+            return {
+                lat,
+                lon,
+                display_name: apiResult?.display_name || apiResult?.displayName || apiResult?.name,
+                source: apiResult?.source || source,
+                method: apiResult?.method,
+                confidence: apiResult?.confidence,
+                query: apiResult?.query || query
+            };
+        };
 
         try {
-            const apiResult = await autoFindService.resolveLocation({
-                address: payloadAddress,
-                city: payloadCity
+            const apiResult = await getAddressLocation({
+                address: query,
+                cityName: payloadCity
             });
 
-            return {
-                lat: apiResult.latitude,
-                lon: apiResult.longitude,
-                display_name: apiResult.displayName,
-                source: apiResult.source,
-                method: apiResult.method,
-                confidence: apiResult.confidence,
-                query: apiResult.query
-            };
+            const normalized = normalizeResult(apiResult, 'addressLocationService');
+            if (parseLatLng(normalized.lat) !== null && parseLatLng(normalized.lon) !== null) {
+                return normalized;
+            }
         } catch (error) {
-            console.warn('Resolve location failed', error);
-            return null;
+            console.warn('Primary resolve location failed', error, { payloadAddress, payloadCity, query });
         }
+
+        try {
+            const fallbackUrl = `${OSM_GEOCODE_URL}?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(query)}`;
+            const response = await fetch(fallbackUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`OSM geocode failed with ${response.status}`);
+            }
+
+            const items = await response.json();
+            const firstItem = Array.isArray(items) ? items[0] : null;
+            const normalized = normalizeResult(firstItem, 'nominatim-search');
+            if (parseLatLng(normalized.lat) !== null && parseLatLng(normalized.lon) !== null) {
+                return normalized;
+            }
+        } catch (error) {
+            console.warn('Fallback geocode failed', error, { payloadAddress, payloadCity, query });
+        }
+
+        return null;
     };
 
     const handleGetLocation = async () => {
         if (!address.trim()) {
             toast.error('Vui lòng nhập địa chỉ trước');
-            return;
+            return null;
         }
 
         const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
         const candidateLat = parseLatLng(resolvedLocation?.lat);
         const candidateLng = parseLatLng(resolvedLocation?.lon);
 
-
         if (candidateLat === null || candidateLng === null) {
+            console.warn('Geocode returned invalid coords', { address, cityName, resolvedLocation });
             toast.error('Không xác định được tọa độ từ địa chỉ và thành phố');
-            return;
+            return null;
         }
 
         setLatitude(candidateLat.toString());
@@ -782,7 +927,10 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             query: resolvedLocation?.query
         });
         toast.success('📍 Đã ghim vị trí từ địa chỉ!');
+        return resolvedLocation;
     };
+
+    const handleLocation = handleGetLocation;
 
     const handleTestGeocoding = async () => {
         if (!address.trim()) {
@@ -813,6 +961,115 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
         }
         if (!address.trim()) {
             toast.error('Vui lòng nhập địa chỉ');
+            return;
+        }
+
+        if ((!latitude || !longitude) || parseLatLng(latitude) === null || parseLatLng(longitude) === null) {
+            toast('Đang xác định vị trí từ địa chỉ và thành phố...');
+            const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
+            const candidateLat = parseLatLng(resolvedLocation?.lat);
+            const candidateLng = parseLatLng(resolvedLocation?.lon);
+
+            if (candidateLat === null || candidateLng === null) {
+                console.warn('Submit geocode failed', { address, cityName, resolvedLocation });
+                toast.error('Không xác định được tọa độ từ địa chỉ và thành phố');
+                return;
+            }
+
+            setLatitude(candidateLat.toString());
+            setLongitude(candidateLng.toString());
+            setResolvedDisplayAddress(resolvedLocation?.display_name || `${address}, ${cityText || 'Việt Nam'}`);
+            setResolvedGeoMeta({
+                source: resolvedLocation?.source,
+                method: resolvedLocation?.method,
+                confidence: resolvedLocation?.confidence,
+                query: resolvedLocation?.query
+            });
+
+            const freshLatitude = candidateLat.toString();
+            const freshLongitude = candidateLng.toString();
+            const resolvedLatitude = parseLatLng(freshLatitude);
+            const resolvedLongitude = parseLatLng(freshLongitude);
+
+            if (resolvedLatitude === null || resolvedLongitude === null) {
+                toast.error('Vui lòng xác định vị trí từ địa chỉ trước khi đặt thợ');
+                return;
+            }
+
+            const cityLookup = cities.find(c => c.id === selectedCityId || c.cityName?.trim() === cityText.trim());
+            console.log('🔍 City values before submit', {
+                cityText,
+                selectedCityId,
+                cityLookup,
+                cities: cities.map(c => ({ id: c.id, cityName: c.cityName }))
+            });
+
+            const cityIdForSubmit = cityLookup?.id || selectedCityId;
+            if (!cityIdForSubmit) {
+                toast.error('Không tìm thấy CityId hợp lệ, vui lòng chọn lại thành phố');
+                return;
+            }
+
+            if (isDemoTech(tech)) {
+                toast.success('Đang chạy chế độ demo: thợ test chỉ hiển thị giao diện, không gửi đơn thật.');
+                navigate('/customer/orders?status=pending');
+                return;
+            }
+
+            setIsSubmitting(true);
+
+            const orderData = {
+                customerId: user.id,
+                technicianId: tech.technicianId || tech.TechnicianId,
+                serviceId: selectedServiceId,
+                cityId: cityIdForSubmit,
+                title: title.trim() || 'Yêu cầu sửa chữa',
+                description: desc.trim(),
+                address: address.trim(),
+                latitude: resolvedLatitude.toString(),
+                longitude: resolvedLongitude.toString(),
+                estimatedTime: Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 ? getTechEstimatedTime(tech) : 110,
+                imageFiles
+            };
+
+            try {
+                const response = await autoFindService.placeAutoOrder(orderData);
+                console.log('✅ Success Response:', response);
+                toast.success('🎉 Đặt thợ thành công! Đang chờ xác nhận...');
+                navigate('/customer/orders?status=pending');
+            } catch (err: any) {
+                console.group('❌ ERROR DETAILS');
+                console.error('Full Error:', err);
+                console.error('Response:', err?.response);
+                console.error('Response Data:', err?.response?.data);
+                console.error('Response Status:', err?.response?.status);
+                console.groupEnd();
+
+                let errorMsg = 'Đặt thợ thất bại';
+                const responseData = err?.response?.data;
+                const validationErrors = responseData?.errors;
+                if (validationErrors && typeof validationErrors === 'object') {
+                    const details = Object.entries(validationErrors)
+                        .flatMap(([field, messages]) =>
+                            Array.isArray(messages)
+                                ? messages.map((msg: any) => `${field}: ${msg}`)
+                                : [`${field}: ${String(messages)}`]
+                        )
+                        .join(' | ');
+                    errorMsg = details || responseData?.message || errorMsg;
+                } else if (responseData?.message) {
+                    errorMsg = responseData.message;
+                } else if (typeof responseData === 'string') {
+                    errorMsg = responseData;
+                } else if (err?.message) {
+                    errorMsg = err.message;
+                }
+
+                toast.error(`❌ Lỗi: ${errorMsg}`);
+                console.error('Final display error:', errorMsg);
+            } finally {
+                setIsSubmitting(false);
+            }
             return;
         }
 
@@ -858,8 +1115,7 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             latitude: resolvedLatitude.toString(),
             longitude: resolvedLongitude.toString(),
             estimatedTime: Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 ? getTechEstimatedTime(tech) : 110,
-            imageFiles,
-            videoFile: videoFiles.length > 0 ? videoFiles[0] : undefined
+            imageFiles
         };
 
         // ✅ DEBUG LOG
@@ -1046,6 +1302,16 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
 
                     </div>
 
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {(latitude || longitude) && (
+                                <p className="text-xs text-zinc-300 break-all">
+                                    Lat: <span className="text-white font-semibold">{latitude || '-'}</span> | Lon: <span className="text-white font-semibold">{longitude || '-'}</span>
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
                     <Button
                         className="w-full h-12 rounded-2xl bg-primary hover:bg-primary-dark text-white font-bold flex items-center justify-center gap-2"
                         onClick={handleSubmit}
@@ -1070,11 +1336,12 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
     const [selectedService, setSelectedService] = useState('');
     const [cityText, setCityText] = useState('Đà Nẵng');
+    const cityName = cityText?.trim() || 'Đà Nẵng';
     const [title, setTitle] = useState('');
     const [desc, setDesc] = useState('');
     const [address, setAddress] = useState('');
-    const [latitude, setLatitude] = useState<string>("16.047079");
-    const [longitude, setLongitude] = useState<string>("108.206230");
+    const [latitude, setLatitude] = useState<string>('');
+    const [longitude, setLongitude] = useState<string>('');
     const [resolvedDisplayAddress, setResolvedDisplayAddress] = useState('');
     const [resolvedGeoMeta, setResolvedGeoMeta] = useState<{ source?: string; method?: string; confidence?: number; query?: string }>({});
     const [isSearching, setIsSearching] = useState(false);
@@ -1091,8 +1358,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setTitle('');
         setDesc('');
         setAddress('');
-        setLatitude('16.047079');
-        setLongitude('108.206230');
+        setLatitude('');
+        setLongitude('');
         setResolvedDisplayAddress('');
         setResolvedGeoMeta({});
         setIsSearching(false);
@@ -1105,6 +1372,34 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
     const handleCloseAutoFind = () => {
         onClose();
+    };
+
+    const handleGetLocation = async () => {
+        if (!address.trim()) {
+            toast.error('Vui lòng nhập địa chỉ trước');
+            return;
+        }
+
+        const resolvedLocation = await resolveLocationFromAddress(address, cityText).catch(() => null);
+
+        const candidateLat = parseLatLng(resolvedLocation?.lat);
+        const candidateLng = parseLatLng(resolvedLocation?.lon);
+
+        if (candidateLat === null || candidateLng === null) {
+            toast.error('Không xác định được tọa độ từ địa chỉ và thành phố');
+            return;
+        }
+
+        setLatitude(candidateLat.toString());
+        setLongitude(candidateLng.toString());
+        setResolvedDisplayAddress(resolvedLocation?.display_name || `${address}, ${cityText || 'Việt Nam'}`);
+        setResolvedGeoMeta({
+            source: resolvedLocation?.source,
+            method: resolvedLocation?.method,
+            confidence: resolvedLocation?.confidence,
+            query: resolvedLocation?.query
+        });
+        toast.success('Đã lấy được latitude/longitude');
     };
 
     const renderOnlyOnline = (items: any[]) => items.filter((t: any) => normalizeTechStatus(t) === 'online');
@@ -1124,17 +1419,19 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         current.unshift({
             id: `local-${Date.now()}`,
             customerId: user.id,
-            technicianId: foundTech.id || foundTech.technicianId || foundTech.TechnicianId,
+            technicianId: resolveTechnicianGuid(foundTech),
             technicianName: foundTech.fullName || foundTech.name || foundTech.TechnicianName,
             serviceName: services.find((s: ServiceDTO) => s.id === selectedService)?.serviceName || foundTech.specialty || '',
             title: title.trim() || 'Đặt thợ tự động',
             description: desc,
             address,
-            cityName: cityText,
+            cityName: cityName,
             status,
             createdAt: new Date().toISOString(),
             EstimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
             estimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
+            imageUrls: [],
+            ImageUrls: [],
             source: 'autofind-local'
         });
 
@@ -1233,7 +1530,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setIsTransitioning(true);
 
 
-        const rejectedTechId = String(foundTech.id || foundTech.technicianId || foundTech.TechnicianId);
+        const rejectedTechId = resolveTechnicianGuid(foundTech);
         setRejectedTechIds(prev => prev.includes(rejectedTechId) ? prev : [...prev, rejectedTechId]);
 
         // Không tạo local rejected order ở phía customer.
@@ -1391,7 +1688,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                 return;
             }
 
-            const resolvedLocation = await geocodingService.resolveAddressToLocation(address, cityText).catch(() => null);
+            const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
             const resolvedLatitude = resolvedLocation?.lat || latitude;
             const resolvedLongitude = resolvedLocation?.lon || longitude;
             const resolvedAddress = resolvedLocation?.display_name || address;
@@ -1403,7 +1700,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             // Step 3: đồng ý thợ -> gọi API 2 tạo order
             await autoFindService.placeAutoOrder({
                 customerId: user.id,
-                technicianId: foundTech.id || foundTech.technicianId || foundTech.TechnicianId,
+                technicianId: resolveTechnicianGuid(foundTech),
                 serviceId: selectedService,
                 cityId: resolvedCityId,
                 title: title.trim() || 'Đặt thợ tự động',
@@ -1429,7 +1726,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                 responseData,
                 payload: {
                     customerId: user?.id,
-                    technicianId: foundTech?.id || foundTech?.technicianId || foundTech?.TechnicianId,
+                    technicianId: resolveTechnicianGuid(foundTech),
                     serviceId: selectedService,
                     cityText,
                     selectedCityId,
@@ -1534,9 +1831,11 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                                     <p className="text-sm font-semibold text-white">Sẵn sàng tìm thợ phù hợp</p>
                                     <p className="mt-1 text-xs text-zinc-500">Kết quả sẽ ưu tiên khu vực gần bạn và dịch vụ đúng nhu cầu.</p>
                                 </div>
-                                <Button onClick={handleStartSearch} className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-primary-dark" disabled={isSearching}>
-                                    {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
-                                </Button>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button onClick={handleStartSearch} className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-primary-dark" disabled={isSearching}>
+                                        {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     </div>

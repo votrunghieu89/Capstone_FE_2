@@ -89,7 +89,8 @@ const autoFindService = {
         }
 
         const res = await api.post(`/customer/autofind/place-auto-order`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 60000,
         });
         return res.data;
     },
