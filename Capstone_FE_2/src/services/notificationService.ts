@@ -17,13 +17,15 @@ const HUB_URL = import.meta.env.VITE_SIGNALR_NOTIFICATION_URL || String(API_URL)
 class NotificationService {
   private connection: HubConnection | null = null;
 
-  public async startConnection(): Promise<void> {
-    const token = localStorage.getItem('accessToken');
+  public async startConnection(accountId?: string): Promise<void> {
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     
     if (!token) return;
 
+    const hubUrl = `${HUB_URL}/NotificationHub${accountId ? `?AccountId=${accountId}` : ''}`;
+
     this.connection = new HubConnectionBuilder()
-      .withUrl(`${HUB_URL}/hubs/notification`, {
+      .withUrl(hubUrl, {
         accessTokenFactory: () => token,
         skipNegotiation: false,
         transport: 1

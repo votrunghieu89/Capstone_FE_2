@@ -115,13 +115,20 @@ async function geocodeNominatimFree(query: string) {
 
 async function geocodePhoton(query: string) {
     try {
+        const simpleQuery = query
+            .replace(/,\s*Vietnam$/i, '')
+            .replace(/Việt Nam/gi, '')
+            .trim();
+
         const url = new URL('https://photon.komoot.io/api/');
-        url.searchParams.set('q', query);
+        url.searchParams.set('q', simpleQuery || query);
         url.searchParams.set('limit', '5');
         url.searchParams.set('lang', 'vi');
-        url.searchParams.set('lat', '16.0');
-        url.searchParams.set('lon', '106.0');
-        const res = await fetch(url.toString());
+
+        const res = await fetch(url.toString(), {
+            headers: { Accept: 'application/json' },
+        });
+
         if (!res.ok) return [];
         const data = await res.json();
         return (data.features || []).map((f: any) => {
@@ -136,19 +143,24 @@ async function geocodePhoton(query: string) {
                 source: 'photon',
             };
         });
-    } catch { return []; }
+    } catch {
+        return [];
+    }
 }
 
-async function overpassDeepSearch(streetName: string, targetHouseNumber: string, nearLat: number, nearLon: number) {
+async function overpassDeepSearch(streetName: string, targetHouseNumber: string, nearLat: string, nearLon: string) {
     const target = parseInt(targetHouseNumber, 10);
+    const lat = Number(nearLat);
+    const lon = Number(nearLon);
     if (isNaN(target)) return null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
     const escaped = escapeOverpassRegex(streetName);
 
     const query = `
 [out:json][timeout:25];
 (
-  way["name"~"^(Đường |Duong )?${escaped}$",i](around:5000,${nearLat},${nearLon});
+  way["name"~"^(Đường |Duong )?${escaped}$",i](around:5000,${lat},${lon});
 )->.targetStreet;
 .targetStreet out geom;
 node(w.targetStreet)->.sNodes;
@@ -254,11 +266,52 @@ out center body;
 function deduplicateResults(results: any[]) {
     const seen = new Set();
     return results.filter(r => {
-        const key = `${r.lat.toFixed(5)},${r.lon.toFixed(5)}`;
+        const lat = Number(r.lat);
+        const lon = Number(r.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+        const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
     });
+}
+
+function to6(value: number) {
+    return Number(value).toFixed(6);
+}
+
+function hashString(input: string) {
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+}
+
+function applyHouseNumberJitter(baseLat: number, baseLon: number, houseNumber: string | null | undefined, streetName: string, city: string) {
+    if (!houseNumber) {
+        return { lat: to6(baseLat), lon: to6(baseLon) };
+    }
+
+    const seed = hashString(`${houseNumber}__${streetName}__${city}`);
+    const angle = (seed % 360) * Math.PI / 180;
+    const ring = ((seed >>> 8) & 0xff) / 255;
+
+    // Lệch có chủ đích theo số nhà để các số nhà khác nhau ghim vào vị trí khác nhau,
+    // nhưng vẫn nằm gần tuyến đường gốc.
+    const minMeters = 4;
+    const maxMeters = 14;
+    const offsetMeters = minMeters + (ring * (maxMeters - minMeters));
+
+    const metersToLat = 1 / 111320;
+    const cosLat = Math.cos(baseLat * Math.PI / 180) || 1;
+    const metersToLon = 1 / (111320 * cosLat);
+
+    return {
+        lat: to6(baseLat + (Math.sin(angle) * offsetMeters * metersToLat)),
+        lon: to6(baseLon + (Math.cos(angle) * offsetMeters * metersToLon)),
+    };
 }
 
 const geocodingService = {
@@ -275,13 +328,12 @@ const geocodingService = {
 
         try {
             // Phase 1: Nominatim + Photon
-            const [structured, photon, free] = await Promise.all([
+            const [structured, free] = await Promise.all([
                 geocodeNominatimStructured(parsed.fullStreet, city),
-                geocodePhoton(freeQuery),
                 geocodeNominatimFree(freeQuery),
             ]);
 
-            const combined = deduplicateResults([...structured, ...photon, ...free]);
+            const combined = deduplicateResults([...structured, ...free]);
 
             // Exact match in Phase 1
             const exactMatch = parsed.houseNumber
@@ -289,12 +341,20 @@ const geocodingService = {
                 : null;
 
             if (exactMatch) {
+                const adjusted = applyHouseNumberJitter(
+                    Number(exactMatch.lat),
+                    Number(exactMatch.lon),
+                    parsed.houseNumber,
+                    parsed.streetName,
+                    city
+                );
+
                 return {
-                    lat: String(exactMatch.lat),
-                    lon: String(exactMatch.lon),
+                    lat: adjusted.lat,
+                    lon: adjusted.lon,
                     display_name: exactMatch.display_name,
                     source: exactMatch.source,
-                    method: 'Nominatim/Photon (chính xác)',
+                    method: parsed.houseNumber ? 'Nominatim (chính xác + house jitter)' : 'Nominatim (chính xác)',
                     confidence: 1.0,
                     query: freeQuery,
                     houseNumber: exactMatch.houseNumber,
@@ -311,16 +371,24 @@ const geocodingService = {
             if (parsed.houseNumber) {
                 const deep = await overpassDeepSearch(
                     parsed.streetName, parsed.houseNumber,
-                    streetResult.lat, streetResult.lon
+                    String(streetResult.lat), String(streetResult.lon)
                 );
 
-                if (deep && deep.method !== 'no_data') {
+                if (deep && deep.method !== 'no_data' && deep.lat && deep.lon) {
+                    const adjusted = applyHouseNumberJitter(
+                        Number(deep.lat),
+                        Number(deep.lon),
+                        parsed.houseNumber,
+                        parsed.streetName,
+                        city
+                    );
+
                     return {
-                        lat: String(deep.lat),
-                        lon: String(deep.lon),
+                        lat: to6(adjusted.lat),
+                        lon: to6(adjusted.lon),
                         display_name: `${parsed.houseNumber} ${parsed.streetName}${city ? ', ' + city : ''}`,
                         source: 'overpass',
-                        method: deep.method,
+                        method: `${deep.method}${parsed.houseNumber ? ' + house jitter' : ''}`,
                         confidence: deep.confidence,
                         query: freeQuery,
                         houseNumber: parsed.houseNumber,
@@ -328,12 +396,20 @@ const geocodingService = {
                     };
                 } else {
                     // Fallback to Phase 1 Street result
+                    const adjusted = applyHouseNumberJitter(
+                        Number(streetResult.lat),
+                        Number(streetResult.lon),
+                        parsed.houseNumber,
+                        parsed.streetName,
+                        city
+                    );
+
                     return {
-                        lat: String(streetResult.lat),
-                        lon: String(streetResult.lon),
+                        lat: to6(adjusted.lat),
+                        lon: to6(adjusted.lon),
                         display_name: streetResult.display_name,
                         source: streetResult.source,
-                        method: 'Chỉ tìm được tuyến đường',
+                        method: parsed.houseNumber ? 'Chỉ tìm được tuyến đường + house jitter' : 'Chỉ tìm được tuyến đường',
                         confidence: 0.5,
                         query: freeQuery,
                         houseNumber: null,
@@ -343,8 +419,8 @@ const geocodingService = {
             } else {
                 // Address didn't have house number
                 return {
-                    lat: String(streetResult.lat),
-                    lon: String(streetResult.lon),
+                    lat: to6(streetResult.lat),
+                    lon: to6(streetResult.lon),
                     display_name: streetResult.display_name,
                     source: streetResult.source,
                     method: 'Tìm theo tên đường (không có số nhà)',

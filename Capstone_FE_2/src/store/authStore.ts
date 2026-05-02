@@ -44,18 +44,31 @@ const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
         localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('accountId', data.id);
         // Set cookie for cross-port login to Admin panel
         document.cookie = `token=${data.accessToken}; path=/; max-age=86400; SameSite=Lax`;
       },
 
       register: async (data: any) => {
-        // Stub for now to satisfy TS errors in AuthModal
-        console.log('Register logic should be implemented in authService first:', data);
+        const payload = {
+          email: String(data.email || '').trim().toLowerCase(),
+          password: String(data.password || ''),
+          fullName: String(data.fullName || '').trim(),
+          phoneNumber: String(data.phone || data.phoneNumber || '').trim(),
+        };
+
+        if (!payload.email || !payload.password || !payload.fullName) {
+          throw new Error('Vui lòng nhập đầy đủ thông tin đăng ký');
+        }
+
+        await authService.saveRegisterInfo(payload);
+        await authService.confirmRegisterCustomer(payload.email);
       },
 
       logout: () => {
         set({ user: null, token: null, isAuthenticated: false });
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('accountId');
         document.cookie = 'token=; path=/; max-age=0';
       },
 

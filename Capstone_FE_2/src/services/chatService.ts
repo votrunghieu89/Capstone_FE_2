@@ -4,25 +4,29 @@ export interface ChatMessage {
   id?: string;
   roomId: string;
   senderId: string;
-  content: string;
-  type: string;
+  content?: string;
+  imageUrls?: string[];
+  videoUrl?: string;
   createdAt?: string;
   isRead?: boolean;
+  avatarUrl?: string;
 }
 
 export interface CreateMessageFormDTO {
   senderId: string;
   receiverId: string;
-  content: string;
+  content?: string;
+  videoUrl?: File | null;
+  imageUrls?: File[];
 }
 
 export interface ChatRoom {
-  id: string;
-  userA: string;
-  userB: string;
+  roomId: string;
+  otherId: string;
+  userName?: string;
+  avatarUrl?: string;
   lastMessage?: string;
-  lastUpdate?: string;
-  // additional properties if mapped
+  lastMessageTime?: string;
 }
 
 const unwrap = (payload: any) => {
@@ -45,10 +49,33 @@ const unwrap = (payload: any) => {
   return payload;
 };
 
+const resolveAccountId = () => {
+  const direct = localStorage.getItem('accountId') || localStorage.getItem('userId') || localStorage.getItem('id');
+  if (direct) return direct;
+
+  try {
+    const raw = localStorage.getItem('fastfix-auth-storage');
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    const userId = parsed?.state?.user?.id;
+    return userId ? String(userId) : '';
+  } catch {
+    return '';
+  }
+};
+
 const chatService = {
   getAllRooms: async (accountId: string, page = 1, pageSize = 20) => {
-    const res = await api.get(`/chat/rooms/${accountId}`, { params: { page, pageSize } });
-    return unwrap(res.data);
+    const resolvedAccountId = String(accountId || resolveAccountId() || '').trim();
+    if (!resolvedAccountId) return [];
+
+    try {
+      const res = await api.get(`/chat/rooms/${resolvedAccountId}`, { params: { page, pageSize } });
+      return unwrap(res.data);
+    } catch (err: any) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
   },
 
   getAllMessages: async (roomId: string, page = 1, pageSize = 50) => {
@@ -62,7 +89,14 @@ const chatService = {
   },
 
   insertMessage: async (data: CreateMessageFormDTO) => {
-    const res = await api.post(`/chat/message`, data);
+    const formData = new FormData();
+    formData.append('SenderId', data.senderId);
+    formData.append('ReceiverId', data.receiverId);
+    if (data.content) formData.append('Content', data.content);
+    if (data.videoUrl) formData.append('VideoUrl', data.videoUrl);
+    data.imageUrls?.forEach((file) => formData.append('ImageUrls', file));
+
+    const res = await api.post(`/chat/message`, formData);
     return res.data;
   },
 

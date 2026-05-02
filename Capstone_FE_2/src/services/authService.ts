@@ -1,11 +1,25 @@
+import axios from 'axios';
 import api from './api';
 import type { LoginData, LoginResultDTO } from '../types/auth';
 
 const authService = {
   // POST /api/auth/login
   login: async (data: LoginData): Promise<LoginResultDTO> => {
-    const res = await api.post('/auth/login', data);
-    return res.data;
+    const payload: LoginData = {
+      email: data.email.trim().toLowerCase(),
+      password: data.password,
+    };
+
+    try {
+      const res = await api.post('/auth/login', payload);
+      return res.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message = (error.response?.data as { message?: string } | undefined)?.message;
+        throw new Error(message || 'Đăng nhập thất bại');
+      }
+      throw error;
+    }
   },
 
   // POST /api/auth/logout 

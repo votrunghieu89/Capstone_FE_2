@@ -19,6 +19,7 @@ export interface PlaceAutoOrderDTO {
     address: string;
     latitude: string;
     longitude: string;
+    estimatedTime?: number;
     status?: string;
     imageFiles?: File[];
     videoFile?: File;
@@ -45,7 +46,13 @@ const autoFindService = {
      * Start searching for technicians automatically
      */
     findTechnicians: async (customerId: string, data: AutoFindRequest) => {
-        const res = await api.post(`/customer/autofind/find/${customerId}`, data);
+        const payload = {
+            latitude: data.latitude,
+            longitude: data.longitude,
+            cityId: data.cityId,
+            serviceId: data.serviceId,
+        };
+        const res = await api.post(`/customer/autofind/find/${customerId}`, payload);
         return res.data;
     },
 
@@ -71,6 +78,9 @@ const autoFindService = {
         formData.append('Address', data.address);
         formData.append('Latitude', data.latitude.toString());
         formData.append('Longitude', data.longitude.toString());
+        if (typeof data.estimatedTime === 'number' && Number.isFinite(data.estimatedTime) && data.estimatedTime > 0) {
+            formData.append('EstimatedTime', data.estimatedTime.toString());
+        }
         if (data.status) formData.append('Status', data.status);
 
         if (data.videoFile) formData.append('VideoFile', data.videoFile);
@@ -79,7 +89,8 @@ const autoFindService = {
         }
 
         const res = await api.post(`/customer/autofind/place-auto-order`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 60000,
         });
         return res.data;
     },

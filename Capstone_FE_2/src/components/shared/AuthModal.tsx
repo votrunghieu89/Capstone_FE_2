@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { X, Mail, Lock, User, Phone, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import useAuthStore from '@/store/authStore';
 import authService from '@/services/authService';
 
@@ -56,9 +57,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const handleLogin = async (data: LoginForm) => {
     try {
       useAuthStore.getState().setLoading(true);
-      const result = await authService.login(data);
+      const result = await authService.login({
+        email: data.email.trim().toLowerCase(),
+        password: data.password,
+      });
       login(result);
-      
+
       const role = result.role?.toLowerCase();
       if (role === 'admin') {
         toast.success('Đăng nhập Admin thành công!', { duration: 3000 });
@@ -71,14 +75,27 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         loginForm.reset();
         window.location.href = '/technician';
       } else {
-        toast.success('Đăng nhập thành công! 🎉');
+        toast.success('Đăng nhập thành công!');
         onClose();
         loginForm.reset();
         window.location.href = '/customer';
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Đăng nhập thất bại';
-      toast.error(msg);
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const serverMessage = (err.response?.data as { message?: string } | undefined)?.message;
+
+        if (status === 401) {
+          toast.error('Sai tên đăng nhập hoặc mật khẩu');
+        } else if (status === 404) {
+          toast.error('Tài khoản đã bị khoá');
+        } else {
+          toast.error(serverMessage || 'Đăng nhập thất bại');
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : 'Đăng nhập thất bại';
+        toast.error(msg);
+      }
     } finally {
       useAuthStore.getState().setLoading(false);
     }
@@ -92,10 +109,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         fullName: data.fullName,
         phone: data.phone || undefined,
       });
-      toast.success('Đăng ký thành công! Chào mừng bạn đến với FastFix 🎉');
+
+      // Try to sign in immediately after successful registration so customer actions
+      // have a valid access token without requiring an extra manual login step.
+      const result = await authService.login({
+        email: data.email,
+        password: data.password,
+      });
+      login(result);
+
+      toast.success('Đăng ký thành công! Bạn đã được đăng nhập tự động 🎉');
       onClose();
       registerForm.reset();
-      // Redirect to customer portal after registration
       window.location.href = '/customer';
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Đăng ký thất bại';

@@ -19,6 +19,42 @@ function pick(obj: any, keys: string[]) {
   return '';
 }
 
+function normalizeAttachments(payload: any) {
+  const imageUrlsRaw = payload?.ImageUrls ?? payload?.imageUrls ?? payload?.images ?? payload?.Images ?? [];
+  const imageUrls = Array.isArray(imageUrlsRaw) ? imageUrlsRaw : [];
+  const videoUrl = payload?.videoUrl ?? payload?.VideoUrl ?? payload?.videoURL ?? '';
+  return { imageUrls, videoUrl };
+}
+
+function formatHourLabel(date: Date) {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
+function buildEtaWindowText(etaMinutesRaw: any) {
+  const etaMinutes = Number(etaMinutesRaw);
+  if (!Number.isFinite(etaMinutes) || etaMinutes <= 0) return '';
+
+  const now = new Date();
+  const end = new Date(now.getTime() + etaMinutes * 60 * 1000);
+  const endLabel = formatHourLabel(end);
+
+  const upper = new Date(end);
+  if (upper.getMinutes() > 0) {
+    upper.setHours(upper.getHours() + 1, 0, 0, 0);
+  }
+  const upperLabel = `${upper.getHours()}h`;
+
+  return `${endLabel} - ${upperLabel}`;
+}
+
+function buildEtaMinutesText(order: any) {
+  const eta = Number(pick(order, ['estimatedTime', 'EstimatedTime']));
+  return Number.isFinite(eta) && eta > 0 ? `${eta} phút` : '—';
+}
+
 export default function HistoryPage() {
   const { user } = useAuthStore();
   const [orders, setOrders] = useState<any[]>([]);
@@ -167,9 +203,14 @@ export default function HistoryPage() {
                       </td>
                       <td className="px-6 py-5 text-white font-medium">{pick(item, ['serviceName', 'ServiceName']) || '—'}</td>
                       <td className="px-6 py-5 text-zinc-400">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-zinc-500" />
-                          {new Date(pick(item, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt']) || Date.now()).toLocaleString('vi-VN')}
+                        <div className="flex flex-col gap-1 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-zinc-500" />
+                            {new Date(pick(item, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt']) || Date.now()).toLocaleString('vi-VN')}
+                          </div>
+                          <div className="text-xs text-blue-300/80">
+                            {buildEtaWindowText(pick(item, ['estimatedTime', 'EstimatedTime'])) || buildEtaMinutesText(item)}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-5 text-zinc-400 text-sm">{pick(item, ['technicianName', 'TechnicianName']) || '—'}</td>
@@ -351,9 +392,25 @@ function HistoryDetailModal({ order, ratingInfo, onClose }: { order: any; rating
       setIsLoadingDetail(true);
       try {
         const res = await orderService.getOrderDetail(orderId);
-        setDetail(res?.data || res || order);
+        const normalized = res?.data || res || order;
+        const { imageUrls, videoUrl } = normalizeAttachments(normalized);
+        setDetail({
+          ...normalized,
+          imageUrls,
+          ImageUrls: imageUrls,
+          videoUrl,
+          VideoUrl: videoUrl
+        });
       } catch {
-        setDetail(order);
+        const fallback = order;
+        const { imageUrls, videoUrl } = normalizeAttachments(fallback);
+        setDetail({
+          ...fallback,
+          imageUrls,
+          ImageUrls: imageUrls,
+          videoUrl,
+          VideoUrl: videoUrl
+        });
       } finally {
         setIsLoadingDetail(false);
       }
@@ -391,8 +448,8 @@ function HistoryDetailModal({ order, ratingInfo, onClose }: { order: any; rating
               <p className="text-white">{pick(detail || order, ['serviceName', 'ServiceName']) || '—'}</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-              <p className="text-zinc-500 mb-1">Trạng thái</p>
-              <p className="text-white">{pick(detail || order, ['status', 'Status']) || '—'}</p>
+              <p className="text-zinc-500 mb-1">Khung giờ dự kiến</p>
+              <p className="text-white">{buildEtaWindowText(pick(detail || order, ['estimatedTime', 'EstimatedTime'])) || buildEtaMinutesText(detail || order)}</p>
             </div>
             <div className="bg-white/5 border border-white/10 rounded-xl p-3 md:col-span-2">
               <p className="text-zinc-500 mb-1">Mô tả</p>
@@ -409,6 +466,46 @@ function HistoryDetailModal({ order, ratingInfo, onClose }: { order: any; rating
             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
               <p className="text-zinc-500 mb-1">Đánh giá</p>
               <p className="text-white">{ratingInfo?.hasFeedback ? `Đã đánh giá (${ratingInfo?.score || '—'} sao)` : 'Chưa đánh giá'}</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 md:col-span-2">
+              <p className="text-zinc-500 mb-2">Tệp đính kèm</p>
+              {(() => {
+                const { imageUrls, videoUrl } = normalizeAttachments(detail || order);
+                const hasMedia = Boolean(videoUrl) || imageUrls.length > 0;
+
+                if (!hasMedia) return <p className="text-white/70 text-sm">Chưa có ảnh hoặc video đính kèm.</p>;
+
+                return (
+                  <div className="space-y-4">
+                    {videoUrl && (
+                      <div>
+                        <p className="text-sm text-zinc-400 mb-2">Video</p>
+                        <video controls className="w-full rounded-2xl border border-white/10 bg-black">
+                          <source src={String(videoUrl)} />
+                          Trình duyệt của bạn không hỗ trợ video.
+                        </video>
+                      </div>
+                    )}
+
+                    {imageUrls.length > 0 && (
+                      <div>
+                        <p className="text-sm text-zinc-400 mb-2">Ảnh</p>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {imageUrls.map((img: string, idx: number) => (
+                            <a key={`${img}-${idx}`} href={String(img)} target="_blank" rel="noreferrer" className="block">
+                              <img
+                                src={String(img)}
+                                alt={`Order attachment ${idx + 1}`}
+                                className="h-28 w-full rounded-2xl border border-white/10 object-cover transition-opacity hover:opacity-90"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
