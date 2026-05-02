@@ -856,7 +856,6 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                 address: address.trim(),
                 latitude: resolvedLatitude.toString(),
                 longitude: resolvedLongitude.toString(),
-                estimatedTime: Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 ? getTechEstimatedTime(tech) : 110,
                 imageFiles
             };
 
