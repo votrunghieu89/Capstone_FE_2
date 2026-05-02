@@ -10,8 +10,7 @@ export interface CreateTechDTO {
 
 export const adminApi = {
   // ================= STATS =================
-  getStats: async () => (await api.get("/admin/stats")).data,
-
+  getStats: async () => (await api.get("/admin/dashboard-stats")).data,
   // ================= USERS =================
   getUsers: async () => (await api.get("/admin/users")).data,
 
