@@ -124,178 +124,6 @@ const resolveTechnicianGuid = (tech: any) =>
         ''
     ).trim();
 
-const demoTechnicians = [
-    {
-        technicianId: 'demo-dn-01',
-        serviceId: 'demo-service-dien-lanh',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Nguyễn Văn Minh',
-        serviceName: 'Điện lạnh',
-        cityName: 'Đà Nẵng',
-        address: 'Hải Châu, Đà Nẵng',
-        rating: 4.9,
-        ratingCount: 24,
-        yearOfExperience: 6,
-        estimatedTime: 18,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Chuyên sửa máy lạnh, vệ sinh định kỳ, nạp gas và xử lý lỗi làm lạnh yếu. Phản hồi nhanh trong khu vực nội thành.',
-        tags: ['Máy lạnh', 'Vệ sinh', 'Nạp gas', 'Khẩn cấp']
-    },
-    {
-        technicianId: 'demo-dn-02',
-        serviceId: 'demo-service-dien-nuoc',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Trần Thị Hạnh',
-        serviceName: 'Điện nước',
-        cityName: 'Đà Nẵng',
-        address: 'Thanh Khê, Đà Nẵng',
-        rating: 4.7,
-        ratingCount: 18,
-        yearOfExperience: 5,
-        estimatedTime: 24,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Xử lý rò rỉ nước, thay vòi, lắp thiết bị vệ sinh và sửa chữa hệ thống điện nước dân dụng.',
-        tags: ['Điện dân dụng', 'Nước rò rỉ', 'Lắp đặt']
-    },
-    {
-        technicianId: 'demo-dn-03',
-        serviceId: 'demo-service-it-laptop',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Lê Quốc Bảo',
-        serviceName: 'IT / Laptop',
-        cityName: 'Đà Nẵng',
-        address: 'Sơn Trà, Đà Nẵng',
-        rating: 5.0,
-        ratingCount: 41,
-        yearOfExperience: 9,
-        estimatedTime: 12,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Cài đặt phần mềm, tối ưu máy chậm, thay linh kiện, vệ sinh laptop và hỗ trợ sự cố mạng nội bộ.',
-        tags: ['Laptop', 'Phần mềm', 'Mạng', 'Vệ sinh']
-    },
-    {
-        technicianId: 'demo-dn-04',
-        serviceId: 'demo-service-dien-gia-dung',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Phạm Gia Huy',
-        serviceName: 'Điện gia dụng',
-        cityName: 'Đà Nẵng',
-        address: 'Ngũ Hành Sơn, Đà Nẵng',
-        rating: 4.8,
-        ratingCount: 29,
-        yearOfExperience: 7,
-        estimatedTime: 16,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Sửa ổ cắm, đèn, quạt, aptomat và xử lý sự cố chập điện trong gia đình.',
-        tags: ['Ổ cắm', 'Đèn', 'Aptomat', 'Chập điện']
-    },
-    {
-        technicianId: 'demo-dn-05',
-        serviceId: 'demo-service-dien-lanh',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Võ Thanh Tùng',
-        serviceName: 'Điện lạnh',
-        cityName: 'Đà Nẵng',
-        address: 'Liên Chiểu, Đà Nẵng',
-        rating: 4.6,
-        ratingCount: 15,
-        yearOfExperience: 4,
-        estimatedTime: 28,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Bảo dưỡng điều hòa, vệ sinh dàn lạnh, kiểm tra quạt gió và khắc phục lỗi không mát.',
-        tags: ['Bảo dưỡng', 'Điều hòa', 'Dàn lạnh']
-    },
-    {
-        technicianId: 'demo-dn-06',
-        serviceId: 'demo-service-it-mang',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Đặng Khánh Linh',
-        serviceName: 'IT / Mạng',
-        cityName: 'Đà Nẵng',
-        address: 'Cẩm Lệ, Đà Nẵng',
-        rating: 4.9,
-        ratingCount: 33,
-        yearOfExperience: 8,
-        estimatedTime: 20,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Lắp đặt modem, xử lý wifi yếu, tối ưu mạng gia đình và hỗ trợ máy tính mất kết nối.',
-        tags: ['WiFi', 'Router', 'Mạng nội bộ', 'Máy tính']
-    },
-    {
-        technicianId: 'demo-dn-07',
-        serviceId: 'demo-service-dien-lanh',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Nguyễn Đức Anh',
-        serviceName: 'Điện lạnh',
-        cityName: 'Đà Nẵng',
-        address: 'Hải Châu, Đà Nẵng',
-        rating: 4.8,
-        ratingCount: 36,
-        yearOfExperience: 10,
-        estimatedTime: 14,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Chuyên sửa máy lạnh inverter, thay block, xử lý xì gas và bảo trì hệ thống lạnh gia đình.',
-        tags: ['Inverter', 'Block', 'Xì gas', 'Bảo trì']
-    },
-    {
-        technicianId: 'demo-dn-08',
-        serviceId: 'demo-service-dien-nuoc',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Phan Thị Mai',
-        serviceName: 'Điện nước',
-        cityName: 'Đà Nẵng',
-        address: 'Thanh Khê, Đà Nẵng',
-        rating: 4.7,
-        ratingCount: 21,
-        yearOfExperience: 6,
-        estimatedTime: 19,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Sửa đường ống, thay sen vòi, lắp máy bơm và xử lý sự cố điện nước dân dụng.',
-        tags: ['Ống nước', 'Sen vòi', 'Máy bơm', 'Dân dụng']
-    },
-    {
-        technicianId: 'demo-dn-09',
-        serviceId: 'demo-service-it-mang',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Trần Minh Khoa',
-        serviceName: 'IT / Mạng',
-        cityName: 'Đà Nẵng',
-        address: 'Sơn Trà, Đà Nẵng',
-        rating: 5.0,
-        ratingCount: 27,
-        yearOfExperience: 7,
-        estimatedTime: 11,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Cấu hình router, đi dây mạng, khắc phục chập chờn wifi và cài máy tính văn phòng.',
-        tags: ['Router', 'Wifi', 'Cài máy', 'Văn phòng']
-    },
-    {
-        technicianId: 'demo-dn-10',
-        serviceId: 'demo-service-dien-gia-dung',
-        cityId: 'demo-city-da-nang',
-        technicianName: 'Lê Thùy Dương',
-        serviceName: 'Điện gia dụng',
-        cityName: 'Đà Nẵng',
-        address: 'Ngũ Hành Sơn, Đà Nẵng',
-        rating: 4.9,
-        ratingCount: 30,
-        yearOfExperience: 8,
-        estimatedTime: 17,
-        status: 'online',
-        avatarUrl: '',
-        description: 'Lắp quạt trần, sửa đèn, thay ổ cắm, kiểm tra aptomat và sửa điện gia đình.',
-        tags: ['Quạt trần', 'Đèn', 'Ổ cắm', 'Aptomat']
-    }
-];
 
 function InfoItem({ label, value }: { label: string; value: string }) {
     const getIcon = () => {
@@ -406,7 +234,7 @@ export default function TechnicianListPage() {
         setDetailLoading(false);
     };
 
-    const selectedCard = [...technicians, ...demoTechnicians].find((t: any) => {
+    const selectedCard = [...technicians, ].find((t: any) => {
         const techId = String(t?.technicianId || t?.TechnicianId || t?.id || t?.Id || '').trim();
         const detailId = String(detailSourceTech?.technicianId || detailSourceTech?.TechnicianId || detailSourceTech?.id || detailSourceTech?.Id || '').trim();
         return techId && techId === detailId;
@@ -421,7 +249,7 @@ export default function TechnicianListPage() {
             ? `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang bận`
             : `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang không hoạt động`;
 
-    const filtered = [...technicians, ...demoTechnicians].filter(t => {
+    const filtered = [...technicians, ].filter(t => {
         const name = (t.technicianName || t.TechnicianName || '').toLowerCase();
         const spec = (t.serviceName || t.ServiceName || '').toLowerCase();
         const searchLower = search.toLowerCase();
