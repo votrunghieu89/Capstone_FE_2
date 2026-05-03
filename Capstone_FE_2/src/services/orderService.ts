@@ -79,9 +79,7 @@ const orderService = {
       data.images.forEach((img) => formData.append('ImageUrls', img, img.name));
     }
 
-    const res = await api.put(`/customer/order/update`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    const res = await api.put(`/customer/order/update`, formData);
     return res.data;
   }
 };

@@ -167,9 +167,17 @@ export default function TechnicianListPage() {
 
     const normalizeText = (v: any) => String(v || '').trim().toLowerCase();
 
-    const getCityName = (cities: CityDTO[], cityId?: string, fallback = 'Đà Nẵng') => {
-        const found = cities.find(c => String(c.id) === String(cityId));
+    const getCityName = (cityList: CityDTO[], cityId?: string, fallback = '') => {
+        const id = cityId != null ? String(cityId).trim() : '';
+        if (!id) return fallback;
+        const found = cityList.find(c => String(c.id).toLowerCase() === id.toLowerCase());
         return found?.cityName || fallback;
+    };
+
+    const getTechCardCityLabel = (tech: any) => {
+        const fromPayload = (tech.cityName || tech.CityName || tech.city || tech.City || '').trim();
+        if (fromPayload) return fromPayload;
+        return getCityName(cities, tech.cityId || tech.CityId, '') || '—';
     };
 
     useEffect(() => {
@@ -234,13 +242,19 @@ export default function TechnicianListPage() {
         setDetailLoading(false);
     };
 
-    const selectedCard = [...technicians, ].find((t: any) => {
+    const selectedCard = [...technicians,].find((t: any) => {
         const techId = String(t?.technicianId || t?.TechnicianId || t?.id || t?.Id || '').trim();
         const detailId = String(detailSourceTech?.technicianId || detailSourceTech?.TechnicianId || detailSourceTech?.id || detailSourceTech?.Id || '').trim();
         return techId && techId === detailId;
     }) || detailSourceTech || null;
 
-    const detailCityName = detailTech?.cityName || detailTech?.CityName || detailTech?.city || detailTech?.City || selectedCard?.cityName || selectedCard?.CityName || selectedCard?.city || selectedCard?.City || '';
+    const detailCityNameFromPayload =
+        detailTech?.cityName || detailTech?.CityName || detailTech?.city || detailTech?.City ||
+        selectedCard?.cityName || selectedCard?.CityName || selectedCard?.city || selectedCard?.City || '';
+    const detailCityIdForLookup =
+        detailTech?.cityId || detailTech?.CityId || selectedCard?.cityId || selectedCard?.CityId || '';
+    const detailCityName =
+        (detailCityNameFromPayload || '').trim() || getCityName(cities, detailCityIdForLookup, '') || '';
     const detailStatus = normalizeTechStatus(selectedCard || detailSourceTech || detailTech);
     const detailServiceName = selectedCard?.serviceName || selectedCard?.ServiceName || detailSourceTech?.serviceName || detailSourceTech?.ServiceName || detailTech?.serviceName || detailTech?.ServiceName || '';
     const detailDescription = detailStatus === 'online'
@@ -249,7 +263,7 @@ export default function TechnicianListPage() {
             ? `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang bận`
             : `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang không hoạt động`;
 
-    const filtered = [...technicians, ].filter(t => {
+    const filtered = [...technicians,].filter(t => {
         const name = (t.technicianName || t.TechnicianName || '').toLowerCase();
         const spec = (t.serviceName || t.ServiceName || '').toLowerCase();
         const searchLower = search.toLowerCase();
@@ -447,9 +461,12 @@ export default function TechnicianListPage() {
                                         <span className="font-semibold text-white">{getTechEstimatedTime(tech)} phút</span>
                                     </div>
                                 )}
-                                <div className="flex items-start gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
-                                    <MapPin className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-zinc-500" />
-                                    <span className="text-sm text-zinc-300">{tech.address || tech.Address || 'Đà Nẵng'}</span>
+                                <div className="flex items-center justify-between gap-2 rounded-2xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+                                    <span className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-zinc-500">
+                                        <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                                        Thành phố
+                                    </span>
+                                    <span className="text-right text-sm font-semibold text-white">{getTechCardCityLabel(tech)}</span>
                                 </div>
                             </div>
 
@@ -514,7 +531,7 @@ export default function TechnicianListPage() {
                     ) : detailTech ? (
                         <div className="grid gap-5 lg:grid-cols-[360px_1fr] items-start">
                             <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-4 ">
-                            <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] bg-gradient-to-br from-blue-500/30 to-cyan-400/20 text-4xl font-bold text-white ring-1 ring-blue-400/20">
+                                <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[24px] bg-gradient-to-br from-blue-500/30 to-cyan-400/20 text-4xl font-bold text-white ring-1 ring-blue-400/20">
                                     {detailTech.avatarUrl || detailTech.AvatarUrl || detailTech.avatarURL || detailTech.AvatarURL ? (
                                         <img
                                             src={detailTech.avatarUrl || detailTech.AvatarUrl || detailTech.avatarURL || detailTech.AvatarURL}
@@ -856,12 +873,12 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                 address: address.trim(),
                 latitude: resolvedLatitude.toString(),
                 longitude: resolvedLongitude.toString(),
-                estimatedTime: Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 ? getTechEstimatedTime(tech) : 110,
-                imageFiles
+                imageFiles,
+                videoFile: videoFiles[0]
             };
 
             try {
-                const response = await autoFindService.placeAutoOrder(orderData);
+                const response = await technicianCatalogService.placeOrder(orderData);
                 console.log('✅ Success Response:', response);
                 toast.success('🎉 Đặt thợ thành công! Đang chờ xác nhận...');
                 navigate('/customer/orders?status=pending');
@@ -942,8 +959,8 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             address: address.trim(),
             latitude: resolvedLatitude.toString(),
             longitude: resolvedLongitude.toString(),
-            estimatedTime: Number.isFinite(getTechEstimatedTime(tech)) && getTechEstimatedTime(tech) > 0 ? getTechEstimatedTime(tech) : 110,
-            imageFiles
+            imageFiles,
+            videoFile: videoFiles[0]
         };
 
         // ✅ DEBUG LOG
@@ -955,7 +972,7 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
         console.groupEnd();
 
         try {
-            const response = await autoFindService.placeAutoOrder(orderData);
+            const response = await technicianCatalogService.placeOrder(orderData);
             console.log('✅ Success Response:', response);
             toast.success('🎉 Đặt thợ thành công! Đang chờ xác nhận...');
             navigate('/customer/orders?status=pending');
@@ -1013,144 +1030,144 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             <div className="px-6 py-6">
                 <div className="grid gap-7 lg:grid-cols-1">
                     <div className="space-y-6">
-                    {/* ✅ DROPDOWN CHỌN SERVICE */}
-                    <div className="space-y-1.5">
-                        <Label>Loại dịch vụ <span className="text-red-400">*</span></Label>
-                        <select
-                            value={selectedServiceId}
-                            onChange={e => setSelectedServiceId(e.target.value)}
-                            className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-white text-sm focus:ring-1 focus:ring-primary outline-none"
-                        >
-                            <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
-                            {services.map(s => (
-                                <option key={s.id} value={s.id} className="bg-[#0a1122]">
-                                    {s.serviceName}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Tiêu đề */}
-                    <div className="space-y-1.5">
-                        <Label>Tiêu đề</Label>
-                        <Input
-                            value={title}
-                            onChange={e => setTitle(e.target.value)}
-                            placeholder="Vd: Điều hòa không mát"
-                            className="h-11 rounded-2xl bg-white/5 border-white/10 text-white"
-                        />
-                    </div>
-
-                    {/* Mô tả */}
-                    <div className="space-y-1.5">
-                        <Label>Mô tả chi tiết <span className="text-red-400">*</span></Label>
-                        <Textarea
-                            value={desc}
-                            onChange={e => setDesc(e.target.value)}
-                            rows={5}
-                            placeholder="Mô tả rõ sự cố để thợ chuẩn bị phù hợp..."
-                            className="rounded-2xl bg-white/5 border-white/10 text-white resize-none"
-                        />
-                    </div>
-
-                    {/* Upload ảnh / video */}
-                    <div className="space-y-1.5">
-                        <Label>Hình ảnh</Label>
-                        <input ref={imageRef} type="file" accept="image/*" multiple onChange={handleImages} className="hidden" />
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            <Button type="button" variant="outline"
-                                className="flex-1 h-11 rounded-2xl bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30"
-                                onClick={() => imageRef.current?.click()}>
-                                <Camera className="w-4 h-4 mr-2" /> Chọn ảnh
-                            </Button>
-                        </div>
-                        {(imagePreviews.length > 0 || videoPreviews.length > 0) && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {imagePreviews.map((src, i) => (
-                                    <div key={i} className="relative group w-14 h-14">
-                                        <img src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
-                                        <button type="button"
-                                            onClick={() => {
-                                                setImagePreviews(p => p.filter((_, j) => j !== i));
-                                                setImageFiles(p => p.filter((_, j) => j !== i));
-                                            }}
-                                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                            <X size={8} />
-                                        </button>
-                                    </div>
+                        {/* ✅ DROPDOWN CHỌN SERVICE */}
+                        <div className="space-y-1.5">
+                            <Label>Loại dịch vụ <span className="text-red-400">*</span></Label>
+                            <select
+                                value={selectedServiceId}
+                                onChange={e => setSelectedServiceId(e.target.value)}
+                                className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-white text-sm focus:ring-1 focus:ring-primary outline-none"
+                            >
+                                <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
+                                {services.map(s => (
+                                    <option key={s.id} value={s.id} className="bg-[#0a1122]">
+                                        {s.serviceName}
+                                    </option>
                                 ))}
-                                {videoPreviews.map((src, i) => (
-                                    <div key={i} className="relative group w-14 h-14">
-                                        <video src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
-                                        <button type="button"
-                                            onClick={() => {
-                                                setVideoPreviews(p => p.filter((_, j) => j !== i));
-                                                setVideoFiles(p => p.filter((_, j) => j !== i));
-                                            }}
-                                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                            <X size={8} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                </div>
-
-                <div className="space-y-6">
-                    <div className="rounded-3xl border border-white/10 bg-white/5 p-5 space-y-4">
-                        {/* Thành phố + địa chỉ nhập thủ công */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label>Thành phố <span className="text-red-400">*</span></Label>
-                                <Input
-                                    value={cityText}
-                                    onChange={e => setCityText(e.target.value)}
-                                    placeholder="Ví dụ: Đà Nẵng"
-                                    className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
-                                />
-                                <p className="text-[10px] text-zinc-500">Nhập tay tên thành phố của bạn.</p>
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label className="flex items-center gap-1.5">
-                                    <MapPin size={13} className="text-primary-light" />
-                                    Địa chỉ <span className="text-red-400">*</span>
-                                </Label>
-                                <Input
-                                    value={address}
-                                    onChange={e => setAddress(e.target.value)}
-                                    placeholder="Ví dụ: 123 Hoàng Diệu"
-                                    className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
-                                />
-                                <p className="text-[10px] text-zinc-500">Nhập địa chỉ chi tiết nơi cần sửa chữa.</p>
-                            </div>
+                            </select>
                         </div>
 
+                        {/* Tiêu đề */}
+                        <div className="space-y-1.5">
+                            <Label>Tiêu đề</Label>
+                            <Input
+                                value={title}
+                                onChange={e => setTitle(e.target.value)}
+                                placeholder="Vd: Điều hòa không mát"
+                                className="h-11 rounded-2xl bg-white/5 border-white/10 text-white"
+                            />
+                        </div>
 
-                    </div>
+                        {/* Mô tả */}
+                        <div className="space-y-1.5">
+                            <Label>Mô tả chi tiết <span className="text-red-400">*</span></Label>
+                            <Textarea
+                                value={desc}
+                                onChange={e => setDesc(e.target.value)}
+                                rows={5}
+                                placeholder="Mô tả rõ sự cố để thợ chuẩn bị phù hợp..."
+                                className="rounded-2xl bg-white/5 border-white/10 text-white resize-none"
+                            />
+                        </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                            {(latitude || longitude) && (
-                                <p className="text-xs text-zinc-300 break-all">
-                                    Lat: <span className="text-white font-semibold">{latitude || '-'}</span> | Lon: <span className="text-white font-semibold">{longitude || '-'}</span>
-                                </p>
+                        {/* Upload ảnh / video */}
+                        <div className="space-y-1.5">
+                            <Label>Hình ảnh</Label>
+                            <input ref={imageRef} type="file" accept="image/*" multiple onChange={handleImages} className="hidden" />
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <Button type="button" variant="outline"
+                                    className="flex-1 h-11 rounded-2xl bg-white/5 border-white/10 hover:bg-primary/10 hover:border-primary/30"
+                                    onClick={() => imageRef.current?.click()}>
+                                    <Camera className="w-4 h-4 mr-2" /> Chọn ảnh
+                                </Button>
+                            </div>
+                            {(imagePreviews.length > 0 || videoPreviews.length > 0) && (
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {imagePreviews.map((src, i) => (
+                                        <div key={i} className="relative group w-14 h-14">
+                                            <img src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
+                                            <button type="button"
+                                                onClick={() => {
+                                                    setImagePreviews(p => p.filter((_, j) => j !== i));
+                                                    setImageFiles(p => p.filter((_, j) => j !== i));
+                                                }}
+                                                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                                <X size={8} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {videoPreviews.map((src, i) => (
+                                        <div key={i} className="relative group w-14 h-14">
+                                            <video src={src} className="w-full h-full rounded-lg object-cover border border-white/10" />
+                                            <button type="button"
+                                                onClick={() => {
+                                                    setVideoPreviews(p => p.filter((_, j) => j !== i));
+                                                    setVideoFiles(p => p.filter((_, j) => j !== i));
+                                                }}
+                                                className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                                <X size={8} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
+
                     </div>
 
-                    <Button
-                        className="w-full h-12 rounded-2xl bg-primary hover:bg-primary-dark text-white font-bold flex items-center justify-center gap-2"
-                        onClick={handleSubmit}
-                        disabled={isSubmitting}>
-                        {isSubmitting
-                            ? <><Loader2 size={16} className="animate-spin" /> Đang gửi...</>
-                            : <><CheckCircle size={16} /> Hoàn thành — Đặt lịch sửa chữa</>
-                        }
-                    </Button>
+                    <div className="space-y-6">
+                        <div className="rounded-3xl border border-white/10 bg-white/5 p-5 space-y-4">
+                            {/* Thành phố + địa chỉ nhập thủ công */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label>Thành phố <span className="text-red-400">*</span></Label>
+                                    <Input
+                                        value={cityText}
+                                        onChange={e => setCityText(e.target.value)}
+                                        placeholder="Ví dụ: Đà Nẵng"
+                                        className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
+                                    />
+                                    <p className="text-[10px] text-zinc-500">Nhập tay tên thành phố của bạn.</p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="flex items-center gap-1.5">
+                                        <MapPin size={13} className="text-primary-light" />
+                                        Địa chỉ <span className="text-red-400">*</span>
+                                    </Label>
+                                    <Input
+                                        value={address}
+                                        onChange={e => setAddress(e.target.value)}
+                                        placeholder="Ví dụ: 123 Hoàng Diệu"
+                                        className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
+                                    />
+                                    <p className="text-[10px] text-zinc-500">Nhập địa chỉ chi tiết nơi cần sửa chữa.</p>
+                                </div>
+                            </div>
+
+
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                                {(latitude || longitude) && (
+                                    <p className="text-xs text-zinc-300 break-all">
+                                        Lat: <span className="text-white font-semibold">{latitude || '-'}</span> | Lon: <span className="text-white font-semibold">{longitude || '-'}</span>
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        <Button
+                            className="w-full h-12 rounded-2xl bg-primary hover:bg-primary-dark text-white font-bold flex items-center justify-center gap-2"
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}>
+                            {isSubmitting
+                                ? <><Loader2 size={16} className="animate-spin" /> Đang gửi...</>
+                                : <><CheckCircle size={16} /> Hoàn thành — Đặt lịch sửa chữa</>
+                            }
+                        </Button>
+                    </div>
                 </div>
-            </div>
             </div>
         </DialogContent>
     );

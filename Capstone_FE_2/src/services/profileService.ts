@@ -23,9 +23,7 @@ const profileService = {
       formData.append('AvatarFile', avatarFile);
     }
 
-    const res = await api.put('/customer/profile', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    const res = await api.put('/customer/profile', formData);
     return res.data;
   }
 };

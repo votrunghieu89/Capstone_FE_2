@@ -91,9 +91,7 @@ const technicianCatalogService = {
       data.imageFiles.forEach(img => formData.append('ImageFiles', img));
     }
 
-    const res = await api.post('/customer/technicians/place-order', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    const res = await api.post('/customer/technicians/place-order', formData);
     return res.data;
   }
 };
