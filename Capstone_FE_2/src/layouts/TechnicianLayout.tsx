@@ -2,7 +2,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/technician/Sidebar';
 import { Header } from '@/components/technician/Header';
-import FloatingGemini from '@/components/shared/FloatingGemini';
+
 import useAuthStore from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -68,8 +68,7 @@ export default function TechnicianLayout() {
         </main>
       </div>
 
-      {/* Global AI Assistant */}
-      <FloatingGemini />
+
     </div>
   );
 }

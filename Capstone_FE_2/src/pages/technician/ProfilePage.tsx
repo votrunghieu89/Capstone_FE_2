@@ -16,6 +16,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import technicianOrderService from '@/services/technicianOrderService';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
+import { getMapEmbedSrc, getMapEmbedSrcByAddress } from '@/utils/mapUtils';
 
 const currentLocationIcon = new L.DivIcon({
   className: 'custom-location-icon',
@@ -39,7 +40,7 @@ export default function TechProfilePage() {
   // Modal Tabs State
   const [modalTab, setModalTab] = useState<'profile' | 'security'>('profile');
   // State lưu vị trí thực tế lấy từ API GPS
-  const [techLocation, setTechLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [techLocation, setTechLocation] = useState<{address: string, cityName: string} | null>(null);
   // State mở/đóng Modal bản đồ phóng to
   const [isMapOpen, setIsMapOpen] = useState(false);
 
@@ -118,8 +119,7 @@ export default function TechProfilePage() {
       // GET /api/technician/order/location/technician/{technicianId}
       try {
         const loc = await technicianOrderService.getTechnicianLocation(user.id);
-        // Since BE only returns address, we don't set techLocation here
-        // The map will fallback to currentLoc (HTML5 GPS)
+        setTechLocation(loc);
       } catch (err) {
         console.error('Lỗi lấy vị trí KTV từ API:', err);
       }
@@ -508,10 +508,9 @@ export default function TechProfilePage() {
         </div>
 
         {/* Sidebar - copy y nguyên từ CommandCenter */}
-        <div className="lg:col-span-4 flex flex-col h-full">
+        <div className="lg:col-span-4 flex flex-col">
           <div
-            onClick={() => setIsMapOpen(true)}
-            className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col h-full shadow-2xl relative overflow-hidden group cursor-pointer hover:border-white/10 transition-colors"
+            className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col shadow-2xl relative overflow-hidden group transition-colors"
           >
             <div className="flex items-start justify-between mb-8 shrink-0 px-2">
               <div className="space-y-4 shrink-0">
@@ -531,37 +530,25 @@ export default function TechProfilePage() {
                   </div>
                 ))}
               </div>
-              <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 text-slate-400 group-hover:text-indigo-400 transition-colors shrink-0">
-                <Layers size={20} />
-              </div>
+
             </div>
 
-            <div className="flex-1 w-full rounded-[24px] overflow-hidden border border-white/5 relative z-10 leaflet-dark-theme pointer-events-none">
-              <MapContainer
-                center={[16.0544, 108.2022]}
-                zoom={12}
-                scrollWheelZoom={false}
-                style={{ height: '100%', width: '100%' }}
-                zoomControl={false}
-                attributionControl={false}
-              >
-                <TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" />
-                {/* Ưu tiên: API GPS → GPS trình duyệt → tọa độ profile - giống hệt CommandCenter */}
-                {(techLocation || currentLoc || (profile?.latitude && profile?.longitude)) && (
-                  <Marker
-                    position={[
-                      techLocation?.lat ?? currentLoc?.lat ?? parseFloat(profile!.latitude!),
-                      techLocation?.lng ?? currentLoc?.lng ?? parseFloat(profile!.longitude!)
-                    ]}
-                    icon={currentLocationIcon}
-                  >
-                    <Popup className="custom-leaflet-popup">
-                      <div className="px-3 py-2 bg-rose-600 rounded-lg text-white font-black text-[11px] uppercase tracking-wider">Vị trí của bạn</div>
-                    </Popup>
-                  </Marker>
-                )}
-              </MapContainer>
+            <div className="relative rounded-2xl overflow-hidden border border-white/5 aspect-video bg-slate-900 group cursor-crosshair shrink-0">
+               <iframe 
+                  key={techLocation ? `${techLocation.address}-${techLocation.cityName}` : (currentLoc ? `${currentLoc.lat},${currentLoc.lng}` : 'profile')}
+                  width="100%" 
+                  height="100%" 
+                  frameBorder="0" 
+                  style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }} 
+                  src={techLocation ? getMapEmbedSrcByAddress(`${techLocation.address}, ${techLocation.cityName}`, 13) : getMapEmbedSrc(currentLoc, profile?.latitude, profile?.longitude, 13)} 
+                  allowFullScreen
+                ></iframe>
+               <div className="absolute bottom-4 left-4 right-4 p-4 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 text-center">
+                  <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">{profile?.city ? `${profile.city} CITY` : 'ĐÀ NẴNG CITY'}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">ACTIVE COVERAGE</p>
+               </div>
             </div>
+
           </div>
         </div>
       </div>
@@ -753,70 +740,7 @@ export default function TechProfilePage() {
         )}
       </AnimatePresence>
 
-      {/* Map Insight Modal - copy y nguyên từ CommandCenter */}
-      <AnimatePresence>
-        {isMapOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-[#0f172a] border border-white/10 rounded-[40px] w-full max-w-[1400px] h-full max-h-[85vh] overflow-hidden relative shadow-[0_0_100px_rgba(0,0,0,0.5)]"
-            >
-              <div className="absolute top-8 left-10 z-20 space-y-2 pointer-events-none">
-                <h2 className="text-4xl font-black text-white tracking-tighter">PHÂN BỔ CHI TIẾT</h2>
-                <p className="text-indigo-400 font-bold uppercase text-[12px] tracking-[0.3em]">TP. Đà Nẵng | Chế độ theo dõi nâng cao</p>
-              </div>
 
-              <button
-                onClick={() => setIsMapOpen(false)}
-                className="absolute top-8 right-10 z-20 w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 hover:bg-rose-500 hover:text-white transition-all hover:rotate-90 group shadow-[0_0_15px_rgba(244,63,94,0.2)]"
-              >
-                <Zap className="transition-colors" />
-              </button>
-
-              <div className="absolute inset-0 z-10">
-                <MapContainer
-                  center={[16.0544, 108.2022]}
-                  zoom={13}
-                  style={{ height: '100%', width: '100%' }}
-                  attributionControl={false}
-                >
-                  <TileLayer url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}" />
-                  {/* Ưu tiên: API GPS → GPS trình duyệt → tọa độ profile - giống hệt CommandCenter */}
-                  {(techLocation || currentLoc || (profile?.latitude && profile?.longitude)) && (
-                    <Marker
-                      position={[
-                        techLocation?.lat ?? currentLoc?.lat ?? parseFloat(profile!.latitude!),
-                        techLocation?.lng ?? currentLoc?.lng ?? parseFloat(profile!.longitude!)
-                      ]}
-                      icon={currentLocationIcon}
-                    >
-                      <Popup className="custom-leaflet-popup">
-                        <div className="px-3 py-2 bg-rose-600 rounded-lg text-white font-black text-[11px] uppercase tracking-wider">Vị trí của bạn</div>
-                      </Popup>
-                    </Marker>
-                  )}
-                </MapContainer>
-              </div>
-
-              {/* Bottom Decorative Element */}
-              <div className="absolute bottom-8 left-10 right-10 z-20 flex items-center justify-between pointer-events-none">
-                <div className="flex gap-4" />
-                <div className="text-right bg-slate-900/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/5">
-                  <p className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1">Dữ liệu cập nhật thời gian thực</p>
-                  <p className="text-white font-black text-[12px]">HỆ THỐNG PHÂN BỔ FASTFIX v.2.0</p>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

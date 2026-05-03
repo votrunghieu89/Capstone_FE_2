@@ -3,9 +3,10 @@ import {
   MapPin, Clock, AlertCircle, 
   Phone, User, ChevronRight,
   CheckCircle2, Cloud, Navigation,
-  Activity, Target, ArrowRight, RefreshCcw, Zap, LocateFixed
+  Activity, Target, ArrowRight, RefreshCcw,
+  ZoomIn, X, Image as ImageIcon, Zap
 } from 'lucide-react';
-import { openGoogleMapsRoute, getMapEmbedSrc, getMapEmbedSrcByAddress } from '@/utils/mapUtils';
+import { openGoogleMapsLocation, getMapEmbedSrc, openGoogleMapsRoute, getMapEmbedSrcByAddress } from '@/utils/mapUtils';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,7 +14,7 @@ import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
 import orderService from '@/services/orderService';
 import { statisticService } from '@/services/statisticService';
-import type { ViewOrderDTO, ViewOrderDetailDTO } from '@/types/order';
+import { ViewOrderDTO, OrderDetailDTO } from '@/types/order';
 import { TechnicianProfileViewDTO } from '@/types/technician';
 import technicianService from '@/services/technicianService';
 import toast from 'react-hot-toast';
@@ -26,10 +27,10 @@ export default function TechAcceptedRequestsPage() {
   const { user } = useAuthStore();
   const [requests, setRequests] = useState<ViewOrderDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [detailsMap, setDetailsMap] = useState<Record<string, ViewOrderDetailDTO>>({});
+  const [detailsMap, setDetailsMap] = useState<Record<string, OrderDetailDTO>>({});
   const [fetchingMedia, setFetchingMedia] = useState<Set<string>>(new Set());
-  const [actionLoading, setActionLoading] = useState(false);
   const [profile, setProfile] = useState<TechnicianProfileViewDTO | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   
   // Real-time stats states
   const [stats, setStats] = useState({
@@ -41,16 +42,33 @@ export default function TechAcceptedRequestsPage() {
   });
   
   // Real-time GPS device location
-  const { location: gpsLocation, loading: gpsLoading, error: gpsError } = useCurrentLocation();
+  const { location: gpsLocation } = useCurrentLocation();
   const [techLocation, setTechLocation] = useState<{ address: string, cityName: string } | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [hasInProgress, setHasInProgress] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       loadRequests();
       loadStats();
       loadLocation();
+      checkInProgress();
     }
   }, [user?.id]);
+
+  const checkInProgress = async () => {
+    if (!user?.id) return;
+    try {
+      const order = await technicianOrderService.getInProgressOrder(user.id);
+      setHasInProgress(!!order);
+    } catch {
+      setHasInProgress(false);
+    }
+  };
 
   const loadLocation = async () => {
     if (!user?.id) return;
@@ -83,10 +101,12 @@ export default function TechAcceptedRequestsPage() {
   const loadStats = async () => {
     if (!user?.id) return;
     try {
-      const [receivedToday, completed, total, profileData] = await Promise.all([
+      // Fetch stats and the real accepted orders list
+      const [receivedToday, completed, total, confirmedOrders, profileData] = await Promise.all([
         statisticService.getTodayReceivedCount(user.id),
         statisticService.getTotalCompletedCount(user.id),
         statisticService.getTotalOrders(user.id),
+        technicianOrderService.getConfirmedOrders(user.id),
         technicianService.getProfile(user.id)
       ]);
       
@@ -96,7 +116,7 @@ export default function TechAcceptedRequestsPage() {
       setStats({
         todayReceived: receivedToday,
         completionRate: rate,
-        acceptedCount: requests.length,
+        acceptedCount: confirmedOrders.length,
         total,
         completed
       });
@@ -110,7 +130,7 @@ export default function TechAcceptedRequestsPage() {
       if (detailsMap[order.orderId] || fetchingMedia.has(order.orderId)) continue;
       setFetchingMedia(prev => new Set(prev).add(order.orderId));
       try {
-        const detail: ViewOrderDetailDTO = await orderService.getOrderDetail(order.orderId);
+        const detail: OrderDetailDTO = await orderService.getOrderDetail(order.orderId);
         if (detail) {
           setDetailsMap(prev => ({ ...prev, [order.orderId]: detail }));
         }
@@ -140,6 +160,29 @@ export default function TechAcceptedRequestsPage() {
     }
   };
 
+  const handleCancel = (orderId: string) => {
+    setCancelOrderId(orderId);
+    setCancelReason('');
+    setShowCancelModal(true);
+  };
+
+  const confirmCancel = async () => {
+    if (!user?.id || !cancelOrderId || !cancelReason.trim()) return;
+    setCancelLoading(true);
+    try {
+      await technicianOrderService.rejectOrder({ orderId: cancelOrderId, technicianId: user.id, reason: cancelReason });
+      toast.success('Đã hủy đơn hàng');
+      setShowCancelModal(false);
+      setCancelOrderId(null);
+      setCancelReason('');
+      loadRequests();
+    } catch (err: any) {
+      toast.error('Không thể hủy đơn hàng lúc này');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex bg-[#020617] items-center justify-center min-h-[calc(100vh-80px)]">
@@ -149,11 +192,21 @@ export default function TechAcceptedRequestsPage() {
   }
 
   return (
+    <>
     <div className="h-[calc(100vh-80px)] bg-[#020617] text-slate-200 overflow-hidden flex flex-col">
       <div className="max-w-[1600px] w-full mx-auto px-4 md:px-8 py-8 flex flex-col lg:flex-row gap-8 flex-1 min-h-0">
         
         {/* === MAIN CONTENT: Requests List (SCROLLABLE AREA) === */}
         <div className="flex-1 flex flex-col min-h-0 space-y-8">
+          {hasInProgress && requests.length > 0 && (
+            <div className="w-full bg-[#0f172a]/90 backdrop-blur-md border border-amber-500/30 rounded-3xl p-5 flex flex-col items-center justify-center text-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.1)] shrink-0">
+              <AlertCircle size={28} className="text-amber-500 mb-1 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+              <p className="text-[11px] font-black text-amber-500 uppercase tracking-[0.2em] leading-relaxed drop-shadow-md">
+                BẠN ĐANG CÓ 1 ĐƠN ĐANG THỰC HIỆN, HÃY HOÀN THÀNH ĐƠN NÀY <br /> ĐỂ NHẬN ĐƯỢC ĐƠN HÀNG MỚI !
+              </p>
+            </div>
+          )}
+
           {/* Header Title & Badge */}
           <div className="flex items-center justify-between shrink-0">
             <div className="space-y-2">
@@ -180,14 +233,23 @@ export default function TechAcceptedRequestsPage() {
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5">
             <AnimatePresence mode='popLayout'>
               {requests.length === 0 ? (
-                <div className="bg-[#0f172a]/40 border border-dashed border-white/10 rounded-[32px] p-24 text-center">
-                  <AlertCircle size={48} className="mx-auto text-slate-600 mb-4" />
-                  <h2 className="text-xl font-black text-white uppercase mb-2">Chưa có công việc</h2>
-                  <p className="text-slate-500 mb-8 max-w-sm mx-auto text-sm">Mọi yêu cầu bạn đã tiếp nhận sẽ hiển thị chi tiết tại đây.</p>
-                  <Link to="/technician/don-hang/dang-cho" className="inline-flex items-center gap-2 text-emerald-400 font-bold uppercase text-[10px] tracking-widest hover:underline">
-                    Tìm việc ngay <ChevronRight size={14} />
-                  </Link>
-                </div>
+                hasInProgress ? (
+                  <div className="bg-[#0f172a]/90 backdrop-blur-md border border-amber-500/30 rounded-[32px] p-24 text-center shadow-[0_0_20px_rgba(245,158,11,0.1)]">
+                    <AlertCircle size={48} className="mx-auto text-amber-500 mb-6 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                    <p className="text-amber-500 font-black uppercase tracking-[0.2em] leading-relaxed drop-shadow-md text-[13px]">
+                      BẠN ĐANG CÓ 1 ĐƠN ĐANG THỰC HIỆN, HÃY HOÀN THÀNH ĐƠN NÀY <br /> ĐỂ NHẬN ĐƯỢC ĐƠN HÀNG MỚI !
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-[#0f172a]/40 border border-dashed border-white/10 rounded-[32px] p-24 text-center">
+                    <AlertCircle size={48} className="mx-auto text-slate-600 mb-4" />
+                    <h2 className="text-xl font-black text-white uppercase mb-2">Chưa có công việc</h2>
+                    <p className="text-slate-500 mb-8 max-w-sm mx-auto text-sm">Mọi yêu cầu bạn đã tiếp nhận sẽ hiển thị chi tiết tại đây.</p>
+                    <Link to="/technician/don-hang/dang-cho" className="inline-flex items-center gap-2 text-emerald-400 font-bold uppercase text-[10px] tracking-widest hover:underline">
+                      Tìm việc ngay <ChevronRight size={14} />
+                    </Link>
+                  </div>
+                )
               ) : (
                 requests.map((request, idx) => (
                   <motion.div
@@ -197,14 +259,11 @@ export default function TechAcceptedRequestsPage() {
                     transition={{ delay: idx * 0.1 }}
                     className="group bg-[#0f172a]/60 backdrop-blur-xl border border-white/5 hover:border-emerald-500/30 rounded-[28px] p-6 transition-all duration-300 relative overflow-hidden flex flex-col gap-6"
                   >
-                    {/* Card Header: Tag + ID + Status */}
+                    {/* Card Header: Tag + Status */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg">
                           {detailsMap[request.orderId]?.serviceName || request.serviceName || 'DỊCH VỤ'}
-                        </span>
-                        <span className="text-[11px] font-bold text-slate-600">
-                          #TK-{(request.orderId || '').slice(-5).toUpperCase()}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 text-emerald-400">
@@ -219,8 +278,9 @@ export default function TechAcceptedRequestsPage() {
                           <h2 className="text-2xl font-black text-white group-hover:text-emerald-400 transition-colors">
                             {request.title || 'Yêu cầu sửa chữa thiết bị'}
                           </h2>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                              {/* Customer Info */}
                              <div className="flex items-center gap-4">
                                <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0">
@@ -244,20 +304,39 @@ export default function TechAcceptedRequestsPage() {
                                  </p>
                                </div>
                              </div>
+                          </div>
+                       </div>
 
-                             {/* Phone Number */}
-                             <div className="flex items-center gap-4">
-                               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shrink-0">
-                                 <Phone size={20} className="text-emerald-400" />
-                               </div>
-                               <div>
-                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Số điện thoại</p>
-                                 <p className="text-sm font-bold text-white">
-                                   {request.phoneNumber || request.customerPhone || detailsMap[request.orderId]?.customerPhone || 'Chưa có SĐT'}
-                                 </p>
-                               </div>
+                       {/* Column 2: Contact & Navigation */}
+                       <div className="w-full xl:w-64 space-y-6">
+                          {/* Contact Info — Hiển thị SĐT vì đã tiếp nhận */}
+                          <div className="flex items-center gap-4">
+                             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shrink-0">
+                               <Phone size={20} className="text-emerald-400" />
+                             </div>
+                             <div>
+                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Liên hệ</p>
+                               <p className="text-sm font-bold text-emerald-400">
+                                 {request.phoneNumber || (request as any).customerPhone || detailsMap[request.orderId]?.customerPhone || 'Chưa có SĐT'}
+                               </p>
                              </div>
                           </div>
+                          
+                          <button
+                            onClick={() => openGoogleMapsRoute(
+                              techLocation ? `${techLocation.address}, ${techLocation.cityName}` : gpsLocation, 
+                              detailsMap[request.orderId]?.address || request.address
+                            )}
+                            className="flex items-center gap-4 group/nav w-full text-left"
+                          >
+                             <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 group-hover/nav:bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center text-indigo-400 transition-all shrink-0">
+                               <Navigation size={20} className="group-hover/nav:scale-110 transition-transform" />
+                             </div>
+                             <div>
+                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Lộ trình</p>
+                               <p className="text-sm font-black text-indigo-400 group-hover/nav:underline">CHỈ ĐƯỜNG</p>
+                             </div>
+                          </button>
                        </div>
 
                        {/* Call to Action Buttons */}
@@ -265,24 +344,20 @@ export default function TechAcceptedRequestsPage() {
                           <button 
                             onClick={() => handleStartWork(request.orderId)}
                             disabled={actionLoading}
-                            className="w-full sm:w-auto px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
+                            className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
                           >
-                            Bắt đầu ngay <Zap size={15} />
+                            Bắt đầu ngay <Zap size={16} />
                           </button>
                           <div className="flex w-full gap-3">
                              <button 
-                               onClick={() => openGoogleMapsRoute(
-                                 techLocation ? `${techLocation.address}, ${techLocation.cityName}` : gpsLocation, 
-                                 detailsMap[request.orderId]?.address || request.address
-                               )}
-                               className="flex-1 px-4 py-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 font-black text-[10px] uppercase tracking-widest rounded-xl border border-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                               onClick={() => handleCancel(request.orderId)}
+                               className="flex-1 px-4 py-3.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 font-black text-[10px] uppercase tracking-widest rounded-2xl border border-rose-500/30 transition-all active:scale-95"
                              >
-                               <Navigation size={13} />
-                               Chỉ đường
+                               Hủy đơn
                              </button>
                              <button 
                                onClick={() => navigate(`/technician/don-hang/chi-tiet/${request.orderId}`)}
-                               className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-300 font-black text-[10px] uppercase tracking-widest rounded-xl border border-white/5 transition-all active:scale-95"
+                               className="flex-1 px-4 py-3.5 bg-white/5 hover:bg-white/10 text-slate-300 font-black text-[10px] uppercase tracking-widest rounded-2xl border border-white/5 transition-all active:scale-95"
                              >
                                Chi tiết
                              </button>
@@ -291,11 +366,18 @@ export default function TechAcceptedRequestsPage() {
                     </div>
 
                     {/* Card Footer: Time Badge */}
-                    <div className="flex items-center gap-2 pt-4 border-t border-white/5">
-                      <Clock size={14} className="text-slate-600" />
-                      <span className="text-[11px] font-bold text-slate-500">
-                        Hẹn lúc: <span className="text-white">{format(new Date(request.orderDate), "HH:mm")}</span> - Hôm nay ({formatDistanceToNow(new Date(request.orderDate), { addSuffix: true, locale: vi })})
-                      </span>
+                    <div className="flex items-center justify-between pt-4 border-t border-white/5 gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} className="text-slate-600" />
+                        <span className="text-[11px] font-bold text-slate-500">
+                          Hẹn lúc: <span className="text-white">{format(new Date(request.orderDate), "HH:mm - dd/MM/yyyy")}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-amber-500/8 border border-amber-500/20 rounded-xl px-3 py-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">Dự kiến hoàn thành</p>
+                        <p className="text-sm font-black text-amber-400 leading-none">{format(new Date(new Date(request.orderDate).getTime() + 60 * 60 * 1000), "HH:mm")}</p>
+                      </div>
                     </div>
                   </motion.div>
                 ))
@@ -307,27 +389,6 @@ export default function TechAcceptedRequestsPage() {
         {/* === SIDEBAR: Stats & Insights (Fixed in place) === */}
         <div className="w-full lg:w-[380px] space-y-4 h-full shrink-0 pb-4">
           
-          {/* Dashboard Stats */}
-          <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/5 rounded-[32px] p-6 space-y-6 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
-                <Activity size={120} />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">Nhiệm vụ đã nhận</p>
-                <div className="flex items-baseline gap-2">
-                   <span className="text-5xl font-black text-white leading-none">{requests.length}</span>
-                   <span className="text-[11px] font-bold text-emerald-400 uppercase">Hiện có</span>
-                </div>
-              </div>
-              <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
-                 <CheckCircle2 size={32} />
-              </div>
-            </div>
-
-
-          </div>
 
           {/* Deployment Map Insight */}
           <div className="bg-[#0f172a]/60 backdrop-blur-3xl border border-white/5 rounded-[32px] p-6 space-y-5">
@@ -374,5 +435,99 @@ export default function TechAcceptedRequestsPage() {
 
       </div>
     </div>
+
+    {/* Lightbox */}
+    <AnimatePresence>
+      {lightboxUrl && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all z-10"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X size={18} />
+          </button>
+          <motion.img
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            src={lightboxUrl}
+            className="max-w-full max-h-[90vh] rounded-2xl object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+    {/* ===== CANCEL MODAL ===== */}
+    <AnimatePresence>
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm"
+            onClick={() => setShowCancelModal(false)}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.93, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.93, y: 16 }}
+            className="bg-[#0f172a] border border-white/10 rounded-[28px] p-7 w-full max-w-md relative z-10 shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
+                  <AlertCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-tight">Hủy yêu cầu</h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">
+                  Lý do hủy yêu cầu <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Nhập lý do (ví dụ: quá xa, không đủ thiết bị, bận việc...)"
+                  className="w-full bg-black/30 border border-white/10 focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/30 rounded-2xl p-4 text-sm text-slate-300 placeholder:text-slate-600 resize-none h-28 outline-none transition-all"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest transition-all"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={confirmCancel}
+                  disabled={cancelLoading || !cancelReason.trim()}
+                  className="flex-1 py-3 bg-rose-500 hover:bg-rose-600 active:scale-95 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {cancelLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Xác nhận hủy'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+    </>
   );
 }
