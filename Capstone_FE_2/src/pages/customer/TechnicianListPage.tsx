@@ -256,12 +256,9 @@ export default function TechnicianListPage() {
     const detailCityName =
         (detailCityNameFromPayload || '').trim() || getCityName(cities, detailCityIdForLookup, '') || '';
     const detailStatus = normalizeTechStatus(selectedCard || detailSourceTech || detailTech);
-    const detailServiceName = selectedCard?.serviceName || selectedCard?.ServiceName || detailSourceTech?.serviceName || detailSourceTech?.ServiceName || detailTech?.serviceName || detailTech?.ServiceName || '';
-    const detailDescription = detailStatus === 'online'
-        ? `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang hoạt động`
-        : detailStatus === 'busy'
-            ? `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang bận`
-            : `${detailServiceName ? `Kỹ thuật viên ${detailServiceName}` : 'Kỹ thuật viên'} đang không hoạt động`;
+    const profileDescription = decodeMojibake(
+        String(detailTech?.description ?? detailTech?.Description ?? '').trim()
+    );
 
     const filtered = [...technicians,].filter(t => {
         const name = (t.technicianName || t.TechnicianName || '').toLowerCase();
@@ -569,8 +566,9 @@ export default function TechnicianListPage() {
                                     <span className="text-zinc-500">Trạng thái: </span>{detailStatus || '—'}
                                 </div>
 
-                                <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3">
-                                    <span className="text-zinc-500">Mô tả: </span>{detailDescription}
+                                <div className="rounded-2xl border border-white/10 bg-[#111c32] px-4 py-3 whitespace-pre-wrap">
+                                    <span className="text-zinc-500">Mô tả: </span>
+                                    {profileDescription || 'Chưa có mô tả'}
                                 </div>
                             </div>
                         </div>
@@ -1180,8 +1178,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const navigate = useNavigate();
 
     const [selectedService, setSelectedService] = useState('');
-    const [cityText, setCityText] = useState('Đà Nẵng');
-    const cityName = cityText?.trim() || 'Đà Nẵng';
+    const [cityText, setCityText] = useState('');
+    const cityName = cityText?.trim() || '';
     const [title, setTitle] = useState('');
     const [desc, setDesc] = useState('');
     const [address, setAddress] = useState('');
@@ -1191,15 +1189,32 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const [resolvedGeoMeta, setResolvedGeoMeta] = useState<{ source?: string; method?: string; confidence?: number; query?: string }>({});
     const [isSearching, setIsSearching] = useState(false);
     const [isTransitioning, setIsTransitioning] = useState(false);
+    const [isConfirming, setIsConfirming] = useState(false);
     const [rejectedTechIds, setRejectedTechIds] = useState<string[]>([]);
     const [foundTech, setFoundTech] = useState<any>(null);
     const [selectedCityId, setSelectedCityId] = useState('');
     const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
     const [searchReason, setSearchReason] = useState('');
+    const searchRequestRef = useRef(0);
+    const [imageFiles, setImageFiles] = useState<File[]>([]);
+    const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+    const autoFindImageRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!cities.length) return;
+        if (!selectedCityId || !cities.some(c => String(c.id) === String(selectedCityId))) {
+            const firstCity = cities[0];
+            setSelectedCityId(firstCity.id);
+            setCityText(firstCity.cityName || '');
+        }
+    }, [cities, selectedCityId]);
 
     const resetAutoFindForm = () => {
+        searchRequestRef.current += 1;
         setSelectedService('');
-        setCityText('Đà Nẵng');
+        const firstCity = cities[0];
+        setSelectedCityId(firstCity?.id || '');
+        setCityText(firstCity?.cityName || '');
         setTitle('');
         setDesc('');
         setAddress('');
@@ -1209,13 +1224,37 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setResolvedGeoMeta({});
         setIsSearching(false);
         setIsTransitioning(false);
+        setIsConfirming(false);
         setRejectedTechIds([]);
         setFoundTech(null);
         setSearchStatus('idle');
         setSearchReason('');
+        setImagePreviews(prev => {
+            prev.forEach(url => URL.revokeObjectURL(url));
+            return [];
+        });
+        setImageFiles([]);
+        if (autoFindImageRef.current) autoFindImageRef.current.value = '';
+    };
+
+    const handleAutoFindImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        setImageFiles(prev => [...prev, ...files]);
+        setImagePreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
+        if (autoFindImageRef.current) autoFindImageRef.current.value = '';
     };
 
     const handleCloseAutoFind = () => {
+        searchRequestRef.current += 1;
+        setImagePreviews(prev => {
+            prev.forEach(url => URL.revokeObjectURL(url));
+            return [];
+        });
+        setImageFiles([]);
+        if (autoFindImageRef.current) autoFindImageRef.current.value = '';
+        if (user?.id) {
+            void autoFindService.clearSession(user.id).catch(() => undefined);
+        }
         onClose();
     };
 
@@ -1247,123 +1286,84 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         toast.success('Đã lấy được latitude/longitude');
     };
 
-    const renderOnlyOnline = (items: any[]) => items.filter((t: any) => normalizeTechStatus(t) === 'online');
-
-    const addLocalOrder = (status: 'Pending Confirmation') => {
-        if (!user?.id || !foundTech) return;
-        const localKey = 'ff_customer_local_orders';
-        const current = (() => {
-            try {
-                const parsed = JSON.parse(localStorage.getItem(localKey) || '[]');
-                return Array.isArray(parsed) ? parsed : [];
-            } catch {
-                return [];
-            }
-        })();
-
-        current.unshift({
-            id: `local-${Date.now()}`,
-            customerId: user.id,
-            technicianId: resolveTechnicianGuid(foundTech),
-            technicianName: foundTech.fullName || foundTech.name || foundTech.TechnicianName,
-            serviceName: services.find((s: ServiceDTO) => s.id === selectedService)?.serviceName || foundTech.specialty || '',
-            title: title.trim() || 'Đặt thợ tự động',
-            description: desc,
-            address,
-            cityName: cityName,
-            status,
-            createdAt: new Date().toISOString(),
-            EstimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
-            estimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
-            imageUrls: [],
-            ImageUrls: [],
-            source: 'autofind-local'
-        });
-
-        localStorage.setItem(localKey, JSON.stringify(current));
-    };
-
     const handleStartSearch = async () => {
         if (!user?.id) return toast.error('Vui lòng đăng nhập!');
-        if (!selectedService || !cityText.trim() || !desc || !address) return toast.error('Vui lòng điền đủ thông tin!');
-        console.log('🔍 AutoFind payload before submit', { selectedService, cityText, title, desc, address, latitude, longitude });
+        if (!selectedService || !selectedCityId || !desc || !address) return toast.error('Vui lòng điền đủ thông tin!');
+        console.log('🔍 AutoFind payload before submit', { selectedService, selectedCityId, cityText, title, desc, address, latitude, longitude });
 
-        const fallbackFindByFilter = async () => {
-            const selectedServiceObj = services.find((s: ServiceDTO) => s.id === selectedService);
-            const selectedServiceName = normalizeText(selectedServiceObj?.serviceName || '');
-            const selectedCityName = normalizeText(cityText || 'Đà Nẵng');
-            const isDanang = selectedCityName.includes('da nang') || selectedCityName.includes('danang');
-
-            const allRes = await technicianCatalogService.getAllTechnicians();
-            const allTechs = Array.isArray(allRes) ? allRes : (allRes?.items || allRes?.data || []);
-
-            const matched = allTechs
-                .filter((t: any) => renderOnlyOnline([t]).length > 0)
-                .filter((t: any) => {
-                    const techCityName = normalizeText(t.cityName || t.CityName || t.city || t.City || 'Đà Nẵng');
-                    const techServiceName = normalizeText(t.serviceName || t.ServiceName || '');
-                    const techServiceId = t.serviceId || t.ServiceId;
-                    const serviceOk = (techServiceId && String(techServiceId) === String(selectedService)) ||
-                        techServiceName.includes(selectedServiceName) ||
-                        (selectedServiceName && techServiceName === selectedServiceName);
-                    const cityOk = isDanang ? (techCityName.includes('da nang') || techCityName.includes('danang')) : techCityName.includes(selectedCityName);
-                    return serviceOk && cityOk;
-                });
-
-            if (matched.length === 0) {
-                setSearchReason(`Không có thợ khớp ${selectedServiceName || 'dịch vụ'} tại ${cityText || 'Đà Nẵng'}.`);
-                return false;
-            }
-            const firstTech = matched[0];
-
-            const etaMinutes = Number(firstTech.estimatedTime || firstTech.EstimatedTime || 110);
-            const etaStart = new Date();
-            const etaEnd = new Date(etaStart.getTime() + etaMinutes * 60 * 1000);
-            const formatHourMinute = (date: Date) => {
-                const h = String(date.getHours()).padStart(2, '0');
-                const m = String(date.getMinutes()).padStart(2, '0');
-                return `${h}h${m}`;
-            };
-
-            setFoundTech({
-                ...firstTech,
-                technicianId: firstTech.technicianId || firstTech.TechnicianId,
-                fullName: firstTech.technicianName || firstTech.TechnicianName,
-                name: firstTech.technicianName || firstTech.TechnicianName,
-                rating: firstTech.averageRating || firstTech.AverageRating || 5,
-                specialty: firstTech.serviceName || firstTech.ServiceName,
-                serviceName: firstTech.serviceName || firstTech.ServiceName || 'Kỹ thuật viên',
-                orderCount: firstTech.orderCount || firstTech.OrderCount || 0,
-                ratingCount: firstTech.ratingCount || firstTech.RatingCount || 0,
-                avatarURL: firstTech.avatarURL || firstTech.AvatarURL || firstTech.avatarUrl || firstTech.AvatarUrl,
-                phone: firstTech.phone || firstTech.Phone || '',
-                address: firstTech.address || firstTech.Address || '',
-                city: firstTech.city || firstTech.City || '',
-                estimatedTime: etaMinutes,
-                EstimatedTime: etaMinutes,
-                etaWindow: `${formatHourMinute(etaStart)}-${formatHourMinute(etaEnd)}`
-            });
-            setSearchStatus('found');
-            setSearchReason('');
-            toast.success('Đã tìm thợ theo dữ liệu hiện có');
-            return true;
-        };
-
+        const requestId = ++searchRequestRef.current;
         setIsSearching(true);
         setSearchStatus('searching');
         try {
-            const ok = await fallbackFindByFilter();
-            if (!ok) {
-                setSearchStatus('not_found');
-                if (!searchReason) setSearchReason('Không có thợ khớp với dịch vụ và thành phố bạn chọn.');
-                toast.error('Không tìm thấy thợ phù hợp lúc này');
+            const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
+            if (requestId !== searchRequestRef.current) return;
+            const candidateLat = parseLatLng(resolvedLocation?.lat ?? latitude);
+            const candidateLng = parseLatLng(resolvedLocation?.lon ?? longitude);
+            if (candidateLat === null || candidateLng === null) {
+                toast.error('Không xác định được tọa độ từ địa chỉ và thành phố');
+                setSearchStatus('idle');
+                return;
             }
-        } catch (err) {
-            console.error(err);
-            setSearchStatus('not_found');
-            setSearchReason('Có lỗi khi tìm thợ. Vui lòng thử lại hoặc đổi dịch vụ/thành phố.');
-            toast.error('Không tìm thấy thợ phù hợp lúc này');
+
+            const latValue = candidateLat.toString();
+            const lngValue = candidateLng.toString();
+            setLatitude(latValue);
+            setLongitude(lngValue);
+            setResolvedDisplayAddress(resolvedLocation?.display_name || `${address}, ${cityName || 'Việt Nam'}`);
+
+            await autoFindService.clearSession(user.id).catch(() => undefined);
+            if (requestId !== searchRequestRef.current) return;
+            await autoFindService.findTechnicians(user.id, {
+                customerId: user.id,
+                serviceId: selectedService,
+                cityId: selectedCityId,
+                latitude: latValue,
+                longitude: lngValue,
+                description: desc
+            });
+            if (requestId !== searchRequestRef.current) return;
+            const res = await autoFindService.checkAcceptance(user.id);
+            if (requestId !== searchRequestRef.current) return;
+            if (!res || !(res.id || res.technicianId || res.TechnicianId)) {
+                setSearchStatus('not_found');
+                setSearchReason('Không có thợ phù hợp với tiêu chí bạn chọn.');
+                toast.error('Không tìm thấy thợ phù hợp lúc này');
+                return;
+            }
+
+            setFoundTech({
+                ...res,
+                technicianId: res.technicianId || res.TechnicianId || res.id,
+                fullName: res.fullName || res.FullName || res.name,
+                name: res.name || res.fullName || res.FullName,
+                specialty: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
+                serviceName: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
+                rating: res.score || res.Score || res.avgScore || res.AvgScore || 5,
+                orderCount: res.orderCount || res.OrderCount || 0,
+                ratingCount: res.ratingCount || res.RatingCount || 0,
+                avatarURL: res.avatarURL || res.AvatarURL || res.avatarUrl || res.AvatarUrl,
+                phone: res.phone || res.Phone || '',
+                address: res.address || res.Address || '',
+                city: res.city || res.City || '',
+                estimatedTime: res.estimatedTime ?? res.EstimatedTime
+            });
+            setSearchStatus('found');
+            setSearchReason('');
+        } catch (err: any) {
+            if (requestId !== searchRequestRef.current) return;
+            const status = err?.response?.status;
+            const message = err?.response?.data?.message || '';
+            if (status === 400) {
+                setSearchStatus('not_found');
+                setSearchReason(message || 'Không có thợ phù hợp với tiêu chí bạn chọn.');
+                toast.error(message || 'Không có thợ phù hợp lúc này');
+            } else {
+                setSearchStatus('not_found');
+                setSearchReason('Có lỗi khi tìm thợ. Vui lòng thử lại hoặc đổi dịch vụ/thành phố.');
+                toast.error('Không thể tìm kỹ thuật viên lúc này');
+            }
         } finally {
+            if (requestId !== searchRequestRef.current) return;
             setIsSearching(false);
             setTimeout(() => setIsTransitioning(false), 500);
         }
@@ -1374,169 +1374,84 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setIsSearching(true);
         setIsTransitioning(true);
 
-
         const rejectedTechId = resolveTechnicianGuid(foundTech);
         setRejectedTechIds(prev => prev.includes(rejectedTechId) ? prev : [...prev, rejectedTechId]);
 
-        // Không tạo local rejected order ở phía customer.
-        // Rejected orders chỉ hiển thị khi technician từ chối order thật từ backend.
-
-        const selectedServiceObj = services.find((s: ServiceDTO) => s.id === selectedService);
-        const selectedServiceName = normalizeText(selectedServiceObj?.serviceName || '');
-        const selectedCityName = normalizeText(cityText || 'Đà Nẵng');
-        const matchesService = (t: any) => {
-            const techServiceId = t.serviceId || t.ServiceId;
-            const techServiceName = normalizeText(t.serviceName || t.ServiceName || '');
-            return (techServiceId && String(techServiceId) === String(selectedService)) ||
-                techServiceName.includes(selectedServiceName) ||
-                (selectedServiceName && techServiceName === selectedServiceName);
-        };
-        const matchesCity = (t: any) => {
-            const techCityName = normalizeText(t.cityName || t.CityName || t.city || t.City || 'Đà Nẵng');
-            const selectedIsDanang = selectedCityName.includes('da nang') || selectedCityName.includes('danang');
-            return !cityText || (selectedIsDanang ? (techCityName.includes('da nang') || techCityName.includes('danang')) : techCityName.includes(selectedCityName));
-        };
-
-        const fallbackNextTechnician = async () => {
-            const listByServiceAndCity = await technicianCatalogService.filterTechnicians({
-                serviceId: selectedService,
-                cityId: undefined
-            });
-            const firstList = Array.isArray(listByServiceAndCity)
-                ? listByServiceAndCity
-                : (listByServiceAndCity?.items || listByServiceAndCity?.data || []);
-
-            let candidates = firstList.filter((t: any) => matchesService(t) && matchesCity(t));
-            if (candidates.length === 0) {
-                const listByServiceOnly = await technicianCatalogService.filterTechnicians({ serviceId: selectedService });
-                candidates = (Array.isArray(listByServiceOnly)
-                    ? listByServiceOnly
-                    : (listByServiceOnly?.items || listByServiceOnly?.data || [])).filter((t: any) => matchesService(t) && matchesCity(t));
-            }
-
-            if (candidates.length === 0) return false;
-
-            const nextTech = candidates.find((t: any) => {
-                const tid = t.technicianId || t.TechnicianId || t.id;
-                const currentId = foundTech?.technicianId || foundTech?.TechnicianId || foundTech?.id;
-                return tid && tid !== rejectedTechId && tid !== currentId && !rejectedTechIds.includes(String(tid));
-            });
-
-            if (!nextTech) return false;
-
-            setFoundTech({
-                ...nextTech,
-                technicianId: nextTech.technicianId || nextTech.TechnicianId,
-                fullName: nextTech.technicianName || nextTech.TechnicianName,
-                name: nextTech.technicianName || nextTech.TechnicianName,
-                rating: nextTech.averageRating || nextTech.AverageRating || 5,
-                specialty: nextTech.serviceName || nextTech.ServiceName,
-                serviceName: nextTech.serviceName || nextTech.ServiceName || 'Kỹ thuật viên',
-                orderCount: nextTech.orderCount || nextTech.OrderCount || 0,
-                ratingCount: nextTech.ratingCount || nextTech.RatingCount || 0,
-                avatarURL: nextTech.avatarURL || nextTech.AvatarURL || nextTech.avatarUrl || nextTech.AvatarUrl,
-                phone: nextTech.phone || nextTech.Phone || '',
-                address: nextTech.address || nextTech.Address || '',
-                city: nextTech.city || nextTech.City || '',
-                estimatedTime: nextTech.estimatedTime || nextTech.EstimatedTime || 110,
-                EstimatedTime: nextTech.estimatedTime || nextTech.EstimatedTime || 110
-            });
-            setSearchStatus('found');
-            setIsTransitioning(false);
-            toast.success('Đã từ chối thợ hiện tại. Đã đề xuất thợ khác.');
-            return true;
-        };
-
         try {
-            // Re-find lại để backend tính đề xuất mới theo cùng tiêu chí
-            const normalizedCityText = cityText.trim().toLowerCase();
-            const cityIdForRefind = selectedCityId || cities.find((c: CityDTO) => {
-                const cityName = String(c.cityName || '').trim().toLowerCase();
-                return cityName === normalizedCityText || cityName.includes(normalizedCityText) || normalizedCityText.includes(cityName);
-            })?.id || '';
+            const attempted = new Set<string>([...rejectedTechIds, rejectedTechId, resolveTechnicianGuid(foundTech)]);
+            let nextCandidate: any = null;
 
-            if (!cityIdForRefind) {
-                throw new Error('Không xác định được cityId để tìm lại thợ');
-            }
-
-            await autoFindService.findTechnicians(user.id, {
-                customerId: user.id,
-                serviceId: selectedService,
-                cityId: cityIdForRefind,
-                latitude,
-                longitude,
-                description: desc
-            });
-
-            const res = await autoFindService.checkAcceptance(user.id);
-            if (res && (res.id || res.technicianId || res.TechnicianId)) {
+            for (let i = 0; i < 15; i += 1) {
+                const res = await autoFindService.checkAcceptance(user.id);
+                if (!res || !(res.id || res.technicianId || res.TechnicianId)) break;
                 const nextBackendId = String(res.id || res.technicianId || res.TechnicianId);
-                const backendOk = nextBackendId && nextBackendId !== String(rejectedTechId) && !rejectedTechIds.includes(nextBackendId);
-                if (backendOk && matchesService(res) && matchesCity(res)) {
-                    setFoundTech({
-                        ...res,
-                        technicianId: res.technicianId || res.TechnicianId || res.id,
-                        fullName: res.fullName || res.FullName || res.name,
-                        name: res.name || res.fullName || res.FullName,
-                        specialty: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
-                        serviceName: res.serviceName || res.ServiceName || 'Kỹ thuật viên',
-                        rating: res.score || res.Score || res.avgScore || res.AvgScore || 5,
-                        orderCount: res.orderCount || res.OrderCount || 0,
-                        ratingCount: res.ratingCount || res.RatingCount || 0,
-                        avatarURL: res.avatarURL || res.AvatarURL || res.avatarUrl || res.AvatarUrl,
-                        phone: res.phone || res.Phone || '',
-                        address: res.address || res.Address || '',
-                        city: res.city || res.City || ''
-                    });
-                    setSearchStatus('found');
-                    setIsTransitioning(false);
-                    toast.success('Đã từ chối thợ hiện tại. Đã đề xuất thợ khác.');
-                    return;
+                if (!attempted.has(nextBackendId)) {
+                    nextCandidate = res;
+                    break;
                 }
             }
 
-            const hasFallback = await fallbackNextTechnician();
-            if (hasFallback) return;
+            if (!nextCandidate) {
+                setFoundTech(null);
+                setSearchStatus('not_found');
+                setSearchReason('Không còn thợ nào khác phù hợp lúc này.');
+                await autoFindService.clearSession(user.id).catch(() => undefined);
+                toast.error('Không có thợ phù hợp tiếp theo.');
+                return;
+            }
 
-            setFoundTech(null);
-            setSearchStatus('not_found');
-            setSearchReason('Không còn thợ nào khác khớp với dịch vụ và thành phố bạn chọn.');
-            setIsTransitioning(false);
-            try { await autoFindService.clearSession(user.id); } catch { }
-            toast.success('Đã từ chối. Không còn thợ phù hợp để đề xuất thêm.');
+            setFoundTech({
+                ...nextCandidate,
+                technicianId: nextCandidate.technicianId || nextCandidate.TechnicianId || nextCandidate.id,
+                fullName: nextCandidate.fullName || nextCandidate.FullName || nextCandidate.name,
+                name: nextCandidate.name || nextCandidate.fullName || nextCandidate.FullName,
+                specialty: nextCandidate.serviceName || nextCandidate.ServiceName || 'Kỹ thuật viên',
+                serviceName: nextCandidate.serviceName || nextCandidate.ServiceName || 'Kỹ thuật viên',
+                rating: nextCandidate.score || nextCandidate.Score || nextCandidate.avgScore || nextCandidate.AvgScore || 5,
+                orderCount: nextCandidate.orderCount || nextCandidate.OrderCount || 0,
+                ratingCount: nextCandidate.ratingCount || nextCandidate.RatingCount || 0,
+                avatarURL: nextCandidate.avatarURL || nextCandidate.AvatarURL || nextCandidate.avatarUrl || nextCandidate.AvatarUrl,
+                phone: nextCandidate.phone || nextCandidate.Phone || '',
+                address: nextCandidate.address || nextCandidate.Address || '',
+                city: nextCandidate.city || nextCandidate.City || '',
+                estimatedTime: nextCandidate.estimatedTime ?? nextCandidate.EstimatedTime
+            });
+            setSearchStatus('found');
+            setSearchReason('');
+            toast.success('Đã đề xuất kỹ thuật viên tiếp theo.');
         } catch {
-            try {
-                const hasFallback = await fallbackNextTechnician();
-                if (hasFallback) return;
-            } catch { }
-
-            try { await autoFindService.clearSession(user.id); } catch { }
-            setIsTransitioning(false);
-            toast.success('Đã từ chối thợ. Vui lòng thử tìm lại để nhận đề xuất khác.');
+            setSearchStatus('not_found');
+            setSearchReason('Không còn thợ nào khác phù hợp lúc này.');
+            toast.error('Không có thợ phù hợp tiếp theo.');
         } finally {
+            setIsTransitioning(false);
             setIsSearching(false);
         }
     };
 
     const handleConfirmBooking = async () => {
         if (!foundTech || !user) return;
-        setIsTransitioning(true);
+        setIsConfirming(true);
         try {
-            const normalizedCityText = cityText.trim().toLowerCase();
-            const resolvedCityId = selectedCityId || cities.find((c: CityDTO) => {
-                const cityName = String(c.cityName || '').trim().toLowerCase();
-                return cityName === normalizedCityText || cityName.includes(normalizedCityText) || normalizedCityText.includes(cityName);
-            })?.id || '';
+            const resolvedCityId = selectedCityId;
 
             if (!resolvedCityId) {
                 toast.error('Không xác định được cityId hợp lệ, vui lòng chọn lại thành phố');
                 return;
             }
 
-            const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
+            const currentLat = parseLatLng(latitude);
+            const currentLng = parseLatLng(longitude);
+            const resolvedLocation = (currentLat !== null && currentLng !== null)
+                ? null
+                : await resolveLocationFromAddress(address, cityName).catch(() => null);
             const resolvedLatitude = resolvedLocation?.lat || latitude;
             const resolvedLongitude = resolvedLocation?.lon || longitude;
             const resolvedAddress = resolvedLocation?.display_name || address;
+            const estimatedTimeValue = Number(getTechEstimatedTime(foundTech));
+            const finalEstimatedTime = Number.isFinite(estimatedTimeValue) && estimatedTimeValue > 0
+                ? estimatedTimeValue
+                : 150;
 
             setLatitude(resolvedLatitude);
             setLongitude(resolvedLongitude);
@@ -1553,16 +1468,16 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                 address: resolvedAddress,
                 latitude: resolvedLatitude,
                 longitude: resolvedLongitude,
-                estimatedTime: foundTech.estimatedTime || foundTech.EstimatedTime || 110,
-                status: 'Pending Confirmation'
+                estimatedTime: finalEstimatedTime,
+                status: 'Pending Confirmation',
+                ...(imageFiles.length ? { imageFiles } : {})
             });
-
-            // Step 4: tạo order thành công -> clear cache
-            try { await autoFindService.clearSession(user.id); } catch { }
 
             toast.success('Đặt thợ thành công!');
             onClose();
             navigate('/customer/orders?status=pending');
+            // cleanup in background so dialog can close immediately
+            void autoFindService.clearSession(user.id).catch(() => undefined);
         } catch (err: any) {
             const responseData = err?.response?.data;
             const errorMessage = responseData?.message || err?.message || 'Đặt thợ thất bại';
@@ -1576,18 +1491,12 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                     cityText,
                     selectedCityId,
                     latitude,
-                    longitude,
-                    estimatedTime: foundTech?.estimatedTime || foundTech?.EstimatedTime || 110
+                    longitude
                 }
             });
-
-            // fallback frontend-only: vẫn tạo local order để hiện ở trang pending
-            addLocalOrder('Pending Confirmation');
-            toast.error(`${errorMessage} - Đã lưu đơn tạm trên giao diện.`);
-            onClose();
-            navigate('/customer/orders?status=pending');
+            toast.error(errorMessage);
         } finally {
-            setTimeout(() => setIsTransitioning(false), 500);
+            setIsConfirming(false);
         }
     };
 
@@ -1630,12 +1539,23 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
                             <div className="space-y-1.5">
                                 <Label className="text-zinc-300">Thành phố</Label>
-                                <Input
-                                    placeholder="Nhập thành phố..."
-                                    value={cityText}
-                                    onChange={e => setCityText(e.target.value)}
-                                    className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-zinc-500 focus:border-primary/50"
-                                />
+                                <select
+                                    value={selectedCityId}
+                                    onChange={e => {
+                                        const cityId = e.target.value;
+                                        setSelectedCityId(cityId);
+                                        const city = cities.find((c: CityDTO) => String(c.id) === String(cityId));
+                                        setCityText(city?.cityName || '');
+                                    }}
+                                    className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none transition focus:border-primary/50"
+                                >
+                                    <option value="" className="bg-[#0a1122]">Chọn thành phố...</option>
+                                    {cities.map((c: CityDTO) => (
+                                        <option key={c.id} value={c.id} className="bg-[#0a1122]">
+                                            {c.cityName}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div className="space-y-1.5 md:col-span-2">
@@ -1668,6 +1588,46 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                                 />
                             </div>
 
+                            <div className="space-y-1.5 md:col-span-2">
+                                <Label className="text-zinc-300">Hình ảnh <span className="font-normal text-zinc-500">(tùy chọn)</span></Label>
+                                <input
+                                    ref={autoFindImageRef}
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleAutoFindImages}
+                                    className="hidden"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 w-full rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10 sm:w-auto"
+                                    onClick={() => autoFindImageRef.current?.click()}
+                                >
+                                    <Camera className="mr-2 h-4 w-4" /> Chọn ảnh
+                                </Button>
+                                {imagePreviews.length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {imagePreviews.map((src, i) => (
+                                            <div key={`${src}-${i}`} className="group relative h-14 w-14">
+                                                <img src={src} alt="" className="h-full w-full rounded-lg border border-white/10 object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        URL.revokeObjectURL(src);
+                                                        setImagePreviews(p => p.filter((_, j) => j !== i));
+                                                        setImageFiles(p => p.filter((_, j) => j !== i));
+                                                    }}
+                                                    className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-white opacity-0 transition group-hover:opacity-100"
+                                                >
+                                                    <X size={8} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
                         </div>
 
                         <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
@@ -1698,7 +1658,20 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                             <h3 className="text-xl font-bold text-white">Đang tìm thợ gần bạn...</h3>
                             <p className="mt-2 max-w-md text-sm text-zinc-400">Hệ thống đang kiểm tra thợ phù hợp nhất theo dịch vụ, khu vực và trạng thái rảnh.</p>
                         </div>
-                        <Button variant="ghost" className="rounded-xl text-red-400 hover:bg-red-400/10 hover:text-red-300" onClick={() => setSearchStatus('idle')}>
+                        <Button
+                            variant="ghost"
+                            className="rounded-xl text-red-400 hover:bg-red-400/10 hover:text-red-300"
+                            onClick={async () => {
+                                searchRequestRef.current += 1;
+                                if (user?.id) await autoFindService.clearSession(user.id).catch(() => undefined);
+                                setIsSearching(false);
+                                setIsTransitioning(false);
+                                setIsConfirming(false);
+                                setFoundTech(null);
+                                setSearchReason('');
+                                setSearchStatus('idle');
+                            }}
+                        >
                             Hủy tìm kiếm
                         </Button>
                     </div>
@@ -1758,11 +1731,11 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
                         {!isTransitioning && (
                             <div className="grid gap-3 sm:grid-cols-2">
-                                <Button variant="outline" className="h-11 rounded-xl border-white/10 bg-white/5 font-semibold text-white hover:bg-white/10" onClick={handleRejectTechnician} disabled={isSearching || isTransitioning}>
+                                <Button variant="outline" className="h-11 rounded-xl border-white/10 bg-white/5 font-semibold text-white hover:bg-white/10" onClick={handleRejectTechnician} disabled={isSearching || isTransitioning || isConfirming}>
                                     {isSearching ? 'Đang lấy thợ khác...' : 'Từ chối thợ này'}
                                 </Button>
-                                <Button className="h-11 rounded-xl bg-green-600 font-bold text-white hover:bg-green-700" onClick={handleConfirmBooking} disabled={isTransitioning}>
-                                    Xác nhận đặt lịch
+                                <Button className="h-11 rounded-xl bg-green-600 font-bold text-white hover:bg-green-700" onClick={handleConfirmBooking} disabled={isTransitioning || isConfirming}>
+                                    {isConfirming ? 'Đang đặt lịch...' : 'Xác nhận đặt lịch'}
                                 </Button>
                             </div>
                         )}

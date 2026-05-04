@@ -100,7 +100,7 @@ export default function OrdersPage() {
             : (typeof imageUrlsRaw === 'string' ? [imageUrlsRaw] : []);
         return { imageUrls };
     };
-    
+
     // Listen to real-time notifications (from SignalR)
     const { notifications } = useNotificationSignalR();
     const { joinRoom, leaveRoom, isConnected } = useChatSignalR();
@@ -164,7 +164,7 @@ export default function OrdersPage() {
                 .filter((o: any) => (o?.customerId || '') === user.id)
                 .filter((o: any) => {
                     const s = normalizeStatus(String(o?.status || ''));
-                    if (statusParam === 'pending') return s === 'pending' || s === 'pending-confirmation';
+                    if (statusParam === 'pending') return s === 'pending' || s === 'pending-confirmation' || s === 'confirmed';
                     if (statusParam === 'in-progress') return s === 'in-progress' || s === 'inprogress';
                     if (statusParam === 'completed') return s === 'completed' || s === 'done';
                     if (statusParam === 'cancelled') return s === 'cancelled' || s === 'canceled';
@@ -469,7 +469,7 @@ export default function OrdersPage() {
 
         if (statusParam === 'all') return !isCompleted;
 
-        if (statusParam === 'pending') return s === 'pending' || s === 'pending-confirmation';
+        if (statusParam === 'pending') return s === 'pending' || s === 'pending-confirmation' || s === 'confirmed';
 
         if (statusParam === 'in-progress') return s === 'in-progress' || s === 'inprogress';
         if (statusParam === 'completed') return false;
@@ -480,6 +480,14 @@ export default function OrdersPage() {
     });
 
     const filteredOrders = filteredOrdersBase;
+    const pendingWaitingCount = filteredOrders.filter((o) => {
+        const s = normalizeStatus(o.status || o.Status || '');
+        return s === 'pending' || s === 'pending-confirmation';
+    }).length;
+    const pendingConfirmedCount = filteredOrders.filter((o) => {
+        const s = normalizeStatus(o.status || o.Status || '');
+        return s === 'confirmed';
+    }).length;
 
     const getStatusTitle = (status: string) => {
         switch (status) {
@@ -560,7 +568,14 @@ export default function OrdersPage() {
                     <div>
                         <h2 className="text-xl font-semibold text-white">{getStatusTitle(statusParam)}</h2>
                         {statusParam === 'pending' && (
-                            <p className="mt-1 text-sm text-blue-300/80">Luôn ưu tiên hiển thị khung giờ dự kiến nếu đơn có EstimatedTime.</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                <span className="rounded-full border border-zinc-500/30 bg-zinc-500/10 px-2.5 py-1 text-zinc-300">
+                                    Đơn đang chờ xác nhận: {pendingWaitingCount}
+                                </span>
+                                <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-blue-300">
+                                    Đơn đã xác nhận: {pendingConfirmedCount}
+                                </span>
+                            </div>
                         )}
                     </div>
                     <div className="flex items-center gap-3">
@@ -676,103 +691,103 @@ export default function OrdersPage() {
                                             const status = normalizeStatus(order.status || order.Status || '');
                                             return status === 'in-progress' || status === 'inprogress';
                                         })() && (
-                                            <Button
-                                                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white h-11 text-[13px] font-bold truncate px-3 shadow-lg shadow-green-600/25"
-                                                onClick={() => handleConfirmComplete(order)}
-                                            >
-                                                ✓ Hoàn thành
-                                            </Button>
-                                        )}
+                                                <Button
+                                                    className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 text-white h-11 text-[13px] font-bold truncate px-3 shadow-lg shadow-green-600/25"
+                                                    onClick={() => handleConfirmComplete(order)}
+                                                >
+                                                    ✓ Hoàn thành
+                                                </Button>
+                                            )}
 
                                         {(() => {
                                             const status = normalizeStatus(order.status || order.Status || '');
                                             return status === 'pending' || status === 'pending-confirmation';
                                         })() && (
-                                            <Button
-                                                variant="outline"
-                                                className="w-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10 h-11 text-[13px] font-bold truncate px-3"
-                                                onClick={() => handleOpenUpdate(order)}
-                                            >
-                                                Cập nhật
-                                            </Button>
-                                        )}
+                                                <Button
+                                                    variant="outline"
+                                                    className="w-full border-blue-500/30 text-blue-400 hover:bg-blue-500/10 h-11 text-[13px] font-bold truncate px-3"
+                                                    onClick={() => handleOpenUpdate(order)}
+                                                >
+                                                    Cập nhật
+                                                </Button>
+                                            )}
 
                                         {(() => {
                                             const status = normalizeStatus(order.status || order.Status || '');
                                             return status === 'pending' || status === 'pending-confirmation';
                                         })() && (
-                                            <Button
-                                                variant="outline"
-                                                className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 h-11 text-[13px] font-bold truncate px-3"
-                                                onClick={() => handleCancel(order)}
-                                            >
-                                                <X className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
-                                                <span className="truncate">Hủy đơn</span>
-                                            </Button>
-                                        )}
+                                                <Button
+                                                    variant="outline"
+                                                    className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 h-11 text-[13px] font-bold truncate px-3"
+                                                    onClick={() => handleCancel(order)}
+                                                >
+                                                    <X className="w-3.5 h-3.5 mr-1 flex-shrink-0" />
+                                                    <span className="truncate">Hủy đơn</span>
+                                                </Button>
+                                            )}
 
                                         {(() => {
                                             const status = normalizeStatus(order.status || order.Status || '');
                                             return status !== 'cancelled' && status !== 'canceled';
                                         })() && (
-                                            <Button
-                                                variant="ghost"
-                                                className="w-full border border-[#272a3d] bg-[#1c1f2e] hover:bg-[#22253a] hover:border-[#3b4068] text-[#8b93b8] hover:text-[#c5cadf] h-11 text-[13px] font-bold truncate px-3"
-                                                onClick={async () => {
-                                                    const roomId = String(pick(order, ['roomId', 'RoomId']) || '').trim();
-                                                    const techName = String(pick(order, ['technicianName', 'TechnicianName']) || '').trim();
-                                                    const orderId = String(pick(order, ['id', 'Id', 'orderId', 'OrderId']) || '').trim();
+                                                <Button
+                                                    variant="ghost"
+                                                    className="w-full border border-[#272a3d] bg-[#1c1f2e] hover:bg-[#22253a] hover:border-[#3b4068] text-[#8b93b8] hover:text-[#c5cadf] h-11 text-[13px] font-bold truncate px-3"
+                                                    onClick={async () => {
+                                                        const roomId = String(pick(order, ['roomId', 'RoomId']) || '').trim();
+                                                        const techName = String(pick(order, ['technicianName', 'TechnicianName']) || '').trim();
+                                                        const orderId = String(pick(order, ['id', 'Id', 'orderId', 'OrderId']) || '').trim();
 
-                                                    // 1) Nếu đã có roomId từ backend thì dùng luôn
-                                                    if (roomId) {
-                                                        if (orderId) localStorage.setItem(`ff_order_room_${orderId}`, roomId);
-                                                        const q = new URLSearchParams({ roomId });
-                                                        if (techName) q.set('techName', techName);
-                                                        if (orderId) q.set('orderId', orderId);
-                                                        navigate(`/customer/contact?${q.toString()}`);
-                                                        return;
-                                                    }
-
-                                                    // 2) Khóa cứng đúng room: tạo/lấy room ngay tại Orders rồi điều hướng theo roomId
-                                                    const techId = resolveTechnicianChatId(order);
-                                                    if (user?.id && techId) {
-                                                        try {
-                                                            const roomRes = await chatService.getOrCreateRoom(user.id, techId);
-                                                            const ensuredRoomId = String(roomRes?.roomId || roomRes?.RoomId || roomRes?.id || roomRes?.Id || roomRes || '').trim();
-                                                            if (ensuredRoomId) {
-                                                                if (orderId) localStorage.setItem(`ff_order_room_${orderId}`, ensuredRoomId);
-                                                                localStorage.setItem(`ff_order_other_${orderId}`, techId);
-                                                                const q = new URLSearchParams({ roomId: ensuredRoomId });
-                                                                if (techName) q.set('techName', techName);
-                                                                if (orderId) q.set('orderId', orderId);
-                                                                localStorage.setItem('technicianId', techId);
-                                                                navigate(`/customer/contact?${q.toString()}`);
-                                                                return;
-                                                            }
-                                                        } catch (err: any) {
-                                                            console.error('getOrCreateRoom from Orders failed', err);
+                                                        // 1) Nếu đã có roomId từ backend thì dùng luôn
+                                                        if (roomId) {
+                                                            if (orderId) localStorage.setItem(`ff_order_room_${orderId}`, roomId);
+                                                            const q = new URLSearchParams({ roomId });
+                                                            if (techName) q.set('techName', techName);
+                                                            if (orderId) q.set('orderId', orderId);
+                                                            navigate(`/customer/contact?${q.toString()}`);
+                                                            return;
                                                         }
-                                                    }
 
-                                                    // 3) Fallback mềm
-                                                    if (techId) {
-                                                        const q = new URLSearchParams({ techId });
-                                                        if (techName) q.set('techName', techName);
-                                                        localStorage.setItem('technicianId', techId);
-                                                        navigate(`/customer/contact?${q.toString()}`);
-                                                        return;
-                                                    }
+                                                        // 2) Khóa cứng đúng room: tạo/lấy room ngay tại Orders rồi điều hướng theo roomId
+                                                        const techId = resolveTechnicianChatId(order);
+                                                        if (user?.id && techId) {
+                                                            try {
+                                                                const roomRes = await chatService.getOrCreateRoom(user.id, techId);
+                                                                const ensuredRoomId = String(roomRes?.roomId || roomRes?.RoomId || roomRes?.id || roomRes?.Id || roomRes || '').trim();
+                                                                if (ensuredRoomId) {
+                                                                    if (orderId) localStorage.setItem(`ff_order_room_${orderId}`, ensuredRoomId);
+                                                                    localStorage.setItem(`ff_order_other_${orderId}`, techId);
+                                                                    const q = new URLSearchParams({ roomId: ensuredRoomId });
+                                                                    if (techName) q.set('techName', techName);
+                                                                    if (orderId) q.set('orderId', orderId);
+                                                                    localStorage.setItem('technicianId', techId);
+                                                                    navigate(`/customer/contact?${q.toString()}`);
+                                                                    return;
+                                                                }
+                                                            } catch (err: any) {
+                                                                console.error('getOrCreateRoom from Orders failed', err);
+                                                            }
+                                                        }
 
-                                                    if (techName) {
-                                                        navigate(`/customer/contact?techName=${encodeURIComponent(techName)}`);
-                                                    } else {
-                                                        navigate('/customer/contact');
-                                                    }
-                                                }}
-                                            >
-                                                💬 Chat với thợ
-                                            </Button>
-                                        )}
+                                                        // 3) Fallback mềm
+                                                        if (techId) {
+                                                            const q = new URLSearchParams({ techId });
+                                                            if (techName) q.set('techName', techName);
+                                                            localStorage.setItem('technicianId', techId);
+                                                            navigate(`/customer/contact?${q.toString()}`);
+                                                            return;
+                                                        }
+
+                                                        if (techName) {
+                                                            navigate(`/customer/contact?techName=${encodeURIComponent(techName)}`);
+                                                        } else {
+                                                            navigate('/customer/contact');
+                                                        }
+                                                    }}
+                                                >
+                                                    💬 Chat với thợ
+                                                </Button>
+                                            )}
                                     </div>
                                 </div>
 
@@ -1208,6 +1223,7 @@ function StatusBadge({ status }: { status: string }) {
     let label = 'Chờ xác nhận';
 
     if (s === 'pending' || s === 'pending-confirmation') { color = 'bg-zinc-500/10 text-zinc-300 border-zinc-500/20'; label = 'Chờ xác nhận'; }
+    else if (s === 'confirmed') { color = 'bg-blue-500/10 text-blue-400 border-blue-500/20'; label = 'Đã xác nhận'; }
     else if (s === 'accepted') { color = 'bg-blue-500/10 text-blue-400 border-blue-500/20'; label = 'Đã tiếp nhận'; }
     else if (s === 'in-progress' || s === 'inprogress') { color = 'bg-amber-500/10 text-amber-400 border-amber-500/20'; label = 'Đang thực hiện'; }
     else if (s === 'completed' || s === 'done') { color = 'bg-green-500/10 text-green-400 border-green-500/20'; label = 'Hoàn thành'; }
