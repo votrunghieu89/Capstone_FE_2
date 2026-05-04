@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
 import technicianService from '@/services/technicianService';
+import { statisticService } from '@/services/statisticService';
 import orderService from '@/services/orderService';
 import type { ViewOrderDTO, ViewOrderDetailDTO } from '@/types/order';
 import type { RatingOverviewDTO } from '@/types/technician';
@@ -45,7 +46,7 @@ export default function TechHistoryPage() {
   const [ratingsList, setRatingsList] = useState<any[]>([]);
   const [ratingOverview, setRatingOverview] = useState<RatingOverviewDTO | null>(null);
   
-  const [stats, setStats] = useState({ totalOrders: 0, avgRating: 0, totalCompleted: 0 });
+  const [stats, setStats] = useState({ totalOrders: 0, avgRating: 0, totalCompleted: 0, totalCanceled: 0, totalRejected: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
 
@@ -73,16 +74,20 @@ export default function TechHistoryPage() {
     if (!user?.id) return;
     try {
       setLoadingStats(true);
-      const [total, avg, completed, overview] = await Promise.allSettled([
+      const [total, avg, completed, overview, canceled, rejected] = await Promise.allSettled([
         technicianService.getTotalOrders(user.id),
         technicianService.getAvgRating(user.id),
         technicianService.getTotalCompleted(user.id),
-        technicianService.getRatingOverview(user.id)
+        technicianService.getRatingOverview(user.id),
+        statisticService.getTotalCanceled(user.id),
+        statisticService.getTotalRejected(user.id)
       ]);
       setStats({
         totalOrders: total.status === 'fulfilled' ? total.value : 0,
         avgRating: avg.status === 'fulfilled' ? avg.value : 0,
-        totalCompleted: completed.status === 'fulfilled' ? completed.value : 0
+        totalCompleted: completed.status === 'fulfilled' ? completed.value : 0,
+        totalCanceled: canceled.status === 'fulfilled' ? canceled.value : 0,
+        totalRejected: rejected.status === 'fulfilled' ? rejected.value : 0
       });
       if (overview.status === 'fulfilled') setRatingOverview(overview.value);
     } catch (e) {
@@ -279,22 +284,7 @@ export default function TechHistoryPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
-          <div className="space-y-6 relative z-10">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Lưu lượng nhận đơn</p>
-            <div className="flex items-end gap-4">
-              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalOrders}</span>
-              <div className="flex items-center gap-1.5 text-blue-400 mb-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full shadow-lg">
-                <span className="text-[10px] font-bold whitespace-nowrap">Đơn giao phó</span>
-              </div>
-            </div>
-          </div>
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700">
-             <CheckCircle2 size={80} className="text-blue-500" />
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
         <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
           <div className="space-y-6 relative z-10">
             <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
@@ -321,19 +311,73 @@ export default function TechHistoryPage() {
           </div>
         </div>
 
+        {/* Canceled Card */}
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
+          <div className="space-y-6 relative z-10">
+            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-2">
+               <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+               ĐƠN BỊ HỦY
+            </p>
+            <div className="flex flex-col gap-3">
+              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalCanceled}</span>
+              <div className="w-full">
+                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
+                   <div 
+                    className="h-full bg-rose-500 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.4)] transition-all duration-1000" 
+                    style={{ width: `${stats.totalOrders > 0 ? (stats.totalCanceled / stats.totalOrders) * 100 : 0}%` }}
+                   />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">
+                  Đơn bị hủy
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700 pointer-events-none">
+             <XCircle size={80} className="text-rose-500" />
+          </div>
+        </div>
+
+        {/* Rejected Card */}
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
+          <div className="space-y-6 relative z-10">
+            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest flex items-center gap-2">
+               <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+               TỪ CHỐI
+            </p>
+            <div className="flex flex-col gap-3">
+              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalRejected}</span>
+              <div className="w-full">
+                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
+                   <div 
+                    className="h-full bg-orange-500 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.4)] transition-all duration-1000" 
+                    style={{ width: `${stats.totalOrders > 0 ? (stats.totalRejected / stats.totalOrders) * 100 : 0}%` }}
+                   />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">
+                  Đơn từ chối
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700 pointer-events-none">
+             <ShieldAlert size={80} className="text-orange-500" />
+          </div>
+        </div>
+
         <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] shadow-2xl shadow-black/40 overflow-hidden relative group">
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 relative z-10">Đánh giá độ uy tín</p>
           <div className="flex items-center gap-6 relative z-10">
             <span className="text-6xl font-black text-white leading-none tracking-tighter drop-shadow-xl">
-              {ratingOverview && ratingOverview.totalRating > 0 
-                ? ratingOverview.avgScore.toFixed(1) 
+              {ratingOverview && (ratingOverview.totalRating > 0 || (ratingOverview as any).TotalRating > 0) 
+                ? (ratingOverview.avgScore ?? (ratingOverview as any).AvgScore).toFixed(1) 
                 : (stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "5.0")}
             </span>
             <div className="space-y-2.5">
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => {
-                  const currentScore = (ratingOverview && ratingOverview.totalRating > 0) 
-                    ? ratingOverview.avgScore 
+                  const currentScore = (ratingOverview && (ratingOverview.totalRating > 0 || (ratingOverview as any).TotalRating > 0)) 
+                    ? (ratingOverview.avgScore ?? (ratingOverview as any).AvgScore) 
                     : (stats.avgRating > 0 ? stats.avgRating : 5);
                   return (
                     <Star 
@@ -347,7 +391,7 @@ export default function TechHistoryPage() {
                   );
                 })}
               </div>
-              <p className="text-[9px] text-amber-400/80 font-bold uppercase tracking-widest">Từ {ratingOverview?.totalRating || 0} lượt phản hồi</p>
+              <p className="text-[9px] text-amber-400/80 font-bold uppercase tracking-widest">Từ {ratingOverview?.totalRating ?? (ratingOverview as any)?.TotalRating ?? 0} lượt phản hồi</p>
             </div>
           </div>
            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:-rotate-12 group-hover:scale-110 transition-all duration-700">
@@ -489,7 +533,6 @@ export default function TechHistoryPage() {
                          <th className="pb-3 px-4">Thời gian</th>
                          <th className="pb-3 px-4">Trạng thái</th>
                          <th className="pb-3 px-4 text-center">Đánh giá</th>
-                         <th className="pb-3 px-4 text-center">Thao tác</th>
                        </tr>
                      </thead>
                      <tbody className="divide-y divide-white/[0.02]">
@@ -546,15 +589,6 @@ export default function TechHistoryPage() {
                              ) : (
                                <span className="text-slate-600 font-bold">-</span>
                              )}
-                           </td>
-                           <td className="py-4 px-4 text-center">
-                             <button
-                               onClick={() => openDetailModal(item.orderId)}
-                               className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all shadow-sm active:scale-95 border border-blue-500/20"
-                               title="Xem chi tiết"
-                             >
-                               <Eye size={16} />
-                             </button>
                            </td>
                          </tr>
                          <tr className="border-b border-white/[0.02]">
