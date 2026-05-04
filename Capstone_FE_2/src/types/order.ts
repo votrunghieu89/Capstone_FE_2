@@ -13,6 +13,8 @@ export enum OrderStatus {
 // Matches BE: Capstone_2_BE.DTOs.Technician.Orders.ViewOrderDTO
 export interface ViewOrderDTO {
   orderId: string;
+  /** Guid khách hàng — BE Technician ViewOrderDTO */
+  customerId?: string;
   customerName: string;
   customerPhone?: string;
   phoneNumber?: string; // Backend actually sends this
@@ -90,6 +92,7 @@ export interface OrderOverviewDTO {
 // Matches BE: Capstone_2_BE.DTOs.Customer.Order.OrderDetailDTO
 export interface OrderDetailDTO {
   orderId: string;
+  customerId?: string;
   technicianName: string;
   technicianPhone: string;
   technicianAvatar: string;

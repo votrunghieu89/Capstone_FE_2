@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { Wrench, Calendar, Clock, ClipboardList, X, Loader2, RefreshCw, MessageCircle } from 'lucide-react';
@@ -103,7 +103,48 @@ export default function OrdersPage() {
 
     // Listen to real-time notifications (from SignalR)
     const { notifications } = useNotificationSignalR();
-    const { joinRoom, leaveRoom, isConnected } = useChatSignalR();
+    const { joinRoom, leaveRoom, isConnected, notifications: chatNotifications } = useChatSignalR();
+    const unreadBySenderId = useMemo(() => {
+        const map: Record<string, number> = {};
+        (chatNotifications || []).forEach((n: any) => {
+            const senderId = String(n?.SenderId || n?.SenderID || n?.senderId || n?.senderID || n?.senderid || '').trim();
+            if (!senderId) return;
+            map[senderId] = (map[senderId] || 0) + 1;
+        });
+        return map;
+    }, [chatNotifications]);
+    const [unreadByOtherId, setUnreadByOtherId] = useState<Record<string, number>>({});
+    const refreshUnreadFromRooms = useCallback(async () => {
+        if (!user?.id) return;
+        try {
+            const res = await chatService.getAllRooms(user.id, 1, 100);
+            const rooms = Array.isArray(res) ? res : (res?.items || res?.data || []);
+            const map: Record<string, number> = {};
+            rooms.forEach((room: any) => {
+                const otherId = String(room?.otherId || room?.OtherId || room?.otherPartyId || room?.OtherPartyId || '').trim();
+                if (!otherId) return;
+                const unreadCount = Number(room?.unreadCount ?? room?.UnreadCount ?? 0);
+                const hasUnread = Boolean(room?.hasUnread ?? room?.HasUnread);
+                const value = Number.isFinite(unreadCount) && unreadCount > 0 ? unreadCount : (hasUnread ? 1 : 0);
+                if (value > 0) map[otherId] = Math.max(map[otherId] || 0, value);
+            });
+            setUnreadByOtherId(map);
+        } catch {
+            // keep previous unread state
+        }
+    }, [user?.id]);
+    useEffect(() => {
+        if (!user?.id) return;
+        void refreshUnreadFromRooms();
+        const timer = window.setInterval(() => {
+            void refreshUnreadFromRooms();
+        }, 8000);
+        return () => window.clearInterval(timer);
+    }, [refreshUnreadFromRooms, user?.id]);
+    useEffect(() => {
+        if (!chatNotifications.length) return;
+        void refreshUnreadFromRooms();
+    }, [chatNotifications.length, refreshUnreadFromRooms]);
     const fetchOrders = useCallback(async (silent = false) => {
         if (!user?.id) { setIsLoading(false); return; }
         if (!silent) setIsLoading(true); else setRefreshing(true);
@@ -768,7 +809,7 @@ export default function OrdersPage() {
                                         })() && (
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-full border border-[#272a3d] bg-[#1c1f2e] hover:bg-[#22253a] hover:border-[#3b4068] text-[#8b93b8] hover:text-[#c5cadf] h-11 text-[13px] font-bold truncate px-3"
+                                                    className="relative w-full border border-[#272a3d] bg-[#1c1f2e] hover:bg-[#22253a] hover:border-[#3b4068] text-[#8b93b8] hover:text-[#c5cadf] h-11 text-[13px] font-bold truncate px-3"
                                                     onClick={async () => {
                                                         const roomId = String(pick(order, ['roomId', 'RoomId']) || '').trim();
                                                         const techName = String(pick(order, ['technicianName', 'TechnicianName']) || '').trim();
@@ -821,6 +862,17 @@ export default function OrdersPage() {
                                                         }
                                                     }}
                                                 >
+                                                    {(() => {
+                                                        const techId = resolveTechnicianChatId(order);
+                                                        const key = String(techId || '').trim();
+                                                        const unreadCount = key ? Math.max(unreadBySenderId[key] || 0, unreadByOtherId[key] || 0) : 0;
+                                                        if (!unreadCount) return null;
+                                                        return (
+                                                            <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ff2d55] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-[#1c1f2e] z-10">
+                                                                {unreadCount > 99 ? '99+' : unreadCount}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     💬 Chat với thợ
                                                 </Button>
                                             )}

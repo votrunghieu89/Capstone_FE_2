@@ -140,23 +140,42 @@ export function useChatSignalR(roomId?: string) {
     if (!user?.id) return;
 
     let mounted = true;
+    const appendNotificationIfNew = (message: any) => {
+      setNotifications((prev) => {
+        const key = String(
+          message?.MessId ||
+          message?.MessID ||
+          message?.messId ||
+          message?.id ||
+          message?.Id ||
+          ''
+        );
+        if (!key) return prev;
+        if (prev.some((m: any) => String(m?.MessId || m?.MessID || m?.messId || m?.id || m?.Id || '') === key)) return prev;
+        return [...prev, message];
+      });
+    };
+
     const handler = (message: any) => {
       if (!mounted) return;
 
       const messageRoomId = String(message?.RoomId || message?.roomId || message?.roomID || message?.roomid || '');
       const activeRoomId = String(roomRef.current || '');
 
+      // ChatMessage + NewMessageNotification có thể trùng MessId — gộp vào notifications để badge/unread đếm đúng
+      appendNotificationIfNew(message);
+
       // Chỉ append message thuộc room đang mở để tránh lẫn tin giữa các phòng chat
       if (activeRoomId && messageRoomId && activeRoomId !== messageRoomId) return;
 
       setMessages(prev => {
-        const newId = String(message?.MessId || message?.messId || message?.id || message?.Id || '');
+        const newId = String(message?.MessId || message?.MessID || message?.messId || message?.id || message?.Id || '');
         const newContent = String(message?.Content || message?.content || '');
         const newSenderId = String(message?.SenderId || message?.senderId || '');
         const newCreatedAt = String(message?.CreateAt || message?.createdAt || '');
 
         const isDuplicate = prev.some((m: any) => {
-          const oldId = String(m?.MessId || m?.messId || m?.id || m?.Id || '');
+          const oldId = String(m?.MessId || m?.MessID || m?.messId || m?.id || m?.Id || '');
           const oldContent = String(m?.Content || m?.content || '');
           const oldSenderId = String(m?.SenderId || m?.senderId || '');
           const oldCreatedAt = String(m?.CreateAt || m?.createdAt || '');
@@ -178,11 +197,7 @@ export function useChatSignalR(roomId?: string) {
 
     const notificationHandler = (message: any) => {
       if (!mounted) return;
-      setNotifications(prev => {
-        const key = String(message?.MessId || message?.messId || message?.id || message?.Id || `${message?.RoomId || message?.roomId}-${Date.now()}`);
-        if (key && prev.some((m: any) => String(m?.MessId || m?.messId || m?.id || m?.Id || '') === key)) return prev;
-        return [...prev, message];
-      });
+      appendNotificationIfNew(message);
     };
 
     listeners.add(handler);

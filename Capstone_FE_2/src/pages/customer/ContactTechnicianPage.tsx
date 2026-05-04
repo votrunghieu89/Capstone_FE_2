@@ -41,6 +41,7 @@ export default function ContactTechnicianPage() {
   const [isLoadingRooms, setIsLoadingRooms] = useState(true);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [mediaPreviews, setMediaPreviews] = useState<{ url: string; name: string }[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [unreadByRoom, setUnreadByRoom] = useState<Record<string, number>>({});
 
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -149,10 +150,19 @@ export default function ContactTechnicianPage() {
         await chatService.insertMessage({ senderId: user.id, receiverId, content } as any);
       }
 
-      if (mediaPreviews.length > 0) {
-        toast('Gửi ảnh/video sẽ được đồng bộ khi backend hỗ trợ upload từ UI này.');
-        setMediaPreviews([]);
+      if (mediaFiles.length > 0) {
+        await chatService.insertMessage({
+          senderId: user.id,
+          receiverId,
+          imageUrls: mediaFiles,
+        } as any);
       }
+
+      setMediaPreviews(prev => {
+        prev.forEach((m) => URL.revokeObjectURL(m.url));
+        return [];
+      });
+      setMediaFiles([]);
 
       await refreshRooms();
       setUnreadByRoom(prev => ({ ...prev, [effectiveRoomId]: 0 }));
@@ -162,7 +172,10 @@ export default function ContactTechnicianPage() {
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    Array.from(e.target.files || []).forEach((file) => setMediaPreviews(prev => [...prev, { url: URL.createObjectURL(file), name: file.name }]));
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setMediaFiles(prev => [...prev, ...files]);
+    files.forEach((file) => setMediaPreviews(prev => [...prev, { url: URL.createObjectURL(file), name: file.name }]));
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
@@ -264,7 +277,16 @@ export default function ContactTechnicianPage() {
                   {mediaPreviews.map((media, idx) => (
                     <div key={idx} className="relative group">
                       <img src={media.url} className="w-16 h-16 rounded-xl object-cover border border-white/10" alt={media.name} />
-                      <button type="button" onClick={() => setMediaPreviews(p => p.filter((_, i) => i !== idx))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = mediaPreviews[idx];
+                          if (target?.url) URL.revokeObjectURL(target.url);
+                          setMediaPreviews(p => p.filter((_, i) => i !== idx));
+                          setMediaFiles(p => p.filter((_, i) => i !== idx));
+                        }}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center"
+                      >
                         <X size={10} />
                       </button>
                     </div>

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/technician/Sidebar';
 import { Header } from '@/components/technician/Header';
 import FloatingGemini from '@/components/shared/FloatingGemini';
+import TechnicianChatWidget from '@/components/technician/TechnicianChatWidget';
 import useAuthStore from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -49,13 +50,13 @@ export default function TechnicianLayout() {
   return (
     <div className="flex h-screen bg-[#020617] text-slate-200 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} />
-      
+
       <div className={cn(
         "flex-1 transition-all duration-300 min-w-0 flex flex-col h-screen",
         sidebarOpen ? "md:pl-0" : "pl-0"
       )}>
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        
+
         <main className="flex-1 overflow-hidden relative flex flex-col">
           <motion.div
             initial={{ opacity: 0 }}
@@ -68,6 +69,7 @@ export default function TechnicianLayout() {
         </main>
       </div>
 
+      <TechnicianChatWidget />
       {/* Global AI Assistant */}
       <FloatingGemini />
     </div>

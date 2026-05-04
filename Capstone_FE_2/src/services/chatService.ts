@@ -89,6 +89,20 @@ const chatService = {
   },
 
   insertMessage: async (data: CreateMessageFormDTO) => {
+    const hasMedia = Boolean(data.videoUrl) || Boolean(data.imageUrls?.length);
+
+    // BE hiện tại nhận JSON tốt cho tin nhắn text (FromBody).
+    if (!hasMedia) {
+      const payload = {
+        senderId: data.senderId,
+        receiverId: data.receiverId,
+        content: data.content || '',
+      };
+      const res = await api.post(`/chat/message`, payload);
+      return res.data;
+    }
+
+    // Khi có media, gửi multipart (dùng cho BE hỗ trợ FromForm/IFormFile).
     const formData = new FormData();
     formData.append('SenderId', data.senderId);
     formData.append('ReceiverId', data.receiverId);
@@ -101,8 +115,16 @@ const chatService = {
   },
 
   markAsRead: async (roomId: string, accountId: string) => {
-    const res = await api.post(`/chat/mark-read`, null, { params: { roomId, accountId } });
-    return res.data;
+    try {
+      const res = await api.post(`/chat/mark-read`, null, { params: { roomId, accountId } });
+      return res.data;
+    } catch (err: any) {
+      // BE có thể trả 400 khi không có message nào cần mark-read.
+      if (err?.response?.status === 400) {
+        return { message: 'No unread messages to mark.' };
+      }
+      throw err;
+    }
   }
 };
 

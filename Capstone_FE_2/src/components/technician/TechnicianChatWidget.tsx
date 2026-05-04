@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MessageCircle, X, Send, User, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useAuthStore from '@/store/authStore';
@@ -6,7 +7,8 @@ import { useChatSignalR } from '@/hooks/useChatSignalR';
 import chatService from '@/services/chatService';
 import { getChatRoomId, messageImageUrls, otherPartyIdFromRoom, sortChatMessagesOldestFirst } from '@/lib/chatRoomUtils';
 
-export default function ChatWidget() {
+export default function TechnicianChatWidget() {
+  const location = useLocation();
   const { user } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -19,6 +21,8 @@ export default function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const prevNotificationLenRef = useRef(0);
+
+  const hideOnFullChatPage = location.pathname === '/technician/chat';
 
   const totalUnreadMessages = Object.values(unreadByRoom).reduce((sum, n) => sum + (n > 0 ? n : 0), 0);
 
@@ -61,7 +65,7 @@ export default function ChatWidget() {
     refreshUnreadFromApi();
   }, [refreshUnreadFromApi]);
 
-  // Khi có realtime event tới, sync unreadCount từ API để badge luôn đúng.
+  // Khi có realtime event tới, ưu tiên sync lại unreadCount từ API để badge luôn đúng.
   useEffect(() => {
     if (!user?.id) return;
     if (!notifications.length) return;
@@ -94,7 +98,7 @@ export default function ChatWidget() {
       const roomId = getChatRoomId(activeRoom);
       if (!roomId) return;
       setMessages([]);
-      void markRoomAsRead(roomId);
+      markRoomAsRead(roomId);
       chatService
         .getAllMessages(roomId, 1, 50)
         .then(async (res) => {
@@ -203,10 +207,10 @@ export default function ChatWidget() {
     }
   };
 
-  if (!user) return null;
+  if (!user || hideOnFullChatPage) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[10050] flex flex-col items-end pointer-events-auto">
+    <div className="fixed bottom-6 right-24 z-[10050] flex flex-col items-end pointer-events-auto">
       <AnimatePresence>
         {isOpen && (
           <motion.div
