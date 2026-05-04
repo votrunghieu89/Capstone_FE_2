@@ -195,6 +195,24 @@ export default function TechProfilePage() {
         // Có thể gọi authService.checkEmail ở đây nếu cần validation realtime
       }
 
+      let finalLat = formData.latitude;
+      let finalLng = formData.longitude;
+
+      // Geocoding: Chuyển đổi địa chỉ + tên thành phố sang toạ độ
+      try {
+        const geocodingService = (await import('@/services/geocodingService')).default;
+        const selectedCity = cities.find(c => c.cityId === formData.cityId);
+        const cityName = selectedCity ? selectedCity.cityName : '';
+        
+        const geoResult = await geocodingService.resolveAddressToLocation(formData.address, cityName);
+        if (geoResult && geoResult.lat && geoResult.lon) {
+          finalLat = geoResult.lat.toString();
+          finalLng = geoResult.lon.toString();
+        }
+      } catch (geoErr) {
+        console.error('Lỗi khi geocoding địa chỉ:', geoErr);
+      }
+
       // Payload gửi đi khớp với yêu cầu BE
       const updateData = {
         id: user.id,
@@ -205,8 +223,8 @@ export default function TechProfilePage() {
         experiences: formData.experiences, // Tương đương 'yearsOfExperience'
         cityId: formData.cityId,
         serviceId: formData.serviceId,
-        latitude: formData.latitude,
-        longitude: formData.longitude,
+        latitude: finalLat,
+        longitude: finalLng,
         avatarFile: formData.avatarFile // Gửi kèm theo cả file ảnh
       };
 

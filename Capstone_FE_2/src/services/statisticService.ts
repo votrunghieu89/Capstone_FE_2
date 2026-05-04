@@ -104,6 +104,31 @@ class StatisticService {
       return 0;
     }
   }
+  /**
+   * Lấy tổng số đơn hàng bị hủy
+   */
+  public async getTotalCanceled(technicianId: string): Promise<number> {
+    try {
+      const response = await api.get(`/technician/statistic/${technicianId}/canceled/total`);
+      return response.data || 0;
+    } catch (error) {
+      console.error('Lỗi khi lấy tổng số đơn hủy:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Lấy tổng số đơn hàng bị từ chối
+   */
+  public async getTotalRejected(technicianId: string): Promise<number> {
+    try {
+      const response = await api.get(`/technician/statistic/${technicianId}/rejected/total`);
+      return response.data || 0;
+    } catch (error) {
+      console.error('Lỗi khi lấy tổng số đơn từ chối:', error);
+      return 0;
+    }
+  }
 }
 
 export const statisticService = new StatisticService();
