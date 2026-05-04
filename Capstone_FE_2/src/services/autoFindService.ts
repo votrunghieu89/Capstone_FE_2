@@ -60,8 +60,14 @@ const autoFindService = {
      * Check if a technician has accepted the auto-find request
      */
     checkAcceptance: async (customerId: string) => {
-        const res = await api.get(`/customer/autofind/accept/${customerId}`);
-        return res.data;
+        try {
+            const res = await api.get(`/customer/autofind/accept/${customerId}`);
+            return res.data;
+        } catch (error: any) {
+            // Backend returns 400 when queue is empty; treat as no-candidate signal.
+            if (error?.response?.status === 400) return null;
+            throw error;
+        }
     },
 
     /**
@@ -78,8 +84,8 @@ const autoFindService = {
         formData.append('Address', data.address);
         formData.append('Latitude', data.latitude.toString());
         formData.append('Longitude', data.longitude.toString());
-        if (typeof data.estimatedTime === 'number' && Number.isFinite(data.estimatedTime) && data.estimatedTime > 0) {
-            formData.append('EstimatedTime', data.estimatedTime.toString());
+        if (Number.isFinite(data.estimatedTime)) {
+            formData.append('EstimatedTime', String(data.estimatedTime));
         }
         if (data.status) formData.append('Status', data.status);
 
