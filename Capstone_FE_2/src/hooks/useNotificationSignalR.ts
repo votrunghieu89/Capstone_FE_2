@@ -8,31 +8,49 @@ export function useNotificationSignalR() {
   const { user } = useAuthStore();
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const accountId = String(user?.id || localStorage.getItem('accountId') || '').trim();
+
+  const normalizeNotification = (item: any): AppNotification => ({
+    id: String(item?.id || item?.notificationId || item?.NotificationId || ''),
+    senderId: String(item?.senderId || item?.SenderId || ''),
+    receiverId: String(item?.receiverId || item?.ReceiverId || ''),
+    action: String(item?.action || item?.Action || ''),
+    message: String(item?.message || item?.Message || item?.action || item?.Action || ''),
+    isRead: Boolean(item?.isRead ?? item?.IsRead ?? false),
+    createAt: String(item?.createAt || item?.CreateAt || item?.createdAt || item?.CreatedAt || new Date().toISOString()),
+  });
+
+  const sortNewestFirst = (list: AppNotification[]) =>
+    [...list].sort((a, b) => {
+      const ta = new Date(a.createAt || '').getTime();
+      const tb = new Date(b.createAt || '').getTime();
+      return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta);
+    });
+
   // Fetch initial notifications
   useEffect(() => {
-    if (user?.id) {
-      notificationService.getAll(user.id).then(res => {
+    if (accountId) {
+      notificationService.getAll(accountId).then(res => {
         const raw = Array.isArray(res) ? res : (res.items || res.data || []);
-        setNotifications(raw.reverse()); // latest first typically
+        setNotifications(sortNewestFirst(raw.map(normalizeNotification)));
       }).catch(err => console.error("Error fetching notifications", err));
     }
-  }, [user]);
+  }, [accountId]);
 
   const connectionRef = useRef<signalR.HubConnection | null>(null);
 
   // SignalR Connection
   useEffect(() => {
     let isMounted = true;
-    if (!user?.id || connectionRef.current) return;
+    if (!accountId || connectionRef.current) return;
 
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5271/api';
     const hubBase = String(apiBase).replace(/\/api\/?$/, '');
     const hubUrl = import.meta.env.VITE_SIGNALR_NOTIFICATION_URL || `${hubBase}/NotificationHub`;
     const accessToken = localStorage.getItem('accessToken') || localStorage.getItem('token') || '';
     const newConnection = new signalR.HubConnectionBuilder()
-      .withUrl(`${hubUrl}?AccountId=${user.id}`, {
+      .withUrl(`${hubUrl}?AccountId=${accountId}`, {
         skipNegotiation: false,
-        transport: signalR.HttpTransportType.WebSockets,
         accessTokenFactory: () => accessToken
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -42,7 +60,11 @@ export function useNotificationSignalR() {
 
     newConnection.on('ReceiveNotification', (notification: any) => {
       if (isMounted) {
-        setNotifications(prev => [notification, ...prev]);
+        const normalized = normalizeNotification(notification);
+        setNotifications(prev => {
+          const deduped = [normalized, ...prev.filter(p => p.id !== normalized.id)];
+          return sortNewestFirst(deduped);
+        });
         toast('🔔 Bạn có thông báo mới: ' + (notification.message || notification.Action || 'Cập nhật đơn hàng!'), {
           style: { background: '#2563eb', color: '#fff' }
         });
@@ -57,7 +79,7 @@ export function useNotificationSignalR() {
           setConnection(newConnection);
           console.log('SignalR Notification Connected');
         } else {
-          newConnection.stop().catch(() => {});
+          newConnection.stop().catch(() => { });
         }
       } catch (err: any) {
         if (isMounted && err.name !== 'AbortError' && !err.message?.includes('stop() was called')) {
@@ -74,26 +96,29 @@ export function useNotificationSignalR() {
         const conn = connectionRef.current;
         connectionRef.current = null;
         if (conn.state !== signalR.HubConnectionState.Disconnected) {
-          conn.stop().catch(() => {}); 
+          conn.stop().catch(() => { });
         }
         setConnection(null);
       }
     };
-  }, [user?.id]);
+  }, [accountId]);
 
   const markAsRead = async (id: string) => {
     try {
       await notificationService.markAsRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      setNotifications(prev => prev.map(n => {
+        const nid = String((n as any).id || (n as any).notificationId || (n as any).NotificationId || '');
+        return nid === id ? { ...n, isRead: true } : n;
+      }));
     } catch (err) {
       console.error(err);
     }
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
+    if (!accountId) return;
     try {
-      await notificationService.markAllAsRead(user.id);
+      await notificationService.markAllAsRead(accountId);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (err) {
       console.error(err);

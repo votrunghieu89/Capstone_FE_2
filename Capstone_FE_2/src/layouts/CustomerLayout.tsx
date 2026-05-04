@@ -5,11 +5,12 @@ import { Header } from '@/components/customer/Header';
 import useAuthStore from '@/store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChatWidget from '@/components/shared/ChatWidget';
+import profileService from '@/services/profileService';
 
 export default function CustomerLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-    const { user, isAuthenticated } = useAuthStore();
+    const { user, isAuthenticated, setUser } = useAuthStore();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -35,6 +36,39 @@ export default function CustomerLayout() {
         checkAuth();
     }, [user, isAuthenticated, navigate]);
 
+    useEffect(() => {
+        const syncCustomerProfile = async () => {
+            const customerId = user?.id;
+            if (!customerId) return;
+
+            try {
+                const res = await profileService.getCustomerProfile(customerId);
+                const payload = res?.data || res;
+                const fullName = payload?.fullName || payload?.FullName || '';
+                const avatarUrl = payload?.avatarURL || payload?.AvatarURL || payload?.avatarUrl || payload?.AvatarUrl || '';
+                const email = payload?.email || payload?.Email || user?.email || '';
+
+                const hasChanged =
+                    (fullName && fullName !== user?.fullName) ||
+                    (avatarUrl && avatarUrl !== user?.avatarUrl) ||
+                    (email && email !== user?.email);
+
+                if (!hasChanged) return;
+
+                setUser({
+                    ...user,
+                    fullName: fullName || user?.fullName || '',
+                    avatarUrl: avatarUrl || user?.avatarUrl || '',
+                    email: email || user?.email || '',
+                });
+            } catch {
+                // Keep existing local user data if profile API fails.
+            }
+        };
+
+        void syncCustomerProfile();
+    }, [user?.id]);
+
     if (isAuthorized === null) return null;
 
     return (
@@ -58,7 +92,7 @@ export default function CustomerLayout() {
                         </motion.div>
                     </AnimatePresence>
                 </main>
-                
+
                 {/* Floating Chat Widget */}
                 <ChatWidget />
             </div>

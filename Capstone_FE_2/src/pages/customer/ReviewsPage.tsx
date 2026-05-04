@@ -142,10 +142,43 @@ export default function ReviewsPage() {
         }
     };
 
+    const confirmDeleteReviewWithToast = () =>
+        new Promise<boolean>((resolve) => {
+            toast((t) => (
+                <div className="space-y-2">
+                    <p className="text-sm font-medium">Bạn có chắc muốn xóa đánh giá này?</p>
+                    <div className="flex items-center justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 px-3"
+                            onClick={() => {
+                                toast.dismiss(t.id);
+                                resolve(false);
+                            }}
+                        >
+                            Không
+                        </Button>
+                        <Button
+                            type="button"
+                            className="h-8 px-3 bg-red-600 hover:bg-red-700 text-white"
+                            onClick={() => {
+                                toast.dismiss(t.id);
+                                resolve(true);
+                            }}
+                        >
+                            Xóa
+                        </Button>
+                    </div>
+                </div>
+            ), { duration: 10000 });
+        });
+
     const handleDeleteReview = async (review: any) => {
         const rid = String(review.id || review.Id || review.feedbackId || review.FeedbackId || '');
         if (!rid) return;
-        if (!window.confirm('Bạn có chắc muốn xóa đánh giá này?')) return;
+        const isConfirmed = await confirmDeleteReviewWithToast();
+        if (!isConfirmed) return;
 
         try {
             await ratingService.deleteRating(rid);

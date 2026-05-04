@@ -271,8 +271,44 @@ export default function OrdersPage() {
         }
     }, [user, statusParam]);
 
+    const confirmCancelWithToast = () =>
+        new Promise<boolean>((resolve) => {
+            toast((t) => (
+                <div className="space-y-2">
+                    <p className="text-sm font-medium">Bạn có chắc chắn muốn hủy đơn hàng này?</p>
+                    <div className="flex items-center justify-end gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 px-3"
+                            onClick={() => {
+                                toast.dismiss(t.id);
+                                resolve(false);
+                            }}
+                        >
+                            Không
+                        </Button>
+                        <Button
+                            type="button"
+                            className="h-8 px-3 bg-red-600 hover:bg-red-700 text-white"
+                            onClick={() => {
+                                toast.dismiss(t.id);
+                                resolve(true);
+                            }}
+                        >
+                            Xác nhận hủy
+                        </Button>
+                    </div>
+                </div>
+            ), { duration: 10000 });
+        });
+
     const handleCancel = async (order: any) => {
-        if (!window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) return;
+        const isConfirmed = await confirmCancelWithToast();
+        if (!isConfirmed) {
+            toast('Đã hủy thao tác hủy đơn.');
+            return;
+        }
 
         const upsertLocalCancelledOrder = () => {
             if (!user?.id) return;

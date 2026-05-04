@@ -26,8 +26,9 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
         setShowLogoutConfirm(false);
     };
 
-    const userName = user?.fullName || 'Khách Hàng';
+    const userName = user?.fullName || (user as any)?.FullName || 'Khách Hàng';
     const unreadCount = notifications.filter(n => !n.isRead).length;
+    const displayedNotifications = notifications.slice(0, 5);
 
     return (
         <>
@@ -37,7 +38,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
                         <Menu className="w-5 h-5" />
                     </button>
                     <h2 className="text-lg font-semibold text-white hidden md:block">
-                        Xin chào, {userName.split(' ')[0] || userName} 👋
+                        Xin chào👋
                     </h2>
                 </div>
 
@@ -62,11 +63,11 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
                                 )}
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            {notifications.length === 0 ? (
+                            {displayedNotifications.length === 0 ? (
                                 <div className="p-4 text-center text-sm text-text-secondary">Chưa có thông báo nào</div>
                             ) : (
                                 <div className="flex flex-col">
-                                    {notifications.map((notif: any, idx: number) => (
+                                    {displayedNotifications.map((notif: any, idx: number) => (
                                         <DropdownMenuItem
                                             key={notif.id || notif.notificationId || `notif-${idx}`}
                                             onClick={() => {
