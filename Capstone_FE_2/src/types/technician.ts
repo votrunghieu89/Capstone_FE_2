@@ -51,8 +51,11 @@ export interface ViewAllTechnicianDTO {
 
 // Matches BE: Capstone_2_BE.DTOs.Technician.Rating.TechnicianRatingViewDTO
 export interface TechnicianRatingViewDTO {
-  ratingId: string;
-  customerName: string;
+  ratingId?: string; // Optional since BE sends feedbackId
+  feedbackId?: string;
+  orderId?: string;
+  customerName?: string;
+  customerFullName?: string;
   score: number;
   feedback: string;
   createdAt: string;

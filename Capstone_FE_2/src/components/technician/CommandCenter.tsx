@@ -17,7 +17,9 @@ import {
   Layers,
   ArrowUpRight,
   TrendingDown,
-  FileText
+  FileText,
+  XCircle,
+  ShieldAlert
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +28,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import useAuthStore from '@/store/authStore';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
+import { getMapEmbedSrc, getMapEmbedSrcByAddress } from '@/utils/mapUtils';
 
 const currentLocationIcon = new L.DivIcon({
   className: 'custom-location-icon',
@@ -60,7 +63,9 @@ export function CommandCenter() {
   const [totalOrders, setTotalOrders] = useState(0);
   const [avgRating, setAvgRating] = useState(0);
   const [chartData, setChartData] = useState<any[]>([]);
-  const [techLocation, setTechLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [totalCanceled, setTotalCanceled] = useState(0);
+  const [totalRejected, setTotalRejected] = useState(0);
+  const [techLocation, setTechLocation] = useState<{address: string, cityName: string} | null>(null);
   const [profile, setProfile] = useState<any>(null);
 
   const weekData = [
@@ -107,13 +112,15 @@ export function CommandCenter() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [pending, todayCompleted, totalCompleted, avgRating, totalAll, profile] = await Promise.all([
+      const [pending, todayCompleted, totalCompleted, avgRating, totalAll, profile, canceledTotal, rejectedTotal] = await Promise.all([
         technicianOrderService.getConfirmingOrders(user.id).catch(() => []),
         statisticService.getTodayCompletedCount(user.id).catch(() => 0),
         statisticService.getTotalCompletedCount(user.id).catch(() => 0),
         statisticService.getAverageRating(user.id).catch(() => 0),
         statisticService.getTotalOrders(user.id).catch(() => 0),
-        technicianService.getProfile(user.id).catch(() => null)
+        technicianService.getProfile(user.id).catch(() => null),
+        statisticService.getTotalCanceled(user.id).catch(() => 0),
+        statisticService.getTotalRejected(user.id).catch(() => 0)
       ]);
       
       setNewRequests(Array.isArray(pending) ? pending : []);
@@ -123,11 +130,12 @@ export function CommandCenter() {
       setAvgRating(avgRating);
       setTotalOrders(totalAll);
       setProfile(profile);
+      setTotalCanceled(canceledTotal);
+      setTotalRejected(rejectedTotal);
 
       try {
         const loc = await technicianOrderService.getTechnicianLocation(user.id);
-        // Since BE only returns address, we don't set techLocation here
-        // The map will fallback to currentLoc (HTML5 GPS)
+        setTechLocation(loc);
       } catch (err) {
         console.error("Lỗi lấy vị trí KTV:", err);
       }
@@ -156,47 +164,79 @@ export function CommandCenter() {
   const fetchChartData = async () => {
     if (!user?.id) return;
     try {
-      if (timeRange === 'day') {
-        const orders = await technicianOrderService.getHistoryOrders(user.id);
-        const todayDate = new Date().toDateString();
+      // Gọi song song 3 API: Hoàn thành, Đã hủy, Từ chối
+      const [completedOrders, canceledOrders, rejectedOrders] = await Promise.all([
+        technicianOrderService.getHistoryOrders(user.id).catch(() => []),
+        technicianOrderService.getCanceledOrders(user.id).catch(() => []),
+        technicianOrderService.getRejectedOrders(user.id).catch(() => []),
+      ]);
+
+      if (timeRange === 'month') {
+        const year = new Date().getFullYear();
         
-        const todayOrders = (orders || []).filter(o => new Date(o.orderDate).toDateString() === todayDate);
+        const completedMap = new Map<number, number>();
+        const canceledMap = new Map<number, number>();
+        const rejectedMap = new Map<number, number>();
+        for (let i = 1; i <= 12; i++) { completedMap.set(i, 0); canceledMap.set(i, 0); rejectedMap.set(i, 0); }
         
-        const labels = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
-        const dataMap = new Map<string, number>();
-        labels.forEach(l => dataMap.set(l, 0));
-        
-        todayOrders.forEach(o => {
-           const hour = new Date(o.orderDate).getHours();
-           let slot = '00:00';
-           if (hour >= 3 && hour < 6) slot = '03:00';
-           else if (hour >= 6 && hour < 9) slot = '06:00';
-           else if (hour >= 9 && hour < 12) slot = '09:00';
-           else if (hour >= 12 && hour < 15) slot = '12:00';
-           else if (hour >= 15 && hour < 18) slot = '15:00';
-           else if (hour >= 18 && hour < 21) slot = '18:00';
-           else if (hour >= 21) slot = '21:00';
-           
-           dataMap.set(slot, dataMap.get(slot)! + 1);
+        (completedOrders || []).filter(o => new Date(o.orderDate).getFullYear() === year).forEach(o => {
+          const m = new Date(o.orderDate).getMonth() + 1;
+          completedMap.set(m, completedMap.get(m)! + 1);
+        });
+        (canceledOrders || []).filter(o => new Date(o.orderDate).getFullYear() === year).forEach(o => {
+          const m = new Date(o.orderDate).getMonth() + 1;
+          canceledMap.set(m, canceledMap.get(m)! + 1);
+        });
+        (rejectedOrders || []).filter(o => new Date(o.orderDate).getFullYear() === year).forEach(o => {
+          const m = new Date(o.orderDate).getMonth() + 1;
+          rejectedMap.set(m, rejectedMap.get(m)! + 1);
         });
 
-        const formattedData = labels.map(l => ({ day: l, count: dataMap.get(l) || 0 }));
-        setChartData(formattedData);
-      } else if (timeRange === 'month') {
-        const year = new Date().getFullYear();
-        const data = await statisticService.getMonthlyPerformance(user.id, year);
-        const formattedData = data.map((item: any) => ({
-          day: item.label ? `${item.label.replace('Tháng ', '')}/${year}` : '?',
-          count: item.value || 0
+        const formattedData = Array.from({ length: 12 }, (_, i) => i + 1).map(m => ({
+          day: `${m}/${year}`,
+          completed: completedMap.get(m) || 0,
+          canceled: canceledMap.get(m) || 0,
+          rejected: rejectedMap.get(m) || 0,
         }));
         setChartData(formattedData);
       } else {
-        const from = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-        const to = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-        const data = await statisticService.getWeeklyPerformance(user.id, from, to);
-        const formattedData = data.map((item: any) => ({
-          day: item.label || '?',
-          count: item.value || 0
+        // timeRange === 'week' (7 ngày gần nhất)
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        const start = new Date();
+        start.setDate(end.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+
+        const labels: string[] = [];
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          labels.push(format(new Date(d), 'dd/MM/yyyy'));
+        }
+
+        const completedMap = new Map<string, number>();
+        const canceledMap = new Map<string, number>();
+        const rejectedMap = new Map<string, number>();
+        labels.forEach(l => { completedMap.set(l, 0); canceledMap.set(l, 0); rejectedMap.set(l, 0); });
+
+        const inRange = (o: any) => { const d = new Date(o.orderDate); return d >= start && d <= end; };
+
+        (completedOrders || []).filter(inRange).forEach(o => {
+          const label = format(new Date(o.orderDate), 'dd/MM/yyyy');
+          if (completedMap.has(label)) completedMap.set(label, completedMap.get(label)! + 1);
+        });
+        (canceledOrders || []).filter(inRange).forEach(o => {
+          const label = format(new Date(o.orderDate), 'dd/MM/yyyy');
+          if (canceledMap.has(label)) canceledMap.set(label, canceledMap.get(label)! + 1);
+        });
+        (rejectedOrders || []).filter(inRange).forEach(o => {
+          const label = format(new Date(o.orderDate), 'dd/MM/yyyy');
+          if (rejectedMap.has(label)) rejectedMap.set(label, rejectedMap.get(label)! + 1);
+        });
+
+        const formattedData = labels.map(label => ({
+          day: label.substring(0, 5),
+          completed: completedMap.get(label) || 0,
+          canceled: canceledMap.get(label) || 0,
+          rejected: rejectedMap.get(label) || 0,
         }));
         setChartData(formattedData);
       }
@@ -276,43 +316,11 @@ export function CommandCenter() {
           </motion.div>
         </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 min-h-0 overflow-hidden items-stretch">
-          {/* Left Column: Stats + Performance Chart */}
-          <div className="lg:col-span-8 flex flex-col gap-8 min-h-0 overflow-y-auto pr-2 custom-scrollbar">
-            {/* Stats Sub-Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 shrink-0">
-               {/* Stat 1: Yêu cầu mới */}
-              <motion.div variants={itemVariants} className="bg-[#0f172a]/80 backdrop-blur-xl border border-white/5 rounded-[24px] p-6 shadow-xl relative overflow-hidden group">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
-                       YÊU CẦU MỚI
-                    </p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-5xl font-black text-white tracking-tighter">{newRequests.length}</span>
-                      <span className="text-[12px] text-indigo-400/80 font-bold uppercase tracking-tight">Chờ xác nhận</span>
-                    </div>
-                  </div>
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400 shadow-inner">
-                     <FileText size={28} />
-                  </div>
-                </div>
-                <div className="mt-4">
-                   <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min((newRequests.length / 10) * 100, 100)}%` }}
-                        className="h-full bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]" 
-                      />
-                   </div>
-                   <p className="text-[11px] text-slate-500 mt-3 font-black uppercase tracking-[0.1em] italic">
-                      {newRequests.length > 5 ? 'LƯU LƯỢNG CAO' : 'SẴN SÀNG TIẾP NHẬN'}
-                   </p>
-                </div>
-              </motion.div>
-
-              {/* Stat 2: Đã hoàn thành */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 min-h-0 overflow-hidden">
+          {/* Row 1: 4 Stats Cards — chia đều toàn bộ chiều ngang */}
+          <div className="lg:col-span-12">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Stat 1: Hoàn thành */}
               <motion.div variants={itemVariants} className="bg-[#0f172a]/80 backdrop-blur-xl border border-white/5 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -320,29 +328,65 @@ export function CommandCenter() {
                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                        Hoàn thành
                     </p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-5xl font-black text-white tracking-tighter">{totalCompleted}</span>
-                    </div>
+                    <span className="text-5xl font-black text-white tracking-tighter">{totalCompleted}</span>
                   </div>
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400 shadow-inner">
-                     <CheckCircle size={28} />
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
+                     <CheckCircle size={24} />
                   </div>
                 </div>
-                 <div className="mt-4">
-                    <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                       <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${totalOrders > 0 ? (allTimeCompleted / totalOrders) * 100 : 0}%` }}
-                        className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]" 
-                       />
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider italic">
-                      {totalOrders > 0 ? `Tỷ lệ hoàn thành ${Math.round((totalCompleted / totalOrders) * 100)}%` : 'Chưa có đơn hàng'}
-                    </p>
-                 </div>
+                <div className="mt-4">
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${totalOrders > 0 ? (allTimeCompleted / totalOrders) * 100 : 0}%` }} className="h-full bg-emerald-500 rounded-full" />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider italic">Đơn đã hoàn thành</p>
+                </div>
               </motion.div>
 
-              {/* Stat 4: Đánh giá */}
+              {/* Stat 2: Đơn hủy */}
+              <motion.div variants={itemVariants} className="bg-[#0f172a]/80 backdrop-blur-xl border border-white/5 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+                       Đơn hủy
+                    </p>
+                    <span className="text-5xl font-black text-white tracking-tighter">{totalCanceled}</span>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20 text-rose-400">
+                     <XCircle size={24} />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${totalOrders > 0 ? (totalCanceled / totalOrders) * 100 : 0}%` }} className="h-full bg-rose-500 rounded-full" />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider italic">Đơn bị hủy</p>
+                </div>
+              </motion.div>
+
+              {/* Stat 3: Từ chối */}
+              <motion.div variants={itemVariants} className="bg-[#0f172a]/80 backdrop-blur-xl border border-white/5 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+                       Từ chối
+                    </p>
+                    <span className="text-5xl font-black text-white tracking-tighter">{totalRejected}</span>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20 text-orange-400">
+                     <ShieldAlert size={24} />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${totalOrders > 0 ? (totalRejected / totalOrders) * 100 : 0}%` }} className="h-full bg-orange-500 rounded-full" />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider italic">Đơn đã từ chối</p>
+                </div>
+              </motion.div>
+
+              {/* Stat 4: Đánh giá TB */}
               <motion.div variants={itemVariants} className="bg-[#0f172a]/80 backdrop-blur-xl border border-white/5 rounded-[24px] p-6 shadow-xl relative overflow-hidden">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -350,38 +394,29 @@ export function CommandCenter() {
                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
                        Đánh giá TB
                     </p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-5xl font-black text-white tracking-tighter">
-                        {avgRating > 0 ? avgRating.toFixed(1) : '5.0'}
-                      </span>
-                    </div>
+                    <span className="text-5xl font-black text-white tracking-tighter">{avgRating > 0 ? avgRating.toFixed(1) : '5.0'}</span>
                   </div>
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 text-amber-400 shadow-inner">
-                     <Star size={28} />
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 text-amber-400">
+                     <Star size={24} />
                   </div>
                 </div>
-                 <div className="mt-4">
-                    <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                       <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(avgRating / 5) * 100}%` }}
-                        className="h-full bg-amber-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.4)]" 
-                       />
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider italic">
-                      {avgRating > 0 ? `Uy tín vượt trội ${avgRating.toFixed(1)}/5` : 'Chưa có đánh giá'}
-                    </p>
-                 </div>
+                <div className="mt-4">
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${(avgRating / 5) * 100}%` }} className="h-full bg-amber-500 rounded-full" />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-wider italic">{avgRating > 0 ? `Uy tín ${avgRating.toFixed(1)}/5` : 'Chưa có đánh giá'}</p>
+                </div>
               </motion.div>
             </div>
+          </div>
 
-            {/* Performance Chart Card */}
-            <motion.div variants={itemVariants} className="flex-1 flex flex-col min-h-0">
+          {/* Row 2 Left: Biểu đồ Hiệu năng công việc (col-span-8) */}
+          <motion.div variants={itemVariants} className="lg:col-span-8 flex flex-col min-h-0">
               <div className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col flex-1 min-h-0">
                 <div className="relative z-10 flex shrink-0 flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
                   <div className="space-y-1">
                     <h3 className="text-[13px] font-black text-white uppercase tracking-[0.2em]">Hiệu năng công việc</h3>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Đơn hàng hoàn thành theo thời gian</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thống kê đơn hàng theo thời gian</p>
                   </div>
                   
                   <div className="flex items-center p-1 bg-white/5 backdrop-blur-xl rounded-xl border border-white/5 shrink-0">
@@ -407,9 +442,17 @@ export function CommandCenter() {
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={activeChartData}>
                       <defs>
-                        <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
                           <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorCanceled" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorRejected" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f97316" stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.02)" />
@@ -421,6 +464,7 @@ export function CommandCenter() {
                         dy={10}
                       />
                       <YAxis 
+                        allowDecimals={false}
                         axisLine={false} 
                         tickLine={false} 
                         tick={{ fill: '#475569', fontSize: 11, fontWeight: 900 }}
@@ -433,34 +477,55 @@ export function CommandCenter() {
                           padding: '16px',
                           borderWidth: '1px'
                         }}
-                        itemStyle={{ color: '#818cf8', fontWeight: '900', textTransform: 'uppercase', fontSize: '11px' }}
                         labelStyle={{ color: '#f8fafc', fontWeight: '900', marginBottom: '6px', fontSize: '13px' }}
-                        formatter={(value: any) => [`${value} đơn`, 'Hoàn thành']}
+                        formatter={(value: any, name: any) => {
+                          const labels: Record<string, string> = { completed: 'Hoàn thành', canceled: 'Đã hủy', rejected: 'Từ chối' };
+                          return [`${value} đơn`, labels[name as string] || name];
+                        }}
                       />
                       <Area 
                         type="monotone" 
-                        dataKey="count" 
+                        dataKey="completed" 
+                        name="completed"
                         stroke="#6366f1" 
-                        strokeWidth={4}
+                        strokeWidth={3}
                         fillOpacity={1} 
-                        fill="url(#colorArea)" 
-                        dot={{ fill: '#0f172a', stroke: '#6366f1', strokeWidth: 2, r: 4 }}
-                        activeDot={{ r: 7, strokeWidth: 0, fill: '#818cf8' }}
+                        fill="url(#colorCompleted)" 
+                        dot={{ fill: '#0f172a', stroke: '#6366f1', strokeWidth: 2, r: 3 }}
+                        activeDot={{ r: 6, strokeWidth: 0, fill: '#818cf8' }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="canceled" 
+                        name="canceled"
+                        stroke="#ef4444" 
+                        strokeWidth={2.5}
+                        fillOpacity={1} 
+                        fill="url(#colorCanceled)" 
+                        dot={{ fill: '#0f172a', stroke: '#ef4444', strokeWidth: 2, r: 3 }}
+                        activeDot={{ r: 6, strokeWidth: 0, fill: '#f87171' }}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="rejected" 
+                        name="rejected"
+                        stroke="#f97316" 
+                        strokeWidth={2.5}
+                        fillOpacity={1} 
+                        fill="url(#colorRejected)" 
+                        dot={{ fill: '#0f172a', stroke: '#f97316', strokeWidth: 2, r: 3 }}
+                        activeDot={{ r: 6, strokeWidth: 0, fill: '#fb923c' }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
-            </motion.div>
-          </div>
+          </motion.div>
 
-          {/* Right Column: Full-Height Map */}
-          <div className="lg:col-span-4 flex flex-col h-full min-h-0 overflow-y-auto pr-2 custom-scrollbar">
-            {/* Da Nang Map (Bản đồ Đà Nẵng) - Expanded to Full Height */}
-            <motion.div variants={itemVariants} className="flex-1 min-h-[500px] h-full">
+          {/* Row 2 Right: Vị trí dịch vụ (col-span-4) — ngang đều với biểu đồ */}
+          <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col">
               <div 
-                onClick={() => setIsMapOpen(true)}
-                className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col h-full shadow-2xl relative overflow-hidden group cursor-pointer hover:border-white/10 transition-colors"
+                className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col flex-1 shadow-2xl relative overflow-hidden group transition-colors"
               >
                 <div className="flex items-start justify-between mb-8 shrink-0 px-2">
                   <div className="space-y-4 shrink-0">
@@ -480,110 +545,30 @@ export function CommandCenter() {
                       </div>
                     ))}
                   </div>
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10 text-slate-400 group-hover:text-indigo-400 transition-colors shrink-0">
-                    <Layers size={20} />
-                  </div>
                 </div>
 
-                <div className="flex-1 w-full rounded-[24px] overflow-hidden border border-white/5 relative z-10 leaflet-dark-theme pointer-events-none">
-                  <MapContainer 
-                    center={[16.0544, 108.2022]} 
-                    zoom={12} 
-                    scrollWheelZoom={false} 
-                    style={{ height: '100%', width: '100%' }}
-                    zoomControl={false}
-                    attributionControl={false}
-                  >
-                    <TileLayer
-                      url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-                    />
-                    
-                    {/* Đã xóa toàn bộ chấm màu quận huyện và đơn hàng theo yêu cầu */}
-                    
-                    {(techLocation || currentLoc) && (
-                      <Marker position={[techLocation?.lat || currentLoc!.lat, techLocation?.lng || currentLoc!.lng]} icon={currentLocationIcon}>
-                        <Popup className="custom-leaflet-popup">
-                          <div className="px-3 py-2 bg-rose-600 rounded-lg text-white font-black text-[11px] uppercase tracking-wider">
-                            Vị trí của bạn
-                          </div>
-                        </Popup>
-                      </Marker>
-                    )}
-                  </MapContainer>
+                <div className="relative rounded-2xl overflow-hidden border border-white/5 flex-1 min-h-[200px] bg-slate-900 group cursor-crosshair">
+                   <iframe 
+                      key={techLocation ? `${techLocation.address}-${techLocation.cityName}` : (currentLoc ? `${currentLoc.lat},${currentLoc.lng}` : 'profile')}
+                      width="100%" 
+                      height="100%" 
+                      frameBorder="0" 
+                      style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }} 
+                      src={techLocation ? getMapEmbedSrcByAddress(`${techLocation.address}, ${techLocation.cityName}`, 13) : getMapEmbedSrc(currentLoc, profile?.latitude, profile?.longitude, 13)} 
+                      allowFullScreen
+                    ></iframe>
+                   <div className="absolute bottom-4 left-4 right-4 p-4 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 text-center">
+                      <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">{profile?.city ? `${profile.city} CITY` : 'ĐÀ NẴNG CITY'}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">ACTIVE COVERAGE</p>
+                   </div>
                 </div>
 
-                {/* Đã xóa các Badge ghi chú trên bản đồ */}
               </div>
-            </motion.div>
-          </div>
+          </motion.div>
         </section>
       </motion.div>
 
-      {/* Map Insight Modal */}
-      <AnimatePresence>
-        {isMapOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-[#0f172a] border border-white/10 rounded-[40px] w-full max-w-[1400px] h-full max-h-[85vh] overflow-hidden relative shadow-[0_0_100px_rgba(0,0,0,0.5)]"
-            >
-              <div className="absolute top-8 left-10 z-20 space-y-2 pointer-events-none">
-                <h2 className="text-4xl font-black text-white tracking-tighter">PHÂN BỔ CHI TIẾT</h2>
-                <p className="text-indigo-400 font-bold uppercase text-[12px] tracking-[0.3em]">TP. Đà Nẵng | Chế độ theo dõi nâng cao</p>
-              </div>
 
-              <button 
-                onClick={() => setIsMapOpen(false)}
-                className="absolute top-8 right-10 z-20 w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 hover:bg-rose-500 hover:text-white transition-all hover:rotate-90 group shadow-[0_0_15px_rgba(244,63,94,0.2)]"
-              >
-                < Zap className="transition-colors" />
-              </button>
-
-              <div className="absolute inset-0 z-10">
-                <MapContainer 
-                  center={[16.0544, 108.2022]} 
-                  zoom={13} 
-                  style={{ height: '100%', width: '100%' }}
-                  attributionControl={false}
-                >
-                  <TileLayer
-                    url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-                  />
-                  {/* Đã xóa các chấm màu quận huyện trên bản đồ phóng to */}
-                  
-                  {(techLocation || currentLoc) && (
-                    <Marker position={[techLocation?.lat || currentLoc!.lat, techLocation?.lng || currentLoc!.lng]} icon={currentLocationIcon}>
-                      <Popup className="custom-leaflet-popup">
-                        <div className="px-3 py-2 bg-rose-600 rounded-lg text-white font-black text-[11px] uppercase tracking-wider">
-                          Vị trí của bạn
-                        </div>
-                      </Popup>
-                    </Marker>
-                  )}
-                </MapContainer>
-              </div>
-
-              {/* Bottom Decorative Element */}
-              <div className="absolute bottom-8 left-10 right-10 z-20 flex items-center justify-between pointer-events-none">
-                 <div className="flex gap-4">
-                    {/* Removed overlay elements matching Image 2 */}
-                 </div>
-                 <div className="text-right bg-slate-900/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/5">
-                    <p className="text-slate-500 font-black text-[10px] uppercase tracking-widest mb-1">Dữ liệu cập nhật thời gian thực</p>
-                    <p className="text-white font-black text-[12px]">HỆ THỐNG PHÂN BỔ FASTFIX v.2.0</p>
-                 </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

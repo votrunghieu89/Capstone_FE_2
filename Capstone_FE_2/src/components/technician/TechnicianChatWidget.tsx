@@ -210,7 +210,7 @@ export default function TechnicianChatWidget() {
   if (!user || hideOnFullChatPage) return null;
 
   return (
-    <div className="fixed bottom-6 right-24 z-[10050] flex flex-col items-end pointer-events-auto">
+    <div className="fixed bottom-2 right-2 md:bottom-3 md:right-3 z-[10050] flex flex-col items-end pointer-events-auto">
       <AnimatePresence>
         {isOpen && (
           <motion.div

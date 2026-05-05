@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { 
   Calendar, ChevronDown, Star, Download, CheckCircle2, 
   User as UserIcon, Loader2, Clock, MapPin, MessageSquare,
@@ -12,16 +12,19 @@ import toast from 'react-hot-toast';
 import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
 import technicianService from '@/services/technicianService';
+import { statisticService } from '@/services/statisticService';
 import orderService from '@/services/orderService';
 import type { ViewOrderDTO, ViewOrderDetailDTO } from '@/types/order';
 import type { RatingOverviewDTO } from '@/types/technician';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
-type TabType = 'all' | 'completed' | 'canceled' | 'rejected';
+type TabType = 'all' | 'completed' | 'canceled' | 'rejected' | 'ratings';
 
 interface ExtendedOrderDTO extends ViewOrderDTO {
   category: 'completed' | 'canceled' | 'rejected';
+  rating?: number;
+  feedback?: string;
 }
 
 export default function TechHistoryPage() {
@@ -34,15 +37,16 @@ export default function TechHistoryPage() {
 
   useEffect(() => {
     const tab = searchParams.get('tab') as TabType;
-    if (tab && tab !== activeTab && ['all', 'completed', 'canceled', 'rejected'].includes(tab)) {
+    if (tab && tab !== activeTab && ['all', 'completed', 'canceled', 'rejected', 'ratings'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
 
   const [items, setItems] = useState<ExtendedOrderDTO[]>([]);
+  const [ratingsList, setRatingsList] = useState<any[]>([]);
   const [ratingOverview, setRatingOverview] = useState<RatingOverviewDTO | null>(null);
   
-  const [stats, setStats] = useState({ totalOrders: 0, avgRating: 0, totalCompleted: 0 });
+  const [stats, setStats] = useState({ totalOrders: 0, avgRating: 0, totalCompleted: 0, totalCanceled: 0, totalRejected: 0 });
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
 
@@ -50,7 +54,7 @@ export default function TechHistoryPage() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 3;
 
   // Modal Detail State
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -70,16 +74,20 @@ export default function TechHistoryPage() {
     if (!user?.id) return;
     try {
       setLoadingStats(true);
-      const [total, avg, completed, overview] = await Promise.allSettled([
+      const [total, avg, completed, overview, canceled, rejected] = await Promise.allSettled([
         technicianService.getTotalOrders(user.id),
         technicianService.getAvgRating(user.id),
         technicianService.getTotalCompleted(user.id),
-        technicianService.getRatingOverview(user.id)
+        technicianService.getRatingOverview(user.id),
+        statisticService.getTotalCanceled(user.id),
+        statisticService.getTotalRejected(user.id)
       ]);
       setStats({
         totalOrders: total.status === 'fulfilled' ? total.value : 0,
         avgRating: avg.status === 'fulfilled' ? avg.value : 0,
-        totalCompleted: completed.status === 'fulfilled' ? completed.value : 0
+        totalCompleted: completed.status === 'fulfilled' ? completed.value : 0,
+        totalCanceled: canceled.status === 'fulfilled' ? canceled.value : 0,
+        totalRejected: rejected.status === 'fulfilled' ? rejected.value : 0
       });
       if (overview.status === 'fulfilled') setRatingOverview(overview.value);
     } catch (e) {
@@ -94,6 +102,18 @@ export default function TechHistoryPage() {
     setLoadingData(true);
     setItems([]);
     try {
+      const rawRatings = await technicianService.getRatings(user.id).catch(() => []);
+      const allRatings = Array.isArray(rawRatings) ? rawRatings : (rawRatings?.value || rawRatings?.data || rawRatings?.$values || []);
+      
+      // Sort ratings latest first
+      const sortedRatings = [...allRatings].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setRatingsList(sortedRatings);
+      
+      const getRatingInfoForOrder = (orderId: string) => {
+        const r = allRatings.find((r: any) => r.orderId === orderId);
+        return r ? { rating: r.score, feedback: r.feedback } : { rating: undefined, feedback: undefined };
+      };
+
       if (activeTab === 'all') {
         const [completed, canceled, rejected] = await Promise.all([
           technicianOrderService.getHistoryOrders(user.id).catch(() => []),
@@ -102,7 +122,7 @@ export default function TechHistoryPage() {
         ]);
 
         const merged: ExtendedOrderDTO[] = [
-          ...(completed || []).map(o => ({ ...o, category: 'completed' as const })),
+          ...(completed || []).map(o => ({ ...o, category: 'completed' as const, ...getRatingInfoForOrder(o.orderId) })),
           ...(canceled || []).map(o => ({ ...o, category: 'canceled' as const })),
           ...(rejected || []).map(o => ({ ...o, category: 'rejected' as const }))
         ];
@@ -125,7 +145,11 @@ export default function TechHistoryPage() {
           cat = 'rejected';
         }
 
-        const mapped = (res || []).map(o => ({ ...o, category: cat }));
+        const mapped = (res || []).map(o => ({ 
+          ...o, 
+          category: cat,
+          ...(cat === 'completed' ? getRatingInfoForOrder(o.orderId) : {})
+        }));
         mapped.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
         setItems(mapped);
       }
@@ -138,6 +162,26 @@ export default function TechHistoryPage() {
 
   // Filter & Pagination Logic
   const filteredItems = useMemo(() => {
+    if (activeTab === 'ratings') {
+      return ratingsList.filter(item => {
+        if (startDate) {
+          const itemDate = new Date(item.createdAt);
+          itemDate.setHours(0, 0, 0, 0);
+          const filterStart = new Date(startDate);
+          filterStart.setHours(0, 0, 0, 0);
+          if (itemDate < filterStart) return false;
+        }
+        if (endDate) {
+          const itemDate = new Date(item.createdAt);
+          itemDate.setHours(0, 0, 0, 0);
+          const filterEnd = new Date(endDate);
+          filterEnd.setHours(0, 0, 0, 0);
+          if (itemDate > filterEnd) return false;
+        }
+        return true;
+      });
+    }
+
     return items.filter(item => {
       if (startDate) {
         const itemDate = new Date(item.orderDate);
@@ -155,7 +199,7 @@ export default function TechHistoryPage() {
       }
       return true;
     });
-  }, [items, startDate, endDate]);
+  }, [items, ratingsList, startDate, endDate, activeTab]);
 
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
   
@@ -184,7 +228,7 @@ export default function TechHistoryPage() {
     try {
       const res = await orderService.getOrderDetail(orderId);
       // Ensure we extract the correct inner object if nested
-      const data = (res as any)?.value || (res as any)?.data || res;
+      const data = res?.value || res?.data || res;
       setOrderDetail(data);
     } catch (error) {
       console.error(error);
@@ -218,46 +262,7 @@ export default function TechHistoryPage() {
      }
   };
 
-  const handleExportExcel = async () => {
-    if (!user?.id) return;
-    const toastId = toast.loading('Đang trích xuất dữ liệu...');
-    try {
-      const exportData = filteredItems.map((i) => ({
-        'Trạng Thái': getBadgeText(i.category),
-        'Mã Đơn': i.orderId,
-        'Dịch Vụ': i.serviceName || 'Dịch vụ',
-        'Tiêu Đề Công Việc': (i.title || 'Trống').replace(/,/g, ' - '),
-        'Khách Hàng': i.customerName?.replace(/,/g, ' - ') || 'Khách Vô Danh',
-        'SĐT Khách': i.customerPhone || 'Không cung cấp',
-        'Địa Chỉ': (i.address || 'Không rõ').replace(/,/g, ' - '),
-        'Tổng Tiền': i.price ? i.price.toLocaleString('vi-VN') + ' ₫' : '0 ₫',
-        'Ngày Tạo': i.orderDate ? format(new Date(i.orderDate), 'dd/MM/yyyy HH:mm') : 'Không rõ',
-      }));
 
-      if (exportData.length === 0) {
-        toast.error('Không có dữ liệu để xuất.', { id: toastId });
-        return;
-      }
-
-      const headers = Object.keys(exportData[0]).join(',');
-      const rows = exportData.map(obj => Object.values(obj).join(','));
-      const csvContent = '\uFEFF' + [headers, ...rows].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `LichSu_DonHang_${format(new Date(), 'ddMMyyyy')}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success('Xuất file thành công!', { id: toastId });
-    } catch (e) {
-       toast.error('Lỗi khi xuất file.', { id: toastId });
-    }
-  };
 
   if (loadingStats) {
     return (
@@ -275,30 +280,88 @@ export default function TechHistoryPage() {
           <h1 className="text-3xl font-black text-white tracking-tighter shadow-sm">LỊCH SỬ HOẠT ĐỘNG</h1>
         </div>
         
-        <div className="flex items-center gap-5">
-          <button 
-            onClick={handleExportExcel}
-            className="flex items-center gap-2 px-6 py-3 bg-[#11121d] hover:bg-emerald-500 hover:text-white text-emerald-400 rounded-xl font-bold text-xs transition-all border border-emerald-500/20 shadow-2xl active:scale-95 group uppercase tracking-widest"
-          >
-             <Download size={16} /> Xuất báo cáo
-          </button>
-        </div>
+
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
         <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
           <div className="space-y-6 relative z-10">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Lưu lượng nhận đơn</p>
-            <div className="flex items-end gap-4">
-              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalOrders}</span>
-              <div className="flex items-center gap-1.5 text-blue-400 mb-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full shadow-lg">
-                <span className="text-[10px] font-bold whitespace-nowrap">Đơn giao phó</span>
+            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+               HOÀN THÀNH
+            </p>
+            <div className="flex flex-col gap-3">
+              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalCompleted}</span>
+              <div className="w-full">
+                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
+                   <div 
+                    className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)] transition-all duration-1000" 
+                    style={{ width: `${stats.totalOrders > 0 ? (stats.totalCompleted / stats.totalOrders) * 100 : 0}%` }}
+                   />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">
+                  Đơn đã hoàn thành
+                </p>
               </div>
             </div>
           </div>
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700">
-             <CheckCircle2 size={80} className="text-blue-500" />
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700 pointer-events-none">
+             <CheckCircle2 size={80} className="text-emerald-500" />
+          </div>
+        </div>
+
+        {/* Canceled Card */}
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
+          <div className="space-y-6 relative z-10">
+            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-2">
+               <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+               ĐƠN BỊ HỦY
+            </p>
+            <div className="flex flex-col gap-3">
+              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalCanceled}</span>
+              <div className="w-full">
+                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
+                   <div 
+                    className="h-full bg-rose-500 rounded-full shadow-[0_0_10px_rgba(244,63,94,0.4)] transition-all duration-1000" 
+                    style={{ width: `${stats.totalOrders > 0 ? (stats.totalCanceled / stats.totalOrders) * 100 : 0}%` }}
+                   />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">
+                  Đơn bị hủy
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700 pointer-events-none">
+             <XCircle size={80} className="text-rose-500" />
+          </div>
+        </div>
+
+        {/* Rejected Card */}
+        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] relative overflow-hidden group shadow-2xl shadow-black/40">
+          <div className="space-y-6 relative z-10">
+            <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest flex items-center gap-2">
+               <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+               TỪ CHỐI
+            </p>
+            <div className="flex flex-col gap-3">
+              <span className="text-6xl font-black text-white leading-none tracking-tighter">{stats.totalRejected}</span>
+              <div className="w-full">
+                <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-2">
+                   <div 
+                    className="h-full bg-orange-500 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.4)] transition-all duration-1000" 
+                    style={{ width: `${stats.totalOrders > 0 ? (stats.totalRejected / stats.totalOrders) * 100 : 0}%` }}
+                   />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest italic">
+                  Đơn từ chối
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700 pointer-events-none">
+             <ShieldAlert size={80} className="text-orange-500" />
           </div>
         </div>
 
@@ -306,15 +369,15 @@ export default function TechHistoryPage() {
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6 relative z-10">Đánh giá độ uy tín</p>
           <div className="flex items-center gap-6 relative z-10">
             <span className="text-6xl font-black text-white leading-none tracking-tighter drop-shadow-xl">
-              {ratingOverview && ratingOverview.totalRating > 0 
-                ? ratingOverview.avgScore.toFixed(1) 
+              {ratingOverview && (ratingOverview.totalRating > 0 || (ratingOverview as any).TotalRating > 0) 
+                ? (ratingOverview.avgScore ?? (ratingOverview as any).AvgScore).toFixed(1) 
                 : (stats.avgRating > 0 ? stats.avgRating.toFixed(1) : "5.0")}
             </span>
             <div className="space-y-2.5">
               <div className="flex items-center gap-1">
                 {[1, 2, 3, 4, 5].map((star) => {
-                  const currentScore = (ratingOverview && ratingOverview.totalRating > 0) 
-                    ? ratingOverview.avgScore 
+                  const currentScore = (ratingOverview && (ratingOverview.totalRating > 0 || (ratingOverview as any).TotalRating > 0)) 
+                    ? (ratingOverview.avgScore ?? (ratingOverview as any).AvgScore) 
                     : (stats.avgRating > 0 ? stats.avgRating : 5);
                   return (
                     <Star 
@@ -328,7 +391,7 @@ export default function TechHistoryPage() {
                   );
                 })}
               </div>
-              <p className="text-[9px] text-amber-400/80 font-bold uppercase tracking-widest">Từ {ratingOverview?.totalRating || 0} lượt phản hồi</p>
+              <p className="text-[9px] text-amber-400/80 font-bold uppercase tracking-widest">Từ {ratingOverview?.totalRating ?? (ratingOverview as any)?.TotalRating ?? 0} lượt phản hồi</p>
             </div>
           </div>
            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-30 group-hover:-rotate-12 group-hover:scale-110 transition-all duration-700">
@@ -336,31 +399,7 @@ export default function TechHistoryPage() {
           </div>
         </div>
 
-        <div className="bg-[#11121d] rounded-[32px] p-8 border border-white/[0.03] flex items-center gap-8 shadow-2xl shadow-black/40 group relative overflow-hidden">
-          <div className="relative w-24 h-24 flex-shrink-0 z-10">
-            <svg className="w-full h-full -rotate-90 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
-              <circle cx="48" cy="48" r="40" className="stroke-[#1a1b26] stroke-[8] fill-transparent" />
-              <circle
-                cx="48" cy="48" r="40"
-                className="stroke-emerald-400 stroke-[8] fill-transparent"
-                strokeDasharray={251.2}
-                strokeDashoffset={251.2 * (1 - (stats.totalOrders > 0 ? stats.totalCompleted / stats.totalOrders : 0))}
-                strokeLinecap="round"
-                style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
-              {stats.totalOrders > 0 ? Math.round((stats.totalCompleted / stats.totalOrders) * 100) : 0}%
-            </div>
-          </div>
-          <div className="space-y-3 z-10">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tỷ lệ hoàn thành nhiệm vụ</p>
-            <div className="space-y-1">
-               <p className="text-2xl font-black text-white tracking-tight">{stats.totalCompleted} <span className="text-sm font-bold text-slate-500">ĐƠN ĐÃ HOÀN THÀNH</span></p>
-               <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest border-t border-white/10 pt-2 w-max mt-2">Tổng nhận: {stats.totalOrders}</p>
-            </div>
-          </div>
-        </div>
+
       </div>
 
       {/* Main Content Area */}
@@ -374,6 +413,7 @@ export default function TechHistoryPage() {
                  { id: 'completed', label: 'Hoàn thành', icon: CheckCircle2 },
                  { id: 'canceled', label: 'Đã hủy', icon: XCircle },
                  { id: 'rejected', label: 'Từ chối', icon: ShieldAlert },
+                 { id: 'ratings', label: 'Đánh giá', icon: Star },
                ].map((tab) => (
                   <button
                      key={tab.id}
@@ -452,8 +492,37 @@ export default function TechHistoryPage() {
                 </div>
              ) : (
                <>
-                 {/* Table-like List */}
-                 <div className="overflow-x-auto">
+                 {activeTab === 'ratings' ? (
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {currentItems.map((rating: any, index: number) => (
+                       <div key={rating.ratingId || rating.feedbackId || index} className="bg-[#11121d] p-6 rounded-2xl border border-white/5 shadow-xl flex flex-col gap-4">
+                          <div className="flex items-center justify-between">
+                             <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-[#1a1b26] flex items-center justify-center border border-white/10 shrink-0">
+                                  <UserIcon size={16} className="text-slate-400" />
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-white text-sm">{rating.customerName || rating.customerFullName || 'Khách hàng'}</h4>
+                                  <span className="text-[10px] text-slate-500 font-medium">
+                                     {rating.createdAt ? format(new Date(rating.createdAt), 'dd/MM/yyyy HH:mm') : '-'}
+                                  </span>
+                                </div>
+                             </div>
+                             <div className="flex items-center gap-0.5 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20">
+                               <span className="text-amber-500 font-black mr-1 text-xs">{rating.score}</span>
+                               <Star size={12} className="fill-amber-400 text-amber-400" />
+                             </div>
+                          </div>
+                          <div className="bg-black/20 p-4 rounded-xl border border-white/[0.02] grow">
+                             <p className="text-sm text-slate-300 italic">
+                               {rating.feedback ? `"${rating.feedback}"` : "Không để lại lời bình luận"}
+                             </p>
+                          </div>
+                       </div>
+                     ))}
+                   </div>
+                 ) : (
+                   <div className="overflow-x-auto">
                    <table className="w-full text-left whitespace-nowrap">
                      <thead>
                        <tr className="border-b border-white/10 text-[10px] font-black text-slate-500 uppercase tracking-widest">
@@ -461,14 +530,15 @@ export default function TechHistoryPage() {
                          <th className="pb-3 px-4">Khách hàng</th>
                          <th className="pb-3 px-4">Dịch vụ</th>
                          <th className="pb-3 px-4">Ngày tạo</th>
-                         <th className="pb-3 px-4">Tổng tiền</th>
+                         <th className="pb-3 px-4">Thời gian</th>
                          <th className="pb-3 px-4">Trạng thái</th>
-                         <th className="pb-3 px-4 text-center">Thao tác</th>
+                         <th className="pb-3 px-4 text-center">Đánh giá</th>
                        </tr>
                      </thead>
                      <tbody className="divide-y divide-white/[0.02]">
                        {currentItems.map((item) => (
-                         <tr key={item.orderId} className="group hover:bg-[#11121d] transition-colors duration-200">
+                         <Fragment key={item.orderId}>
+                          <tr className="group hover:bg-[#11121d] transition-colors duration-200">
                            <td className="py-4 px-4">
                              <div className="flex items-center gap-2">
                                <span className="font-bold text-slate-300">
@@ -489,12 +559,12 @@ export default function TechHistoryPage() {
                            </td>
                            <td className="py-4 px-4">
                              <span className="text-sm text-slate-400 font-medium">
-                               {item.orderDate ? format(new Date(item.orderDate), 'dd/MM/yyyy HH:mm') : '-'}
+                               {item.orderDate ? format(new Date(item.orderDate), 'dd/MM/yyyy') : '-'}
                              </span>
                            </td>
                            <td className="py-4 px-4">
                              <span className="font-bold text-white text-sm">
-                               {item.price ? `${item.price.toLocaleString('vi-VN')} ₫` : '-'}
+                               {item.orderDate ? format(new Date(item.orderDate), 'HH:mm') : '-'}
                              </span>
                            </td>
                            <td className="py-4 px-4">
@@ -503,19 +573,45 @@ export default function TechHistoryPage() {
                              </span>
                            </td>
                            <td className="py-4 px-4 text-center">
-                             <button
-                               onClick={() => openDetailModal(item.orderId)}
-                               className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white transition-all shadow-sm active:scale-95 border border-blue-500/20"
-                               title="Xem chi tiết"
-                             >
-                               <Eye size={16} />
-                             </button>
+                             {item.category === 'completed' && item.rating ? (
+                               <div className="flex items-center justify-center gap-0.5">
+                                 {[1, 2, 3, 4, 5].map((star) => (
+                                   <Star 
+                                     key={star} 
+                                     size={14} 
+                                     className={cn(
+                                       "fill-amber-400 text-amber-400",
+                                       star > item.rating! && "opacity-20 fill-transparent text-amber-400/50"
+                                     )} 
+                                   />
+                                 ))}
+                               </div>
+                             ) : (
+                               <span className="text-slate-600 font-bold">-</span>
+                             )}
                            </td>
                          </tr>
+                         <tr className="border-b border-white/[0.02]">
+                           <td colSpan={7} className="px-4 pb-4 pt-1">
+                             <div className="bg-black/20 p-3 rounded-xl ml-4 mr-4 flex flex-col gap-1.5 border border-white/[0.02]">
+                               <div className="flex items-center gap-2">
+                                 <MessageSquare size={12} className="text-slate-500" />
+                                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Nhận xét</span>
+                               </div>
+                               <p className="text-xs text-slate-400 italic pl-5">
+                                 {item.category === 'completed' 
+                                   ? (item.feedback ? `"${item.feedback}"` : "Không có nhận xét") 
+                                   : "Không có nhận xét"}
+                               </p>
+                             </div>
+                           </td>
+                         </tr>
+                         </Fragment>
                        ))}
                      </tbody>
                    </table>
                  </div>
+                 )}
 
                  {/* Pagination */}
                  {totalPages > 1 && (

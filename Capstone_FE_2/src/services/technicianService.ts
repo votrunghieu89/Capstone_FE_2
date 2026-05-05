@@ -54,9 +54,9 @@ const technicianService = {
     return res.data;
   },
 
-  // GET /api/technician/rating/overview/{technicianId}
+  // GET /api/technician/statistic/{technicianId}/ratings
   getRatingOverview: async (technicianId: string): Promise<RatingOverviewDTO> => {
-    const res = await api.get(`/technician/rating/overview/${technicianId}`);
+    const res = await api.get(`/technician/statistic/${technicianId}/ratings`);
     return res.data;
   },
 

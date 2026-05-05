@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ClipboardList,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Bell
 } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
@@ -53,21 +54,36 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
     if (user?.id) {
       loadCounts();
     }
-  }, [user?.id]);
+  }, [user?.id, location.pathname]);
 
   const loadCounts = async () => {
     if (!user?.id) return;
     try {
-      const [confirming, confirmed, inProgress] = await Promise.all([
+      const results = await Promise.allSettled([
         technicianOrderService.getConfirmingOrders(user.id),
         technicianOrderService.getConfirmedOrders(user.id),
         technicianOrderService.getInProgressOrder(user.id)
       ]);
       
+      const confirming = results[0].status === 'fulfilled' ? results[0].value : [];
+      const confirmed = results[1].status === 'fulfilled' ? results[1].value : [];
+      const inProgress = results[2].status === 'fulfilled' ? results[2].value : null;
+      
+      const getLength = (data: any, isSingle = false) => {
+        if (!data) return 0;
+        if (Array.isArray(data)) return data.length;
+        if (data.value && Array.isArray(data.value)) return data.value.length;
+        if (data.data && Array.isArray(data.data)) return data.data.length;
+        if (data.$values && Array.isArray(data.$values)) return data.$values.length;
+        // If it's expected to be a single object (like inProgress), return 1 if it exists
+        if (isSingle && typeof data === 'object') return 1;
+        return 0;
+      };
+
       setCounts({
-        confirming: Array.isArray(confirming) ? confirming.length : 0,
-        confirmed: Array.isArray(confirmed) ? confirmed.length : 0,
-        inProgress: inProgress ? (Array.isArray(inProgress) ? (Array.isArray(inProgress) ? inProgress.length : 1) : 1) : 0
+        confirming: getLength(confirming),
+        confirmed: getLength(confirmed),
+        inProgress: getLength(inProgress, true)
       });
     } catch (err) {
       console.error('Failed to load sidebar counts:', err);
@@ -127,6 +143,12 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
                   >
                     <Icon className={cn("w-5 h-5 transition-transform duration-200 group-hover:scale-110", isChildActive ? "text-blue-400" : "text-slate-500")} />
                     <span>{item.label}</span>
+                    
+                    {/* Parent Notification Bell */}
+                    {item.id === 'orders' && (counts.confirming > 0 || counts.confirmed > 0 || counts.inProgress > 0) && (
+                      <Bell size={14} className="ml-1 text-rose-500 animate-pulse drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+                    )}
+
                     <ChevronDown className={cn(
                       "ml-auto w-4 h-4 transition-transform duration-300",
                       isOpen ? "rotate-180" : ""
@@ -154,19 +176,13 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
                             <ChildIcon className={cn("w-4 h-4", isActive ? "text-white" : "text-slate-600")} />
                             <span>{child.label}</span>
                             {child.href.includes('dang-cho') && counts.confirming > 0 && (
-                              <span className="ml-auto bg-emerald-900/40 border border-emerald-500/20 text-rose-500 text-[10px] px-1.5 py-0.5 rounded-md font-black">
-                                {counts.confirming}
-                              </span>
+                              <Bell size={14} className="ml-auto text-rose-500 animate-pulse drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]" />
                             )}
                             {child.href.includes('da-tiep-nhan') && counts.confirmed > 0 && (
-                              <span className="ml-auto bg-emerald-900/40 border border-emerald-500/20 text-rose-500 text-[10px] px-1.5 py-0.5 rounded-md font-black">
-                                {counts.confirmed}
-                              </span>
+                              <Bell size={14} className="ml-auto text-rose-500 animate-pulse drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]" />
                             )}
                             {child.href.includes('dang-thuc-hien') && counts.inProgress > 0 && (
-                              <span className="ml-auto bg-emerald-900/40 border border-emerald-500/20 text-rose-500 text-[10px] px-1.5 py-0.5 rounded-md font-black">
-                                {counts.inProgress}
-                              </span>
+                              <Bell size={14} className="ml-auto text-rose-500 animate-pulse drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]" />
                             )}
                           </Link>
                         );
