@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   MapPin, Clock, Phone, MessageSquare, CheckCircle,
   Briefcase, User, Navigation, Loader2,
@@ -15,6 +15,7 @@ import { ViewOrderDTO } from '@/types/order';
 import { TechnicianProfileViewDTO } from '@/types/technician';
 import technicianService from '@/services/technicianService';
 import toast from 'react-hot-toast';
+import { buildEtaWindowText, getEtaFallbackLabel } from '@/lib/orderEta';
 
 interface PendingReviewOrder {
   orderId: string;
@@ -48,6 +49,23 @@ export function InProgress() {
     const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/);
     return match ? `https://www.youtube.com/embed/${match[1]}?autoplay=1` : url;
   };
+
+  const inProgressEtaLabel = useMemo(() => {
+    if (!job) return '';
+    const createdRaw =
+      job.orderDate ||
+      (job as any)?.OrderDate ||
+      jobDetail?.orderDate ||
+      (jobDetail as any)?.OrderDate ||
+      (jobDetail as any)?.createdAt ||
+      (jobDetail as any)?.CreatedAt;
+    const etaRaw =
+      job.estimatedTime ??
+      (job as any)?.EstimatedTime ??
+      (jobDetail as any)?.estimatedTime ??
+      (jobDetail as any)?.EstimatedTime;
+    return buildEtaWindowText(etaRaw, createdRaw) || getEtaFallbackLabel(etaRaw);
+  }, [job, jobDetail]);
 
   useEffect(() => {
     if (user?.id) {
@@ -187,7 +205,7 @@ export function InProgress() {
                       <Clock size={13} className="text-amber-400 shrink-0" />
                       <div>
                         <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-0.5">Dự kiến hoàn thành</p>
-                        <p className="text-sm font-black text-amber-400 leading-none">45-60 phút</p>
+                        <p className="text-sm font-black text-amber-400 leading-none tabular-nums">{inProgressEtaLabel || '—'}</p>
                       </div>
                     </div>
                   </div>
@@ -208,7 +226,7 @@ export function InProgress() {
                           const images = jobDetail?.imageUrls || jobDetail?.ImageUrls || [];
                           const video = jobDetail?.videoUrl || jobDetail?.VideoUrl;
                           const hasContent = images.length > 0 || video;
-                          
+
                           return hasContent ? (
                             <div className={`grid gap-3 ${video && images.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                               {/* Cột ẢNH */}
@@ -247,7 +265,7 @@ export function InProgress() {
                                   >
                                     {isYoutubeVideo(video) ? (
                                       <div className="w-full h-full relative pointer-events-none">
-                                        <img 
+                                        <img
                                           src={`https://img.youtube.com/vi/${video.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/)?.[1]}/hqdefault.jpg`}
                                           className="w-full h-full object-cover opacity-70"
                                           alt="Youtube Thumbnail"
@@ -260,7 +278,7 @@ export function InProgress() {
                                         muted
                                         playsInline
                                         preload="metadata"
-                                        onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                                        onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => { })}
                                         onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
                                       />
                                     )}
@@ -506,11 +524,11 @@ export function InProgress() {
               >
                 {isYoutubeVideo(lightboxUrl) ? (
                   <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black">
-                    <iframe 
-                      src={getYoutubeEmbedUrl(lightboxUrl!)} 
-                      title="YouTube video player" 
-                      frameBorder="0" 
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    <iframe
+                      src={getYoutubeEmbedUrl(lightboxUrl!)}
+                      title="YouTube video player"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                       className="w-full h-full"
                     ></iframe>
