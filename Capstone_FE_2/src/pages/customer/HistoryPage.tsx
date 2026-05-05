@@ -208,9 +208,7 @@ export default function HistoryPage() {
                             <Calendar className="w-4 h-4 text-zinc-500" />
                             {new Date(pick(item, ['orderDate', 'OrderDate', 'createdAt', 'CreatedAt']) || Date.now()).toLocaleString('vi-VN')}
                           </div>
-                          <div className="text-xs text-blue-300/80">
-                            {buildEtaWindowText(pick(item, ['estimatedTime', 'EstimatedTime'])) || buildEtaMinutesText(item)}
-                          </div>
+
                         </div>
                       </td>
                       <td className="px-6 py-5 text-zinc-400 text-sm">{pick(item, ['technicianName', 'TechnicianName']) || '—'}</td>

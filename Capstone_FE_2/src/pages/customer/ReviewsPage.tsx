@@ -352,10 +352,7 @@ export default function ReviewsPage() {
                                                         ))}
                                                     </div>
                                                 </div>
-                                                <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
-                                                    <p className="text-[11px] uppercase tracking-wide text-zinc-500">Mã đơn</p>
-                                                    <p className="text-zinc-200 mt-1 font-medium truncate font-mono">{String(review.orderId || '') || '—'}</p>
-                                                </div>
+
                                             </div>
 
                                             <div className="flex justify-end gap-2 pt-1">

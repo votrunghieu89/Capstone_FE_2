@@ -59,8 +59,9 @@ const buildEtaWindowText = (etaMinutesRaw: any, baseDateRaw?: any) => {
 
     const baseDate = baseDateRaw ? new Date(baseDateRaw) : null;
     const base = baseDate && !Number.isNaN(baseDate.getTime()) ? baseDate : new Date();
-    const end = new Date(base.getTime() + etaMinutes * 60 * 1000);
-    return `${formatVietnamHourLabel(base)} - ${formatVietnamHourLabel(end)}`;
+    const start = new Date(base.getTime() + etaMinutes * 60 * 1000);
+    const end = new Date(start.getTime() + 10 * 60 * 1000);
+    return `${formatVietnamHourLabel(start)} - ${formatVietnamHourLabel(end)}`;
 };
 
 const getEtaFallbackLabel = (etaMinutesRaw: any) => {
