@@ -440,32 +440,32 @@ export function NewRequests() {
                     </div>
 
                     {/* Card Body: Title & Core Info */}
-                    <div className="flex flex-col xl:flex-row gap-8">
-                      <div className="flex-1 space-y-6">
+                    <div className="flex flex-col 2xl:flex-row gap-8">
+                      <div className="flex-1 space-y-6 min-w-0">
                         <h2 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors">
                           {request.title || 'Yêu cầu sửa chữa thiết bị'}
                         </h2>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                           {/* Customer Info */}
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-4 min-w-0">
                             <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0">
                               <User size={20} className="text-slate-400" />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 w-full">
                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Khách hàng</p>
-                              <p className="text-sm font-bold text-white truncate">{request.customerName}</p>
+                              <p className="text-sm font-bold text-white break-words leading-tight">{request.customerName}</p>
                             </div>
                           </div>
 
                           {/* Address Info */}
-                          <div className="flex items-start gap-4">
+                          <div className="flex items-start gap-4 min-w-0">
                             <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 shrink-0">
                               <MapPin size={20} className="text-blue-400" />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 w-full">
                               <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Địa chỉ</p>
-                              <p className="text-sm font-medium text-slate-300 line-clamp-2 leading-tight">
+                              <p className="text-sm font-medium text-slate-300 line-clamp-2 break-words leading-tight">
                                 {detailsMap[request.orderId]?.address || request.address}
                               </p>
                             </div>
@@ -474,7 +474,7 @@ export function NewRequests() {
                       </div>
 
                       {/* Column 2: Specific Contact & Navigation */}
-                      <div className="w-full xl:w-64 space-y-6">
+                      <div className="w-full 2xl:w-72 space-y-6">
                         {/* Contact Info */}
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0">
@@ -504,10 +504,10 @@ export function NewRequests() {
                       </div>
 
                       {/* Call to Action Buttons */}
-                      <div className="flex flex-row xl:flex-col items-center justify-end gap-3 shrink-0">
+                      <div className="flex w-full 2xl:w-auto flex-col sm:flex-row 2xl:flex-col items-stretch justify-end gap-3 shrink-0">
                         <button
                           onClick={() => handleAccept(request.orderId)}
-                          className="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
+                          className="w-full px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-95"
                         >
                           Chấp nhận ngay <ArrowRight size={16} />
                         </button>
