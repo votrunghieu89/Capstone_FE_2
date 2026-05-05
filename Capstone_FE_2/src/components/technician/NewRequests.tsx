@@ -21,6 +21,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import chatService from '@/services/chatService';
 import { useChatSignalR } from '@/hooks/useChatSignalR';
+import { buildEtaWindowText, getEtaFallbackLabel } from '@/lib/orderEta';
 
 export function NewRequests() {
   const navigate = useNavigate();
@@ -528,12 +529,40 @@ export function NewRequests() {
                       </div>
                     </div>
 
-                    {/* Card Footer: Time Badge */}
-                    <div className="flex items-center gap-2 pt-4 border-t border-white/5">
-                      <Clock size={14} className="text-slate-600" />
-                      <span className="text-[11px] font-bold text-slate-500">
-                        Hẹn lúc: <span className="text-white">{format(new Date(request.orderDate), "HH:mm")}</span> - Hôm nay ({formatDistanceToNow(new Date(request.orderDate), { addSuffix: true, locale: vi })})
-                      </span>
+                    {/* Card Footer: Time Badge + dự kiến hoàn thành (đồng bộ OrdersPage) */}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-4 border-t border-white/5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Clock size={14} className="text-slate-600 shrink-0" />
+                        <span className="text-[11px] font-bold text-slate-500">
+                          Hẹn lúc: <span className="text-white">{format(new Date(request.orderDate), "HH:mm")}</span> - Hôm nay ({formatDistanceToNow(new Date(request.orderDate), { addSuffix: true, locale: vi })})
+                        </span>
+                      </div>
+                      {(() => {
+                        const createdRaw =
+                          request.orderDate ||
+                          (request as any)?.OrderDate ||
+                          (request as any)?.createdAt ||
+                          (request as any)?.CreatedAt ||
+                          (request as any)?.createAt ||
+                          (request as any)?.CreateAt;
+                        const etaRaw =
+                          request.estimatedTime ??
+                          (request as any)?.EstimatedTime ??
+                          (request as any)?.eta ??
+                          (request as any)?.ETA;
+                        const etaLabel =
+                          buildEtaWindowText(etaRaw, createdRaw) || getEtaFallbackLabel(etaRaw);
+                        return (
+                          <div className="flex items-center gap-2 sm:justify-end min-w-0 flex-wrap">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 shrink-0">
+                              Dự kiến hoàn thành
+                            </span>
+                            <span className="text-[11px] font-bold text-emerald-300/95 tabular-nums">
+                              {etaLabel}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </motion.div>
                 ))
