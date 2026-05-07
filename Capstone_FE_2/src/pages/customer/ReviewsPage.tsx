@@ -205,21 +205,6 @@ export default function ReviewsPage() {
         }
     };
 
-    const formatExactTime = (value: any) => {
-        if (!value) return '—';
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return '—';
-        return d.toLocaleString('vi-VN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        });
-    };
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -302,9 +287,6 @@ export default function ReviewsPage() {
                                                     </h3>
                                                     <p className="text-sm text-zinc-400 leading-relaxed">
                                                         Thợ: <span className="font-semibold text-zinc-300">{techNameMap[review.orderId] || review.technicianLabel || review.technicianName || review.tech || 'Thợ FastFix'}</span>
-                                                    </p>
-                                                    <p className="text-sm text-zinc-400 leading-relaxed mt-1">
-                                                        Đánh giá lúc: <span className="text-zinc-200">{formatExactTime(review.createdAt || review.updatedAt || review.CreateAt || review.UpdateAt || review.reviewedAt || review.ReviewedAt || review.feedbackCreatedAt || review.FeedbackCreatedAt)}</span>
                                                     </p>
                                                 </div>
                                                 <div className="self-start px-3 py-1.5 rounded-lg border text-xs font-semibold bg-green-500/10 border-green-500/30 text-green-400 whitespace-nowrap">
