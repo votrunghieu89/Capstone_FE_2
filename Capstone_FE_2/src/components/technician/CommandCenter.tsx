@@ -270,7 +270,7 @@ export function CommandCenter() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden relative dashboard-panel w-full bg-[#020617]">
+    <div className="flex flex-col min-h-[calc(100vh-80px)] relative dashboard-panel w-full bg-[#020617]">
       <div className="absolute inset-0 z-0 opacity-10">
         <img
           src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop"
@@ -284,7 +284,7 @@ export function CommandCenter() {
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="relative z-10 flex flex-col w-full h-full px-8 py-6 sm:px-12 lg:px-16 max-w-[1920px] mx-auto overflow-hidden dashboard-content"
+        className="relative z-10 flex flex-col w-full min-h-[calc(100vh-80px)] px-8 py-6 sm:px-12 lg:px-16 max-w-[1920px] mx-auto dashboard-content"
       >
         {/* Premium Header Section */}
         <section className="flex shrink-0 flex-col lg:flex-row lg:items-center justify-between gap-8 mb-6">
@@ -315,7 +315,7 @@ export function CommandCenter() {
           </motion.div>
         </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 min-h-0 overflow-hidden">
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1">
           {/* Row 1: 4 Stats Cards — chia đều toàn bộ chiều ngang */}
           <div className="lg:col-span-12">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
@@ -410,8 +410,8 @@ export function CommandCenter() {
           </div>
 
           {/* Row 2 Left: Biểu đồ Hiệu năng công việc (col-span-8) */}
-          <motion.div variants={itemVariants} className="lg:col-span-8 flex flex-col min-h-0">
-            <div className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col flex-1 min-h-0">
+          <motion.div variants={itemVariants} className="lg:col-span-8 flex flex-col min-h-[420px]">
+            <div className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col flex-1">
               <div className="relative z-10 flex shrink-0 flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
                 <div className="space-y-1">
                   <h3 className="text-[13px] font-black text-white uppercase tracking-[0.2em]">Hiệu năng công việc</h3>
@@ -522,7 +522,7 @@ export function CommandCenter() {
           </motion.div>
 
           {/* Row 2 Right: Vị trí dịch vụ (col-span-4) — ngang đều với biểu đồ */}
-          <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col">
+          <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col min-h-[420px]">
             <div
               className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col flex-1 shadow-2xl relative overflow-hidden group transition-colors"
             >
