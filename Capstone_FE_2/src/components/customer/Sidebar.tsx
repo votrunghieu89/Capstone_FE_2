@@ -23,8 +23,8 @@ const menuItems = [
             { href: '/customer/orders?status=in-progress', label: 'Đang thực hiện' },
         ]
     },
-    { href: '/customer/orders?status=cancelled', label: 'Đơn hàng bị hủy', icon: ClipboardList },
-    { href: '/customer/orders?status=rejected', label: 'Đơn hàng từ chối', icon: ClipboardList },
+    { href: '/customer/orders?status=cancelled', label: 'Đơn hàng đã hủy', icon: ClipboardList },
+    { href: '/customer/orders?status=rejected', label: 'Đơn hàng bị từ chối', icon: ClipboardList },
     { href: '/customer/contact', label: 'Liên hệ thợ', icon: MessageSquare },
     { href: '/customer/history', label: 'Lịch sử', icon: History },
     { href: '/customer/reviews', label: 'Đánh giá', icon: Star },
@@ -104,10 +104,10 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                                         <Icon className={cn("w-5 h-5 transition-transform group-hover:scale-110", isActive ? "text-primary" : "")} />
                                         <span className="text-sm tracking-wide">{item.label}</span>
                                     </Link>
-                                    
+
                                     {/* Submenu */}
                                     {hasSubItems && isActive && (
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ opacity: 0, height: 0 }}
                                             animate={{ opacity: 1, height: 'auto' }}
                                             className="ml-12 space-y-1 border-l border-white/10 pl-4 py-1"

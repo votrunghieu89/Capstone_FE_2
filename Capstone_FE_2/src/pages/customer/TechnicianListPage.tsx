@@ -154,6 +154,7 @@ export default function TechnicianListPage() {
 
     const [search, setSearch] = useState('');
     const [activeCategory, setActiveCategory] = useState('Tất cả');
+    const [cityFilter, setCityFilter] = useState('');
     const [technicians, setTechnicians] = useState<any[]>([]);
     const [services, setServices] = useState<ServiceDTO[]>([]);
     const [cities, setCities] = useState<CityDTO[]>([]);
@@ -270,7 +271,11 @@ export default function TechnicianListPage() {
         const matchCategory = activeCategory === 'Tất cả' ||
             normalizeText(t.serviceName || t.ServiceName) === normalizeText(activeCategory);
 
-        return matchSearch && matchCategory;
+        const normalizedCityFilter = comparableCityText(cityFilter);
+        const normalizedTechCity = comparableCityText(getTechCardCityLabel(t));
+        const matchCity = !normalizedCityFilter || normalizedTechCity === normalizedCityFilter;
+
+        return matchSearch && matchCategory && matchCity;
     });
 
     return (
@@ -289,6 +294,9 @@ export default function TechnicianListPage() {
                     <div className="flex items-center gap-2 text-xs text-zinc-400">
                         <span className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5">{filtered.length} kỹ thuật viên</span>
                         <span className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5">{activeCategory}</span>
+                        {cityFilter && (
+                            <span className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5">{cityFilter}</span>
+                        )}
                     </div>
                 </div>
             </motion.div>
@@ -314,6 +322,21 @@ export default function TechnicianListPage() {
                         placeholder="Tìm theo tên, dịch vụ... (Enter để tìm)"
                         className="pl-9 h-11 bg-white/5 border-white/10 text-white placeholder:text-zinc-500 focus:border-primary/50 rounded-xl"
                     />
+                </div>
+                <div className="relative md:w-56">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                    <select
+                        value={cityFilter}
+                        onChange={e => setCityFilter(e.target.value)}
+                        className="w-full h-11 rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 text-sm text-white outline-none transition focus:border-primary/50"
+                    >
+                        <option value="" className="bg-[#0a1122]">Tất cả thành phố</option>
+                        {cities.map(city => (
+                            <option key={city.id} value={city.cityName} className="bg-[#0a1122]">
+                                {city.cityName}
+                            </option>
+                        ))}
+                    </select>
                 </div>
                 <Button
                     variant="outline"
@@ -1121,11 +1144,11 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                                     <Label>Thành phố <span className="text-red-400">*</span></Label>
                                     <Input
                                         value={cityText}
-                                        onChange={e => setCityText(e.target.value)}
                                         placeholder="Ví dụ: Đà Nẵng"
-                                        className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm"
+                                        readOnly
+                                        tabIndex={-1}
+                                        className="h-11 rounded-2xl bg-white/5 border-white/10 text-white text-sm cursor-not-allowed select-none"
                                     />
-                                    <p className="text-[10px] text-zinc-500">Nhập tay tên thành phố của bạn.</p>
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="flex items-center gap-1.5">
@@ -1143,16 +1166,6 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                             </div>
 
 
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                                {(latitude || longitude) && (
-                                    <p className="text-xs text-zinc-300 break-all">
-                                        Lat: <span className="text-white font-semibold">{latitude || '-'}</span> | Lon: <span className="text-white font-semibold">{longitude || '-'}</span>
-                                    </p>
-                                )}
-                            </div>
                         </div>
 
                         <Button

@@ -65,9 +65,6 @@ export function useNotificationSignalR() {
           const deduped = [normalized, ...prev.filter(p => p.id !== normalized.id)];
           return sortNewestFirst(deduped);
         });
-        toast('🔔 Bạn có thông báo mới: ' + (notification.message || notification.Action || 'Cập nhật đơn hàng!'), {
-          style: { background: '#2563eb', color: '#fff' }
-        });
       }
     });
 

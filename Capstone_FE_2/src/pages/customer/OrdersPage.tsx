@@ -1317,7 +1317,7 @@ function StatusBadge({ status }: { status: string }) {
     else if (s === 'in-progress' || s === 'inprogress') { color = 'bg-amber-500/10 text-amber-400 border-amber-500/20'; label = 'Đang thực hiện'; }
     else if (s === 'completed' || s === 'done') { color = 'bg-green-500/10 text-green-400 border-green-500/20'; label = 'Hoàn thành'; }
     else if (s === 'cancelled' || s === 'canceled') { color = 'bg-red-500/10 text-red-400 border-red-500/20'; label = 'Đã hủy'; }
-    else if (s === 'rejected') { color = 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20'; label = 'Đã từ chối'; }
+    else if (s === 'rejected') { color = 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20'; label = 'Đã bị từ chối'; }
 
     return <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${color}`}>{label}</span>;
 }

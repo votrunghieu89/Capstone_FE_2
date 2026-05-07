@@ -55,17 +55,17 @@ export function CommandCenter() {
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week');
   const [isMapOpen, setIsMapOpen] = useState(false);
   const { location: currentLoc } = useCurrentLocation();
-  
+
   // Real statistical data states
   const [todayReceived, setTodayReceived] = useState(0);
-  const [totalCompleted, setTotalCompleted] = useState(0); // Dùng để hiển thị số đơn hoàn thành TRONG NGÀY
+  const [totalCompleted, setTotalCompleted] = useState(0); // Tổng tất cả đơn đã hoàn thành
   const [allTimeCompleted, setAllTimeCompleted] = useState(0); // Dùng cho thanh tiến trình
   const [totalOrders, setTotalOrders] = useState(0);
   const [avgRating, setAvgRating] = useState(0);
   const [chartData, setChartData] = useState<any[]>([]);
   const [totalCanceled, setTotalCanceled] = useState(0);
   const [totalRejected, setTotalRejected] = useState(0);
-  const [techLocation, setTechLocation] = useState<{address: string, cityName: string} | null>(null);
+  const [techLocation, setTechLocation] = useState<{ address: string, cityName: string } | null>(null);
   const [profile, setProfile] = useState<any>(null);
 
   const weekData = [
@@ -112,9 +112,8 @@ export function CommandCenter() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [pending, todayCompleted, totalCompleted, avgRating, totalAll, profile, canceledTotal, rejectedTotal] = await Promise.all([
+      const [pending, totalCompletedCount, avgRating, totalAll, profile, canceledTotal, rejectedTotal] = await Promise.all([
         technicianOrderService.getConfirmingOrders(user.id).catch(() => []),
-        statisticService.getTodayCompletedCount(user.id).catch(() => 0),
         statisticService.getTotalCompletedCount(user.id).catch(() => 0),
         statisticService.getAverageRating(user.id).catch(() => 0),
         statisticService.getTotalOrders(user.id).catch(() => 0),
@@ -122,11 +121,11 @@ export function CommandCenter() {
         statisticService.getTotalCanceled(user.id).catch(() => 0),
         statisticService.getTotalRejected(user.id).catch(() => 0)
       ]);
-      
+
       setNewRequests(Array.isArray(pending) ? pending : []);
       setTodayReceived(pending.length);
-      setTotalCompleted(todayCompleted);
-      setAllTimeCompleted(totalCompleted);
+      setTotalCompleted(totalCompletedCount);
+      setAllTimeCompleted(totalCompletedCount);
       setAvgRating(avgRating);
       setTotalOrders(totalAll);
       setProfile(profile);
@@ -173,12 +172,12 @@ export function CommandCenter() {
 
       if (timeRange === 'month') {
         const year = new Date().getFullYear();
-        
+
         const completedMap = new Map<number, number>();
         const canceledMap = new Map<number, number>();
         const rejectedMap = new Map<number, number>();
         for (let i = 1; i <= 12; i++) { completedMap.set(i, 0); canceledMap.set(i, 0); rejectedMap.set(i, 0); }
-        
+
         (completedOrders || []).filter(o => new Date(o.orderDate).getFullYear() === year).forEach(o => {
           const m = new Date(o.orderDate).getMonth() + 1;
           completedMap.set(m, completedMap.get(m)! + 1);
@@ -273,15 +272,15 @@ export function CommandCenter() {
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden relative dashboard-panel w-full bg-[#020617]">
       <div className="absolute inset-0 z-0 opacity-10">
-        <img 
-          src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop" 
-          alt="dashboard background" 
-          className="w-full h-full object-cover background-image" 
+        <img
+          src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop"
+          alt="dashboard background"
+          className="w-full h-full object-cover background-image"
         />
       </div>
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-[#020617] to-[#0f172a]/95"></div>
 
-      <motion.div 
+      <motion.div
         variants={containerVariants}
         initial="hidden"
         animate="show"
@@ -299,20 +298,20 @@ export function CommandCenter() {
               Hôm nay, {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </motion.div>
-          
+
           <motion.div variants={itemVariants} className="flex items-center gap-4">
-             {/* Dynamic Live Indicator */}
-             <div className="bg-indigo-500/10 border border-indigo-500/20 px-6 py-3 rounded-2xl backdrop-blur-md flex items-center gap-3 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
-                <div className="relative">
-                   <div className={cn("w-2.5 h-2.5 rounded-full", isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500")} />
-                </div>
-                <div className="flex flex-col">
-                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Trạng thái hiện tại</span>
-                   <span className={cn("text-xs font-black uppercase tracking-widest", isOnline ? "text-emerald-400" : "text-rose-400")}>
-                      {isOnline ? 'Đang trực tuyến' : 'Đang ngoại tuyến'}
-                   </span>
-                </div>
-             </div>
+            {/* Dynamic Live Indicator */}
+            <div className="bg-indigo-500/10 border border-indigo-500/20 px-6 py-3 rounded-2xl backdrop-blur-md flex items-center gap-3 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
+              <div className="relative">
+                <div className={cn("w-2.5 h-2.5 rounded-full", isOnline ? "bg-emerald-500 animate-pulse" : "bg-rose-500")} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">Trạng thái hiện tại</span>
+                <span className={cn("text-xs font-black uppercase tracking-widest", isOnline ? "text-emerald-400" : "text-rose-400")}>
+                  {isOnline ? 'Đang trực tuyến' : 'Đang ngoại tuyến'}
+                </span>
+              </div>
+            </div>
           </motion.div>
         </section>
 
@@ -325,13 +324,13 @@ export function CommandCenter() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1 flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-                       Hoàn thành
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                      Hoàn thành
                     </p>
                     <span className="text-5xl font-black text-white tracking-tighter">{totalCompleted}</span>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-400">
-                     <CheckCircle size={24} />
+                    <CheckCircle size={24} />
                   </div>
                 </div>
                 <div className="mt-4">
@@ -347,13 +346,13 @@ export function CommandCenter() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
-                       Đơn hủy
+                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+                      Đơn hủy
                     </p>
                     <span className="text-5xl font-black text-white tracking-tighter">{totalCanceled}</span>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20 text-rose-400">
-                     <XCircle size={24} />
+                    <XCircle size={24} />
                   </div>
                 </div>
                 <div className="mt-4">
@@ -369,13 +368,13 @@ export function CommandCenter() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
-                       Từ chối
+                      <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
+                      Từ chối
                     </p>
                     <span className="text-5xl font-black text-white tracking-tighter">{totalRejected}</span>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20 text-orange-400">
-                     <ShieldAlert size={24} />
+                    <ShieldAlert size={24} />
                   </div>
                 </div>
                 <div className="mt-4">
@@ -391,13 +390,13 @@ export function CommandCenter() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest mb-1 flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
-                       Đánh giá TB
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
+                      Đánh giá TB
                     </p>
                     <span className="text-5xl font-black text-white tracking-tighter">{avgRating > 0 ? avgRating.toFixed(1) : '5.0'}</span>
                   </div>
                   <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 text-amber-400">
-                     <Star size={24} />
+                    <Star size={24} />
                   </div>
                 </div>
                 <div className="mt-4">
@@ -412,158 +411,158 @@ export function CommandCenter() {
 
           {/* Row 2 Left: Biểu đồ Hiệu năng công việc (col-span-8) */}
           <motion.div variants={itemVariants} className="lg:col-span-8 flex flex-col min-h-0">
-              <div className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col flex-1 min-h-0">
-                <div className="relative z-10 flex shrink-0 flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
-                  <div className="space-y-1">
-                    <h3 className="text-[13px] font-black text-white uppercase tracking-[0.2em]">Hiệu năng công việc</h3>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thống kê đơn hàng theo thời gian</p>
-                  </div>
-                  
-                  <div className="flex items-center p-1 bg-white/5 backdrop-blur-xl rounded-xl border border-white/5 shrink-0">
-                    {[
-                      { id: 'week', label: 'Tuần' },
-                      { id: 'month', label: 'Tháng' }
-                    ].map((range) => (
-                      <button 
-                        key={range.id}
-                        onClick={() => setTimeRange(range.id as any)}
-                        className={cn(
-                          "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.1em] transition-all",
-                          timeRange === range.id ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
-                        )}
-                      >
-                        {range.label}
-                      </button>
-                    ))}
-                  </div>
+            <div className="bg-[#0f172a]/80 backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 sm:p-8 shadow-2xl relative overflow-hidden flex flex-col flex-1 min-h-0">
+              <div className="relative z-10 flex shrink-0 flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
+                <div className="space-y-1">
+                  <h3 className="text-[13px] font-black text-white uppercase tracking-[0.2em]">Hiệu năng công việc</h3>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Thống kê đơn hàng theo thời gian</p>
                 </div>
-                
-                <div className="flex-1 w-full min-h-[300px] relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activeChartData}>
-                      <defs>
-                        <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorCanceled" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorRejected" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f97316" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.02)" />
-                      <XAxis 
-                        dataKey="day" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
-                        dy={10}
-                      />
-                      <YAxis 
-                        allowDecimals={false}
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fill: '#475569', fontSize: 11, fontWeight: 900 }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#0f172a', 
-                          borderColor: 'rgba(255,255,255,0.1)', 
-                          borderRadius: '20px',
-                          padding: '16px',
-                          borderWidth: '1px'
-                        }}
-                        labelStyle={{ color: '#f8fafc', fontWeight: '900', marginBottom: '6px', fontSize: '13px' }}
-                        formatter={(value: any, name: any) => {
-                          const labels: Record<string, string> = { completed: 'Hoàn thành', canceled: 'Đã hủy', rejected: 'Từ chối' };
-                          return [`${value} đơn`, labels[name as string] || name];
-                        }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="completed" 
-                        name="completed"
-                        stroke="#6366f1" 
-                        strokeWidth={3}
-                        fillOpacity={1} 
-                        fill="url(#colorCompleted)" 
-                        dot={{ fill: '#0f172a', stroke: '#6366f1', strokeWidth: 2, r: 3 }}
-                        activeDot={{ r: 6, strokeWidth: 0, fill: '#818cf8' }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="canceled" 
-                        name="canceled"
-                        stroke="#ef4444" 
-                        strokeWidth={2.5}
-                        fillOpacity={1} 
-                        fill="url(#colorCanceled)" 
-                        dot={{ fill: '#0f172a', stroke: '#ef4444', strokeWidth: 2, r: 3 }}
-                        activeDot={{ r: 6, strokeWidth: 0, fill: '#f87171' }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="rejected" 
-                        name="rejected"
-                        stroke="#f97316" 
-                        strokeWidth={2.5}
-                        fillOpacity={1} 
-                        fill="url(#colorRejected)" 
-                        dot={{ fill: '#0f172a', stroke: '#f97316', strokeWidth: 2, r: 3 }}
-                        activeDot={{ r: 6, strokeWidth: 0, fill: '#fb923c' }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+
+                <div className="flex items-center p-1 bg-white/5 backdrop-blur-xl rounded-xl border border-white/5 shrink-0">
+                  {[
+                    { id: 'week', label: 'Tuần' },
+                    { id: 'month', label: 'Tháng' }
+                  ].map((range) => (
+                    <button
+                      key={range.id}
+                      onClick={() => setTimeRange(range.id as any)}
+                      className={cn(
+                        "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.1em] transition-all",
+                        timeRange === range.id ? "bg-indigo-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                      )}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              <div className="flex-1 w-full min-h-[300px] relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={activeChartData}>
+                    <defs>
+                      <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorCanceled" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorRejected" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.02)" />
+                    <XAxis
+                      dataKey="day"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#475569', fontSize: 10, fontWeight: 800 }}
+                      dy={10}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#475569', fontSize: 11, fontWeight: 900 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderRadius: '20px',
+                        padding: '16px',
+                        borderWidth: '1px'
+                      }}
+                      labelStyle={{ color: '#f8fafc', fontWeight: '900', marginBottom: '6px', fontSize: '13px' }}
+                      formatter={(value: any, name: any) => {
+                        const labels: Record<string, string> = { completed: 'Hoàn thành', canceled: 'Đã hủy', rejected: 'Từ chối' };
+                        return [`${value} đơn`, labels[name as string] || name];
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="completed"
+                      name="completed"
+                      stroke="#6366f1"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#colorCompleted)"
+                      dot={{ fill: '#0f172a', stroke: '#6366f1', strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 6, strokeWidth: 0, fill: '#818cf8' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="canceled"
+                      name="canceled"
+                      stroke="#ef4444"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorCanceled)"
+                      dot={{ fill: '#0f172a', stroke: '#ef4444', strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 6, strokeWidth: 0, fill: '#f87171' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="rejected"
+                      name="rejected"
+                      stroke="#f97316"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorRejected)"
+                      dot={{ fill: '#0f172a', stroke: '#f97316', strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 6, strokeWidth: 0, fill: '#fb923c' }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </motion.div>
 
           {/* Row 2 Right: Vị trí dịch vụ (col-span-4) — ngang đều với biểu đồ */}
           <motion.div variants={itemVariants} className="lg:col-span-4 flex flex-col">
-              <div 
-                className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col flex-1 shadow-2xl relative overflow-hidden group transition-colors"
-              >
-                <div className="flex items-start justify-between mb-8 shrink-0 px-2">
-                  <div className="space-y-4 shrink-0">
-                    <h3 className="text-[11px] font-black text-[#2DD4BF] uppercase tracking-[0.4em] mb-2 shrink-0">VỊ TRÍ DỊCH VỤ</h3>
-                    {[
-                      { label: 'THÀNH PHỐ', value: profile?.city || 'Đà Nẵng' },
-                      { label: 'ĐỊA CHỈ CỤ THỂ', value: profile?.address || 'Chưa cập nhật' }
-                    ].map((item, idx) => (
-                      <div key={idx} className="flex items-start gap-4">
-                        <div className="mt-0.5 w-8 h-8 rounded-full bg-[#2DD4BF]/10 flex items-center justify-center text-[#2DD4BF] shrink-0">
-                          <MapPin size={14} />
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{item.label}</p>
-                          <p className="text-sm font-bold text-slate-200 uppercase">{item.value}</p>
-                        </div>
+            <div
+              className="bg-white/[0.02] backdrop-blur-3xl rounded-[32px] border border-white/5 p-6 lg:p-8 flex flex-col flex-1 shadow-2xl relative overflow-hidden group transition-colors"
+            >
+              <div className="flex items-start justify-between mb-8 shrink-0 px-2">
+                <div className="space-y-4 shrink-0">
+                  <h3 className="text-[11px] font-black text-[#2DD4BF] uppercase tracking-[0.4em] mb-2 shrink-0">VỊ TRÍ DỊCH VỤ</h3>
+                  {[
+                    { label: 'THÀNH PHỐ', value: profile?.city || 'Đà Nẵng' },
+                    { label: 'ĐỊA CHỈ CỤ THỂ', value: profile?.address || 'Chưa cập nhật' }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-4">
+                      <div className="mt-0.5 w-8 h-8 rounded-full bg-[#2DD4BF]/10 flex items-center justify-center text-[#2DD4BF] shrink-0">
+                        <MapPin size={14} />
                       </div>
-                    ))}
-                  </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{item.label}</p>
+                        <p className="text-sm font-bold text-slate-200 uppercase">{item.value}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <div className="relative rounded-2xl overflow-hidden border border-white/5 flex-1 min-h-[200px] bg-slate-900 group cursor-crosshair">
-                   <iframe 
-                      key={techLocation ? `${techLocation.address}-${techLocation.cityName}` : (currentLoc ? `${currentLoc.lat},${currentLoc.lng}` : 'profile')}
-                      width="100%" 
-                      height="100%" 
-                      frameBorder="0" 
-                      style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }} 
-                      src={techLocation ? getMapEmbedSrcByAddress(`${techLocation.address}, ${techLocation.cityName}`, 13) : getMapEmbedSrc(currentLoc, profile?.latitude, profile?.longitude, 13)} 
-                      allowFullScreen
-                    ></iframe>
-                   <div className="absolute bottom-4 left-4 right-4 p-4 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 text-center">
-                      <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">{profile?.city ? `${profile.city} CITY` : 'ĐÀ NẴNG CITY'}</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">ACTIVE COVERAGE</p>
-                   </div>
-                </div>
-
               </div>
+
+              <div className="relative rounded-2xl overflow-hidden border border-white/5 flex-1 min-h-[200px] bg-slate-900 group cursor-crosshair">
+                <iframe
+                  key={techLocation ? `${techLocation.address}-${techLocation.cityName}` : (currentLoc ? `${currentLoc.lat},${currentLoc.lng}` : 'profile')}
+                  width="100%"
+                  height="100%"
+                  frameBorder="0"
+                  style={{ border: 0, filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)' }}
+                  src={techLocation ? getMapEmbedSrcByAddress(`${techLocation.address}, ${techLocation.cityName}`, 13) : getMapEmbedSrc(currentLoc, profile?.latitude, profile?.longitude, 13)}
+                  allowFullScreen
+                ></iframe>
+                <div className="absolute bottom-4 left-4 right-4 p-4 bg-black/80 backdrop-blur-md rounded-2xl border border-white/10 text-center">
+                  <p className="text-[11px] font-black text-white uppercase leading-none mb-1 tracking-tight">{profile?.city ? `${profile.city} CITY` : 'ĐÀ NẴNG CITY'}</p>
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em]">ACTIVE COVERAGE</p>
+                </div>
+              </div>
+
+            </div>
           </motion.div>
         </section>
       </motion.div>
