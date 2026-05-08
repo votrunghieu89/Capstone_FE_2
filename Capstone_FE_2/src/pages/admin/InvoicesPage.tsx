@@ -122,7 +122,7 @@ export default function InvoicesPage() {
     const q = searchQuery.trim().toLowerCase()
     if (!q) return invoices
     return invoices.filter((item) =>
-      [item.invoiceId, item.orderId, item.customerName, item.technicianName]
+      [item.orderId, item.customerName, item.technicianName]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q))
     )
@@ -152,13 +152,15 @@ export default function InvoicesPage() {
     <div className="flex min-w-0 flex-1 flex-col bg-[#070b14] text-slate-100">
       <DashboardHeader title="Hóa đơn" description="Theo dõi và xem chi tiết hóa đơn của toàn hệ thống" />
 
-      <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
+      <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 p-6">
+
+
         <Card className="rounded-xl border border-slate-800 bg-[#0b111f]">
           <CardContent className="flex gap-4 p-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <Input
-                placeholder="Tìm theo mã hóa đơn, mã đơn, khách hàng, kỹ thuật viên..."
+                placeholder="Tìm theo mã đơn, khách hàng, kỹ thuật viên..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="border-slate-700 bg-[#101a2f] pl-9"
@@ -181,8 +183,7 @@ export default function InvoicesPage() {
               <div className="py-16 text-center text-slate-500">Không tìm thấy hóa đơn phù hợp.</div>
             ) : (
               <div className="overflow-hidden rounded-xl border border-slate-800">
-                <div className="grid grid-cols-[1.1fr_1fr_1fr_140px_160px_120px] gap-3 bg-slate-900/70 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
-                  <span>Mã hóa đơn</span>
+                <div className="grid grid-cols-[1fr_1fr_140px_160px_120px] gap-3 bg-slate-900/70 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
                   <span>Khách hàng</span>
                   <span>Kỹ thuật viên</span>
                   <span className="text-right">Tổng tiền</span>
@@ -192,11 +193,7 @@ export default function InvoicesPage() {
 
                 <div className="divide-y divide-slate-800">
                   {filteredInvoices.map((invoice) => (
-                    <div key={invoice.invoiceId} className="grid grid-cols-[1.1fr_1fr_1fr_140px_160px_120px] gap-3 px-4 py-3 text-sm text-slate-300">
-                      <div className="min-w-0">
-                        <p className="truncate font-mono text-slate-100">{invoice.invoiceId.slice(0, 8)}</p>
-                        <p className="truncate text-xs text-slate-500">Đơn: {invoice.orderId.slice(0, 8)}</p>
-                      </div>
+                    <div key={invoice.invoiceId} className="grid grid-cols-[1fr_1fr_140px_160px_120px] gap-3 px-4 py-3 text-sm text-slate-300">
                       <span className="truncate">{invoice.customerName}</span>
                       <span className="truncate">{invoice.technicianName}</span>
                       <span className="text-right font-semibold text-slate-100">{formatCurrency(invoice.totalAmount)}</span>
