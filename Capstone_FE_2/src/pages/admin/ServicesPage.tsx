@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Wrench, ListChecks, Search, Plus, Trash2, Loader2 } from "lucide-react"
+import { Wrench, Search, Plus, Trash2, Loader2 } from "lucide-react"
 import { adminDelete, adminGet, adminPost, normalizeListPayload } from "@/utils/adminHttp"
 import { toast } from "react-hot-toast"
 import { ConfirmToast } from "@/components/admin/ConfirmToast"
@@ -54,8 +54,6 @@ export default function ServicesPage() {
     if (!q) return services
     return services.filter((item) => item.name.toLowerCase().includes(q))
   }, [searchQuery, services])
-
-  const totalRequests = services.reduce((sum, item) => sum + item.totalRequests, 0)
 
   // --- XỬ LÝ XÓA VỚI CONFIRM TOAST ---
   const handleDeleteService = (id: string, name: string) => {
@@ -156,7 +154,7 @@ export default function ServicesPage() {
 
       <main className="flex-1 p-6 flex flex-col gap-4 max-w-[1400px] w-full mx-auto">
         {/* STATS CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <Card className="border border-slate-800 bg-[#0b111f] rounded-xl overflow-hidden">
             <CardContent className="p-6 flex items-center gap-4">
               <div className="h-12 w-12 rounded-xl bg-blue-950/40 border border-blue-800 flex items-center justify-center">
@@ -165,17 +163,6 @@ export default function ServicesPage() {
               <div>
                 <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Tổng dịch vụ</p>
                 <p className="text-2xl font-bold text-slate-100">{services.length}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border border-slate-800 bg-[#0b111f] rounded-xl overflow-hidden">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="h-12 w-12 rounded-xl bg-emerald-950/40 border border-emerald-800 flex items-center justify-center">
-                <ListChecks className="h-5 w-5 text-emerald-300" />
-              </div>
-              <div>
-                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Tổng yêu cầu</p>
-                <p className="text-2xl font-bold text-slate-100">{totalRequests}</p>
               </div>
             </CardContent>
           </Card>
@@ -213,7 +200,6 @@ export default function ServicesPage() {
                   <div key={item.id} className="group rounded-xl border border-slate-700 bg-[#14171f] p-4 flex justify-between items-start hover:border-slate-500 transition-all">
                     <div>
                       <p className="font-semibold text-slate-100 group-hover:text-blue-400 transition-colors">{item.name}</p>
-                      <p className="text-xs text-slate-400 mt-1 font-mono">ID: {item.id.slice(0, 8)}...</p>
                       <div className="flex items-center gap-2 mt-3">
                         <Badge variant="secondary" className="bg-slate-800 text-slate-300 border-none text-[10px]">
                           Tổng: {item.totalRequests}

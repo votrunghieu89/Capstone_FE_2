@@ -27,6 +27,7 @@ const TechniciansPage = lazy(() => import('@/pages/admin/TechniciansPage'));
 const ServicesPage = lazy(() => import('@/pages/admin/ServicesPage'));
 const CitiesPage = lazy(() => import('@/pages/admin/CitiesPage'));
 const NotificationsPage = lazy(() => import('@/pages/admin/NotificationsPage'));
+const AdminInvoicesPage = lazy(() => import('@/pages/admin/InvoicesPage'));
 const TechDashboardPage = lazy(() => import('@/pages/technician/DashboardPage'));
 const TechProfilePage = lazy(() => import('@/pages/technician/ProfilePage'));
 const TechNewRequestsPage = lazy(() => import('@/pages/technician/NewRequestsPage'));
@@ -34,6 +35,7 @@ const TechAcceptedRequestsPage = lazy(() => import('@/pages/technician/AcceptedR
 const TechInProgressPage = lazy(() => import('@/pages/technician/InProgressPage'));
 const TechHistoryPage = lazy(() => import('@/pages/technician/HistoryPage'));
 const TechChatPage = lazy(() => import('@/pages/technician/ChatPage'));
+const TechInvoicePage = lazy(() => import('@/pages/technician/InvoicePage'));
 const TechOrderDetailPage = lazy(() => import('@/pages/technician/OrderDetailPage'));
 
 const TechCustomerHubPage = CustomerHub;
@@ -85,6 +87,7 @@ export default function AppRoutes() {
           <Route path="ky-thuat-vien" element={<TechniciansPage />} />
           <Route path="dich-vu" element={<ServicesPage />} />
           <Route path="thanh-pho" element={<CitiesPage />} />
+          <Route path="hoa-don" element={<AdminInvoicesPage />} />
           <Route path="thong-bao" element={<NotificationsPage />} />
         </Route>
 
@@ -100,6 +103,7 @@ export default function AppRoutes() {
           <Route path="don-hang/dang-thuc-hien" element={<TechInProgressPage />} />
           <Route path="lich-su" element={<TechHistoryPage />} />
           <Route path="chat" element={<TechChatPage />} />
+          <Route path="hoa-don" element={<TechInvoicePage />} />
           <Route path="khach-hang" element={<TechCustomerHubPage />} />
           <Route path="giao-tiep" element={<TechCommunicationPage />} />
           <Route path="phan-tich" element={<TechAnalyticsPage />} />

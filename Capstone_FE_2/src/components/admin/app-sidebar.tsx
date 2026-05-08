@@ -6,6 +6,7 @@ import {
   Wrench,
   MapPin,
   Bell,
+  ReceiptText,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +24,7 @@ const mainNav = [
   { title: "Kỹ thuật viên", href: "/admin/ky-thuat-vien", icon: Users },
   { title: "Dịch vụ", href: "/admin/dich-vu", icon: Wrench },
   { title: "Thành phố", href: "/admin/thanh-pho", icon: MapPin },
+  { title: "Hóa đơn", href: "/admin/hoa-don", icon: ReceiptText },
 ]
 
 const secondaryNav = [

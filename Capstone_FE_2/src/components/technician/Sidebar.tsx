@@ -15,15 +15,16 @@ import {
   ClipboardList,
   CheckCircle,
   AlertCircle,
-  Bell
+  Bell,
+  ReceiptText
 } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
 import technicianOrderService from '@/services/technicianOrderService';
 
 const menuItems = [
   { href: '/technician', label: 'Bảng Điều Khiển', icon: LayoutDashboard },
-  { 
-    label: 'Đơn hàng', 
+  {
+    label: 'Đơn hàng',
     icon: ClipboardList,
     id: 'orders',
     children: [
@@ -32,9 +33,11 @@ const menuItems = [
       { href: '/technician/don-hang/dang-thuc-hien', label: 'Đang Thực Hiện', icon: Briefcase },
     ]
   },
-  { href: '/technician/chat', label: 'Liên hệ', icon: MessageSquare },
+  { href: '/technician/hoa-don', label: 'Hóa đơn', icon: ReceiptText },
   { href: '/technician/lich-su', label: 'Lịch Sử', icon: TrendingUp },
   { href: '/technician/ho-so', label: 'Profile', icon: User },
+  { href: '/technician/chat', label: 'Liên hệ', icon: MessageSquare },
+
 ];
 
 export function Sidebar({ isOpen }: { isOpen: boolean }) {
@@ -64,11 +67,11 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
         technicianOrderService.getConfirmedOrders(user.id),
         technicianOrderService.getInProgressOrder(user.id)
       ]);
-      
+
       const confirming = results[0].status === 'fulfilled' ? results[0].value : [];
       const confirmed = results[1].status === 'fulfilled' ? results[1].value : [];
       const inProgress = results[2].status === 'fulfilled' ? results[2].value : null;
-      
+
       const getLength = (data: any, isSingle = false) => {
         if (!data) return 0;
         if (Array.isArray(data)) return data.length;
@@ -129,7 +132,7 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
               const Icon = item.icon;
               const isChildActive = item.children.some(child => location.pathname === child.href || location.search.includes(child.href.split('?')[1] || 'never_match'));
               const isOpen = item.id ? openMenus[item.id] : false;
-              
+
               return (
                 <div key={item.label} className="space-y-1">
                   <button
@@ -143,7 +146,7 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
                   >
                     <Icon className={cn("w-5 h-5 transition-transform duration-200 group-hover:scale-110", isChildActive ? "text-blue-400" : "text-slate-500")} />
                     <span>{item.label}</span>
-                    
+
                     {/* Parent Notification Bell */}
                     {item.id === 'orders' && (counts.confirming > 0 || counts.confirmed > 0 || counts.inProgress > 0) && (
                       <Bell size={14} className="ml-1 text-rose-500 animate-pulse drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
@@ -159,9 +162,9 @@ export function Sidebar({ isOpen }: { isOpen: boolean }) {
                     <div className="space-y-1 ml-4 pl-4 border-l border-slate-800/50">
                       {item.children.map((child) => {
                         const ChildIcon = child.icon;
-                        const isActive = location.pathname === child.href.split('?')[0] && 
+                        const isActive = location.pathname === child.href.split('?')[0] &&
                           (child.href.includes('?') ? location.search.includes(child.href.split('?')[1]) : true);
-                        
+
                         return (
                           <Link
                             key={child.href}
