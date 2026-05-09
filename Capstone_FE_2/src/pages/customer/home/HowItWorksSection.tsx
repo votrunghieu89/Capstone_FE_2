@@ -1,27 +1,27 @@
 import { useRef } from "react";
-import { Camera, Brain, UserCheck } from "lucide-react";
+import { ClipboardList, ReceiptText, Wrench } from "lucide-react";
 import { useInView } from "@/hooks/useInView";
 
 const steps = [
   {
     step: 1,
-    icon: Camera,
-    title: "Chụp ảnh sự cố",
-    description: "Chụp ảnh hoặc mô tả vấn đề cần sửa chữa. AI sẽ tự động nhận diện loại sự cố.",
+    icon: ClipboardList,
+    title: "Tạo yêu cầu sửa chữa",
+    description: "Khách hàng chọn dịch vụ, nhập địa chỉ, mô tả sự cố và có thể đính kèm hình ảnh để kỹ thuật viên nắm rõ tình trạng.",
     color: "bg-ff-cta-orange",
   },
   {
     step: 2,
-    icon: Brain,
-    title: "AI phân tích & báo giá",
-    description: "AI phân tích hình ảnh, dự đoán chi phí và đề xuất giải pháp phù hợp nhất.",
+    icon: Wrench,
+    title: "Thợ nhận và xử lý đơn",
+    description: "Kỹ thuật viên xác nhận đơn, liên hệ khách qua chat, di chuyển đến địa điểm và cập nhật tiến trình từ nhận đơn đến hoàn thành.",
     color: "bg-ff-accent-blue",
   },
   {
     step: 3,
-    icon: UserCheck,
-    title: "Thợ gần nhất nhận việc",
-    description: "Hệ thống tự động tìm thợ uy tín gần bạn nhất. Theo dõi tiến trình real-time.",
+    icon: ReceiptText,
+    title: "Hóa đơn, thanh toán, đánh giá",
+    description: "Sau khi hoàn thành, kỹ thuật viên tạo hóa đơn chi tiết; khách thanh toán, xác nhận và gửi đánh giá chất lượng dịch vụ.",
     color: "bg-ff-success",
   },
 ];
@@ -39,10 +39,10 @@ export function HowItWorksSection() {
             Cách hoạt động
           </span>
           <h2 className="font-poppins text-3xl font-bold tracking-tight text-white text-balance sm:text-4xl">
-            3 bước đơn giản
+            Quy trình FastFix
           </h2>
           <p className="mt-4 text-lg leading-relaxed text-white/60">
-            Từ sự cố đến giải pháp chỉ trong vài phút
+            Từ lúc gửi yêu cầu đến khi hoàn tất thanh toán và đánh giá
           </p>
         </div>
 
@@ -51,9 +51,8 @@ export function HowItWorksSection() {
           {/* Connecting line - Desktop */}
           <div className="absolute left-0 right-0 top-[60px] hidden h-[2px] lg:block">
             <div
-              className={`h-full bg-white/10 transition-all duration-1000 ${
-                isInView ? "w-full" : "w-0"
-              }`}
+              className={`h-full bg-white/10 transition-all duration-1000 ${isInView ? "w-full" : "w-0"
+                }`}
             />
           </div>
 
@@ -63,9 +62,8 @@ export function HowItWorksSection() {
               return (
                 <div
                   key={index}
-                  className={`relative flex flex-col items-center text-center ${
-                    isInView ? "animate-fade-up" : "opacity-0"
-                  }`}
+                  className={`relative flex flex-col items-center text-center ${isInView ? "animate-fade-up" : "opacity-0"
+                    }`}
                   style={{ animationDelay: `${index * 0.2}s` }}
                 >
                   {/* Step number with icon */}

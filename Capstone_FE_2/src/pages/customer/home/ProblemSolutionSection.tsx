@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { AlertTriangle, DollarSign, ShieldAlert, Users } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Users } from "lucide-react";
 import { useInView } from "@/hooks/useInView";
 
 const problems = [
@@ -9,13 +9,6 @@ const problems = [
     solution: "AI ghép nối thợ phù hợp nhất trong 15 phút",
     color: "text-ff-cta-orange",
     bgColor: "bg-ff-cta-orange/10",
-  },
-  {
-    icon: DollarSign,
-    problem: "Không biết giá",
-    solution: "AI dự đoán chi phí trước khi đặt lịch",
-    color: "text-ff-accent-blue",
-    bgColor: "bg-ff-accent-blue/10",
   },
   {
     icon: ShieldAlert,
@@ -54,24 +47,23 @@ export function ProblemSolutionSection() {
         </div>
 
         {/* Cards Grid */}
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-3">
           {problems.map((item, index) => {
             const Icon = item.icon;
             return (
               <div
                 key={index}
-                className={`group relative rounded-2xl border border-white/10 bg-white/5 p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
-                  isInView ? "animate-fade-up" : "opacity-0"
-                }`}
+                className={`group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.06] p-7 text-center shadow-[0_18px_55px_rgba(0,0,0,0.18)] transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.08] hover:shadow-xl ${isInView ? "animate-fade-up" : "opacity-0"
+                  }`}
                 style={{ animationDelay: `${index * 0.1}s` }}
               >
-                <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl ${item.bgColor}`}>
+                <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${item.bgColor} ring-1 ring-white/10`}>
                   <Icon className={`h-6 w-6 ${item.color}`} />
                 </div>
-                <h3 className="mb-2 font-poppins text-lg font-semibold text-white">
+                <h3 className="mb-2 font-poppins text-xl font-semibold text-white">
                   {item.problem}
                 </h3>
-                <p className="text-sm leading-relaxed text-white/60">
+                <p className="mx-auto max-w-[240px] text-sm leading-relaxed text-white/65">
                   {item.solution}
                 </p>
                 {/* Hover accent */}

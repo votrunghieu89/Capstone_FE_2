@@ -301,14 +301,63 @@ export default function TechnicianListPage() {
                 </div>
             </motion.div>
 
-            <div className="flex flex-col gap-3 md:flex-row">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                    <Input
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        onKeyDown={async (e) => {
-                            if (e.key !== 'Enter') return;
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 shadow-[0_14px_45px_rgba(0,0,0,0.18)]">
+                <div className="flex flex-col gap-3 lg:flex-row">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                        <Input
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            onKeyDown={async (e) => {
+                                if (e.key !== 'Enter') return;
+                                try {
+                                    setIsLoading(true);
+                                    const response = await fetch('/api/customer/technicians/all');
+                                    if (!response.ok) throw new Error('Failed to load technicians');
+                                    const techRes = await response.json();
+                                    setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
+                                } finally {
+                                    setIsLoading(false);
+                                }
+                            }}
+                            placeholder="Tìm theo tên, dịch vụ... (Enter để tìm)"
+                            className="pl-9 h-11 bg-white/5 border-white/10 text-white placeholder:text-zinc-500 focus:border-primary/50 rounded-xl"
+                        />
+                    </div>
+                    <div className="relative lg:w-64">
+                        <Wrench className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                        <select
+                            value={activeCategory}
+                            onChange={e => setActiveCategory(e.target.value)}
+                            className="w-full h-11 rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 text-sm text-white outline-none transition focus:border-primary/50"
+                        >
+                            <option value="Tất cả" className="bg-[#0a1122]">Tất cả dịch vụ</option>
+                            {services.map(ser => (
+                                <option key={ser.id} value={ser.serviceName} className="bg-[#0a1122]">
+                                    {ser.serviceName}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="relative md:w-56">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                        <select
+                            value={cityFilter}
+                            onChange={e => setCityFilter(e.target.value)}
+                            className="w-full h-11 rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 text-sm text-white outline-none transition focus:border-primary/50"
+                        >
+                            <option value="" className="bg-[#0a1122]">Tất cả thành phố</option>
+                            {cities.map(city => (
+                                <option key={city.id} value={city.cityName} className="bg-[#0a1122]">
+                                    {city.cityName}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <Button
+                        variant="outline"
+                        className="border-white/10 bg-white/5 text-zinc-300 hover:text-white hover:bg-white/10 gap-2 h-11 rounded-xl px-4"
+                        onClick={async () => {
                             try {
                                 setIsLoading(true);
                                 const response = await fetch('/api/customer/technicians/all');
@@ -319,63 +368,10 @@ export default function TechnicianListPage() {
                                 setIsLoading(false);
                             }
                         }}
-                        placeholder="Tìm theo tên, dịch vụ... (Enter để tìm)"
-                        className="pl-9 h-11 bg-white/5 border-white/10 text-white placeholder:text-zinc-500 focus:border-primary/50 rounded-xl"
-                    />
-                </div>
-                <div className="relative md:w-56">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
-                    <select
-                        value={cityFilter}
-                        onChange={e => setCityFilter(e.target.value)}
-                        className="w-full h-11 rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 text-sm text-white outline-none transition focus:border-primary/50"
                     >
-                        <option value="" className="bg-[#0a1122]">Tất cả thành phố</option>
-                        {cities.map(city => (
-                            <option key={city.id} value={city.cityName} className="bg-[#0a1122]">
-                                {city.cityName}
-                            </option>
-                        ))}
-                    </select>
+                        <Filter className="w-4 h-4" /> Lọc
+                    </Button>
                 </div>
-                <Button
-                    variant="outline"
-                    className="border-white/10 bg-white/5 text-zinc-300 hover:text-white hover:bg-white/10 gap-2 h-11 rounded-xl px-4"
-                    onClick={async () => {
-                        try {
-                            setIsLoading(true);
-                            const response = await fetch('/api/customer/technicians/all');
-                            if (!response.ok) throw new Error('Failed to load technicians');
-                            const techRes = await response.json();
-                            setTechnicians(Array.isArray(techRes) ? techRes : (techRes.items || techRes.data || []));
-                        } finally {
-                            setIsLoading(false);
-                        }
-                    }}
-                >
-                    <Filter className="w-4 h-4" /> Lọc
-                </Button>
-            </div>
-
-            <div className="flex gap-2 flex-nowrap overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <button
-                    onClick={() => setActiveCategory('Tất cả')}
-                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === 'Tất cả'
-                        ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                        : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
-                        }`}
-                >
-                    Tất cả
-                </button>
-                {services.map(ser => (
-                    <button key={ser.id} onClick={() => setActiveCategory(ser.serviceName)}
-                        className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === ser.serviceName
-                            ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                            : 'bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white'
-                            }`}>
-                        {ser.serviceName}
-                    </button>
-                ))}
             </div>
 
             {/* ── Auto Find Banner ── */}

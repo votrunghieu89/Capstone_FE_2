@@ -39,12 +39,6 @@ export function HeroSection() {
             </span>
           </h1>
 
-          {/* Subheading */}
-          <p className="max-w-lg text-lg leading-relaxed text-white/60">
-            AI phân tích sự cố &mdash; Tìm thợ gần nhất &mdash; Giá minh bạch.
-            Nền tảng kết nối dịch vụ sửa chữa nhanh nhất Việt Nam.
-          </p>
-
           {/* Quick Search Bar */}
           <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">

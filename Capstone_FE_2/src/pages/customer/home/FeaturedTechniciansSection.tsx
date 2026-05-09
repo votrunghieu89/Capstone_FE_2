@@ -1,151 +1,101 @@
-import { useRef } from "react";
-import { Star, MapPin, Clock, Calendar } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useInView } from "@/hooks/useInView";
+import imageOne from "../../../assets/dfdfgf.jpg";
+import imageTwo from "../../../assets/dgdfgdf.jpg";
+import imageThree from "../../../assets/dgfdg.jpg";
 
-const technicians = [
+const slides = [
   {
-    name: "Nguyễn Văn Minh",
-    specialty: "Điện nước",
-    rating: 4.9,
-    reviews: 234,
-    distance: "1.2 km",
-    experience: "8 năm",
-    startingPrice: "150.000đ",
-    topRated: true,
-    avatarColor: "bg-ff-cta-orange/20",
-    initial: "M",
+    image: imageOne,
+    title: "Dịch vụ tận nhà",
+    description:
+      "Kỹ thuật viên FastFix hỗ trợ sửa chữa, kiểm tra và bảo trì ngay tại địa điểm của khách hàng.",
   },
   {
-    name: "Trần Thị Lan",
-    specialty: "Điều hòa",
-    rating: 4.8,
-    reviews: 189,
-    distance: "2.1 km",
-    experience: "6 năm",
-    startingPrice: "200.000đ",
-    topRated: true,
-    avatarColor: "bg-ff-accent-blue/20",
-    initial: "L",
+    image: imageTwo,
+    title: "Thợ sửa chữa chuyên nghiệp",
+    description:
+      "Xử lý đa dạng thiết bị gia dụng như máy giặt, tủ lạnh, bếp, điện nước và các hạng mục trong nhà.",
   },
   {
-    name: "Lê Văn Hùng",
-    specialty: "Sơn sửa",
-    rating: 4.7,
-    reviews: 156,
-    distance: "3.5 km",
-    experience: "10 năm",
-    startingPrice: "180.000đ",
-    topRated: false,
-    avatarColor: "bg-ff-success/20",
-    initial: "H",
-  },
-  {
-    name: "Phạm Đức Anh",
-    specialty: "Ống khóa",
-    rating: 4.9,
-    reviews: 312,
-    distance: "1.8 km",
-    experience: "12 năm",
-    startingPrice: "120.000đ",
-    topRated: true,
-    avatarColor: "bg-ff-cta-orange/20",
-    initial: "A",
+    image: imageThree,
+    title: "Minh bạch sau khi hoàn tất",
+    description:
+      "Khách hàng được tư vấn, nhận hóa đơn chi tiết và đánh giá chất lượng sau mỗi lần sử dụng dịch vụ.",
   },
 ];
 
 export function FeaturedTechniciansSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { threshold: 0.1 });
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % slides.length);
+    }, 4000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
-    <section id="technicians" ref={sectionRef} className="bg-ff-primary py-24">
-      <div className="mx-auto max-w-7xl px-6">
-        {/* Section Header */}
+    <section id="technicians" ref={sectionRef} className="relative overflow-hidden bg-ff-primary py-24">
+      <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-ff-accent-blue/10 blur-[140px]" />
+
+      <div className="relative mx-auto max-w-7xl px-6">
         <div className="mx-auto mb-16 max-w-2xl text-center">
           <span className="mb-4 inline-block rounded-full bg-ff-cta-orange/10 px-4 py-1.5 text-xs font-semibold text-ff-cta-orange">
-            Thợ nổi bật
+            Dịch vụ thực tế
           </span>
           <h2 className="font-poppins text-3xl font-bold tracking-tight text-white text-balance sm:text-4xl">
-            Thợ uy tín gần bạn
+            FastFix đồng hành tại nhà bạn
           </h2>
-          <p className="mt-4 text-lg leading-relaxed text-white/60">
-            Những thợ được đánh giá cao nhất trên nền tảng FastFix
-          </p>
         </div>
 
-        {/* Technician Cards */}
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {technicians.map((tech, index) => (
-            <div
-              key={index}
-              className={`group relative rounded-2xl border border-white/10 bg-white/5 p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:border-ff-accent-blue/30 ${
-                isInView ? "animate-fade-up" : "opacity-0"
-              }`}
-              style={{ animationDelay: `${index * 0.1}s` }}
-            >
-              {/* Top Rated Badge */}
-              {tech.topRated && (
-                <div className="absolute -right-2 -top-2 rounded-full bg-ff-cta-orange px-3 py-1 text-[10px] font-bold text-white shadow-lg">
-                  Top Rated
-                </div>
-              )}
+        <div
+          className={`relative mx-auto max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.32)] ${isInView ? "animate-fade-up" : "opacity-0"
+            }`}
+        >
+          <div className="relative aspect-[16/8] min-h-[360px]">
+            {slides.map((slide, index) => (
+              <img
+                key={slide.title}
+                src={slide.image}
+                alt={slide.title}
+                className={`absolute inset-0 h-full w-full object-cover transition-all duration-700 ${activeIndex === index ? "scale-100 opacity-100" : "scale-105 opacity-0"
+                  }`}
+              />
+            ))}
 
-              {/* Avatar */}
-              <div className="mb-4 flex items-center gap-4">
-                <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${tech.avatarColor}`}>
-                  <span className="font-poppins text-lg font-bold text-white">
-                    {tech.initial}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="font-poppins text-base font-semibold text-white">
-                    {tech.name}
-                  </h3>
-                  <p className="text-sm text-white/60">{tech.specialty}</p>
-                </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/90 via-[#020617]/25 to-transparent" />
+
+            <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
+              <div className="max-w-2xl">
+                <p className="mb-3 inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white/80 backdrop-blur">
+                  FastFix Service
+                </p>
+                <h3 className="font-poppins text-2xl font-bold text-white sm:text-3xl">
+                  {slides[activeIndex].title}
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-white/70 sm:text-base">
+                  {slides[activeIndex].description}
+                </p>
               </div>
-
-              {/* Rating */}
-              <div className="mb-4 flex items-center gap-2">
-                <div className="flex">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className={`h-4 w-4 ${
-                        i < Math.floor(tech.rating)
-                          ? "fill-ff-cta-orange text-ff-cta-orange"
-                          : "fill-white/20 text-white/20"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <span className="text-sm font-medium text-white">{tech.rating}</span>
-                <span className="text-xs text-white/60">({tech.reviews})</span>
-              </div>
-
-              {/* Info */}
-              <div className="mb-6 flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-sm text-white/60">
-                  <MapPin className="h-3.5 w-3.5 text-ff-accent-blue" />
-                  {tech.distance}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-white/60">
-                  <Clock className="h-3.5 w-3.5 text-ff-success" />
-                  {tech.experience}
-                </div>
-                <div className="flex items-center gap-2 text-sm text-white/60">
-                  <span className="text-xs text-white/60">Từ</span>
-                  <span className="font-semibold text-white">{tech.startingPrice}</span>
-                </div>
-              </div>
-
-              {/* CTA */}
-              <button className="w-full gap-2 bg-white/10 hover:bg-ff-cta-orange/90 border border-white/10 hover:border-ff-cta-orange text-sm font-semibold text-white py-3 rounded-xl transition-all duration-200 flex items-center justify-center">
-                <Calendar className="h-4 w-4" />
-                Đặt lịch
-              </button>
             </div>
-          ))}
+          </div>
+
+          <div className="absolute bottom-6 right-6 flex gap-2">
+            {slides.map((slide, index) => (
+              <button
+                key={slide.title}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                className={`h-2.5 rounded-full transition-all duration-300 ${activeIndex === index ? "w-8 bg-white" : "w-2.5 bg-white/40 hover:bg-white/70"
+                  }`}
+                aria-label={`Chuyển đến ảnh ${index + 1}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>
