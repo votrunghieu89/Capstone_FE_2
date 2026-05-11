@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Search, Star, MapPin, CheckCircle, Filter, Camera, X, Loader2, Navigation, LoaderCircle, Wrench, MapPin as LocationPin, Building2, Briefcase, MessageSquareText } from 'lucide-react';
+import { Search, Star, MapPin, CheckCircle, Filter, Camera, X, Loader2, Navigation, LoaderCircle, Wrench, MapPin as LocationPin, Building2, Briefcase, MessageSquareText, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -124,6 +124,8 @@ const resolveTechnicianGuid = (tech: any) =>
         ''
     ).trim();
 
+const TECHNICIANS_PER_PAGE = 9;
+
 
 function InfoItem({ label, value }: { label: string; value: string }) {
     const getIcon = () => {
@@ -155,6 +157,7 @@ export default function TechnicianListPage() {
     const [search, setSearch] = useState('');
     const [activeCategory, setActiveCategory] = useState('Tất cả');
     const [cityFilter, setCityFilter] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
     const [technicians, setTechnicians] = useState<any[]>([]);
     const [services, setServices] = useState<ServiceDTO[]>([]);
     const [cities, setCities] = useState<CityDTO[]>([]);
@@ -277,6 +280,21 @@ export default function TechnicianListPage() {
 
         return matchSearch && matchCategory && matchCity;
     });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / TECHNICIANS_PER_PAGE));
+    const currentPageSafe = Math.min(currentPage, totalPages);
+    const paginatedTechnicians = filtered.slice(
+        (currentPageSafe - 1) * TECHNICIANS_PER_PAGE,
+        currentPageSafe * TECHNICIANS_PER_PAGE
+    );
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, activeCategory, cityFilter]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
 
     return (
         <div className="space-y-6">
@@ -403,7 +421,14 @@ export default function TechnicianListPage() {
                 </Dialog>
             </motion.div>
 
-            <p className="text-xs text-zinc-500">{filtered.length} kỹ thuật viên</p>
+            <p className="text-xs text-zinc-500">
+                {filtered.length} kỹ thuật viên
+                {filtered.length > TECHNICIANS_PER_PAGE && (
+                    <span className="ml-2 text-zinc-600">
+                        Trang {currentPageSafe}/{totalPages} · Hiển thị {paginatedTechnicians.length}/9
+                    </span>
+                )}
+            </p>
 
             {isLoading ? (
                 <div className="flex justify-center py-16">
@@ -411,7 +436,7 @@ export default function TechnicianListPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {filtered.map((tech, index) => (
+                    {paginatedTechnicians.map((tech, index) => (
                         <motion.div
                             key={`${tech.technicianId || tech.TechnicianId || 'tech'}-${tech.serviceId || tech.ServiceId || 'service'}-${tech.cityId || tech.CityId || 'city'}-${index}`}
                             initial={{ opacity: 0, y: 20 }}
@@ -525,6 +550,54 @@ export default function TechnicianListPage() {
                             </div>
                         </motion.div>
                     ))}
+                </div>
+            )}
+
+            {!isLoading && filtered.length > TECHNICIANS_PER_PAGE && (
+                <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 sm:flex-row">
+                    <p className="text-sm text-zinc-500">
+                        Hiển thị {(currentPageSafe - 1) * TECHNICIANS_PER_PAGE + 1}
+                        {' - '}
+                        {Math.min(currentPageSafe * TECHNICIANS_PER_PAGE, filtered.length)}
+                        {' '}trên {filtered.length} kỹ thuật viên
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={currentPageSafe === 1}
+                            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                            className="h-10 rounded-xl border-white/10 bg-white/5 px-3 text-zinc-300 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+
+                        {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                            <Button
+                                key={page}
+                                type="button"
+                                variant="outline"
+                                onClick={() => setCurrentPage(page)}
+                                className={`h-10 min-w-10 rounded-xl border-white/10 px-3 font-semibold ${page === currentPageSafe
+                                    ? 'bg-primary text-white hover:bg-primary-dark'
+                                    : 'bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white'
+                                    }`}
+                            >
+                                {page}
+                            </Button>
+                        ))}
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={currentPageSafe === totalPages}
+                            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                            className="h-10 rounded-xl border-white/10 bg-white/5 px-3 text-zinc-300 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
             )}
 
@@ -666,7 +739,11 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
                 setSelectedCityId(resolvedCityId);
                 console.log('✅ Auto-selected city text:', resolvedCityText, 'cityId:', resolvedCityId, { techCityId, techCityName });
 
-                // Auto-select service dựa trên serviceName của tech
+                // Auto-select service dựa trên dịch vụ gắn với technician, khách không được đổi ở form.
+                const techServiceId = tech.serviceId || tech.ServiceId;
+                if (techServiceId) {
+                    setSelectedServiceId(String(techServiceId));
+                }
                 const techServiceName = tech.serviceName || tech.ServiceName;
                 if (techServiceName) {
                     const matchedService = serviceList.find((s: ServiceDTO) =>
@@ -1047,21 +1124,12 @@ function BookTechnicianDialog({ tech }: { tech: any }) {
             <div className="px-6 py-6">
                 <div className="grid gap-7 lg:grid-cols-1">
                     <div className="space-y-6">
-                        {/* ✅ DROPDOWN CHỌN SERVICE */}
+                        {/* Dịch vụ cố định theo technician, khách không chọn ở đây */}
                         <div className="space-y-1.5">
-                            <Label>Loại dịch vụ <span className="text-red-400">*</span></Label>
-                            <select
-                                value={selectedServiceId}
-                                onChange={e => setSelectedServiceId(e.target.value)}
-                                className="w-full h-11 bg-white/5 border border-white/10 rounded-2xl px-4 text-white text-sm focus:ring-1 focus:ring-primary outline-none"
-                            >
-                                <option value="" className="bg-[#0a1122]">Chọn dịch vụ...</option>
-                                {services.map(s => (
-                                    <option key={s.id} value={s.id} className="bg-[#0a1122]">
-                                        {s.serviceName}
-                                    </option>
-                                ))}
-                            </select>
+                            <Label>Dịch vụ của thợ <span className="text-red-400">*</span></Label>
+                            <div className="flex h-11 w-full cursor-not-allowed items-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm text-zinc-400 opacity-70">
+                                {tech.serviceName || tech.ServiceName || services.find(s => s.id === selectedServiceId)?.serviceName || 'Dịch vụ chưa cập nhật'}
+                            </div>
                         </div>
 
                         {/* Tiêu đề */}

@@ -940,24 +940,71 @@ export default function OrdersPage() {
 }
 
 function UpdateOrderModal({ order, onClose, onSuccess }: { order: any; onClose: () => void; onSuccess: () => void }) {
-    const [description, setDescription] = useState((order.description || order.Description || '').toString());
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [detail, setDetail] = useState<any>(order);
     const [images, setImages] = useState<File[]>([]);
+    const [isLoadingDetail, setIsLoadingDetail] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const pick = (obj: any, keys: string[]) => {
+        for (const key of keys) {
+            const value = obj?.[key];
+            if (value !== undefined && value !== null && value !== '') return value;
+        }
+        return '';
+    };
+
+    useEffect(() => {
+        const fetchUpdateDetail = async () => {
+            const orderId = order.id || order.Id || order.orderId || order.OrderId;
+            if (!orderId) {
+                setTitle((order.title || order.Title || '').toString());
+                setDescription((order.description || order.Description || '').toString());
+                setIsLoadingDetail(false);
+                return;
+            }
+
+            setIsLoadingDetail(true);
+            try {
+                const res = await orderService.getOrderDetail(String(orderId));
+                const detail = res?.data || res || {};
+                setDetail({ ...order, ...detail });
+                setTitle((detail.title || detail.Title || order.title || order.Title || '').toString());
+                setDescription((detail.description || detail.Description || order.description || order.Description || '').toString());
+            } catch (error) {
+                console.error('Failed to load order detail for update:', error);
+                toast.error('Không thể tải chi tiết đơn để cập nhật');
+                setDetail(order);
+                setTitle((order.title || order.Title || '').toString());
+                setDescription((order.description || order.Description || '').toString());
+            } finally {
+                setIsLoadingDetail(false);
+            }
+        };
+
+        fetchUpdateDetail();
+    }, [order]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const orderId = order.id || order.Id || order.orderId || order.OrderId;
         if (!orderId) return toast.error('Không tìm thấy mã đơn hàng');
+        if (!title.trim()) return toast.error('Vui lòng nhập tiêu đề cập nhật');
         if (!description.trim()) return toast.error('Vui lòng nhập mô tả cập nhật');
 
         setIsSubmitting(true);
         try {
-            await orderService.updateOrder({
+            const response = await orderService.updateOrder({
                 orderId,
+                title: title.trim(),
                 description: description.trim(),
                 images
             });
-            toast.success('Cập nhật đơn hàng thành công');
+            const successMessage = typeof response === 'string'
+                ? response
+                : response?.message || JSON.stringify(response);
+            toast.success(successMessage || 'Cập nhật đơn hàng thành công');
             onSuccess();
         } catch (err: any) {
             toast.error(err?.response?.data?.message || 'Không thể cập nhật đơn hàng');
@@ -969,7 +1016,7 @@ function UpdateOrderModal({ order, onClose, onSuccess }: { order: any; onClose: 
     return (
         <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto p-4"
             onClick={onClose}
         >
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -978,39 +1025,84 @@ function UpdateOrderModal({ order, onClose, onSuccess }: { order: any; onClose: 
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative w-full max-w-xl bg-bg-card/90 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl p-6"
+                className="relative my-6 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-bg-card/90 shadow-2xl backdrop-blur-2xl"
             >
-                <h2 className="text-xl font-bold text-white mb-4">Cập nhật đơn hàng</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="text-xs text-zinc-400">Mô tả cập nhật</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            rows={4}
-                            className="mt-1 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50"
-                            placeholder="Cập nhật thêm thông tin sự cố..."
-                        />
+                <div className="border-b border-white/10 px-6 py-5">
+                    <h2 className="text-xl font-bold text-white mb-2">Cập nhật đơn hàng</h2>
+                    <p className="text-xs text-zinc-500">Các thông tin không được phép sửa vẫn hiển thị bên dưới ở dạng khóa.</p>
+                </div>
+
+                {isLoadingDetail ? (
+                    <div className="flex min-h-[260px] items-center justify-center text-zinc-400">
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary" />
+                        Đang tải chi tiết đơn...
                     </div>
-                    <div>
-                        <label className="text-xs text-zinc-400">Thêm ảnh (tuỳ chọn)</label>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={(e) => setImages(Array.from(e.target.files || []))}
-                            className="mt-1 block w-full text-xs text-zinc-400"
-                        />
-                    </div>
-                    <div className="flex gap-3 justify-end">
-                        <Button type="button" variant="ghost" onClick={onClose}>Hủy</Button>
-                        <Button type="submit" className="bg-primary hover:bg-primary-dark text-white" disabled={isSubmitting}>
-                            {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Lưu cập nhật'}
-                        </Button>
-                    </div>
-                </form>
+                ) : (
+                    <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto px-6 py-5">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 opacity-70">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Thông tin không thể chỉnh sửa</p>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-zinc-500">Đã khóa</span>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <ReadOnlyInfo label="Dịch vụ" value={pick(detail, ['serviceName', 'ServiceName']) || '—'} />
+                                <ReadOnlyInfo label="Kỹ thuật viên" value={pick(detail, ['technicianName', 'TechnicianName']) || '—'} />
+                                <ReadOnlyInfo label="Trạng thái" value={pick(detail, ['status', 'Status']) || '—'} />
+                                <ReadOnlyInfo label="Thời gian tạo" value={formatVietnamDateTime(pick(detail, ['orderDate', 'OrderDate', 'createAt', 'CreateAt', 'createdAt', 'CreatedAt']))} />
+                                <ReadOnlyInfo label="Địa chỉ" value={pick(detail, ['address', 'Address']) || '—'} className="sm:col-span-2" />
+                                <ReadOnlyInfo label="Thành phố" value={pick(detail, ['cityName', 'CityName', 'city', 'City']) || '—'} />
+                                <ReadOnlyInfo label="SĐT thợ" value={pick(detail, ['technicianPhone', 'TechnicianPhone', 'phoneNumber', 'PhoneNumber']) || '—'} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-zinc-400">Tiêu đề</label>
+                            <input
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                className="mt-1 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50"
+                                placeholder="Nhập tiêu đề đơn hàng"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-zinc-400">Mô tả</label>
+                            <textarea
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                rows={4}
+                                className="mt-1 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50"
+                                placeholder="Cập nhật thêm thông tin sự cố..."
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-zinc-400">Ảnh mới</label>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) => setImages(Array.from(e.target.files || []))}
+                                className="mt-1 block w-full text-xs text-zinc-400"
+                            />
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <Button type="button" variant="ghost" onClick={onClose}>Hủy</Button>
+                            <Button type="submit" className="bg-primary hover:bg-primary-dark text-white" disabled={isSubmitting}>
+                                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Lưu cập nhật'}
+                            </Button>
+                        </div>
+                    </form>
+                )}
             </motion.div>
         </motion.div>
+    );
+}
+
+function ReadOnlyInfo({ label, value, className = '' }: { label: string; value: string; className?: string }) {
+    return (
+        <div className={`rounded-xl border border-white/10 bg-black/10 px-3 py-2 ${className}`}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">{label}</p>
+            <p className="mt-1 truncate text-sm text-zinc-400">{value}</p>
+        </div>
     );
 }
 

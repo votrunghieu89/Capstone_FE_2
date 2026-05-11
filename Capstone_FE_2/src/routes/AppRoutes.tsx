@@ -19,6 +19,7 @@ const TechnicianListPage = lazy(() => import('@/pages/customer/TechnicianListPag
 const OrdersPage = lazy(() => import('@/pages/customer/OrdersPage'));
 const ContactTechnicianPage = lazy(() => import('@/pages/customer/ContactTechnicianPage'));
 const HistoryPage = lazy(() => import('@/pages/customer/HistoryPage'));
+const CustomerInvoicePage = lazy(() => import('@/pages/customer/InvoicePage'));
 const ReviewsPage = lazy(() => import('@/pages/customer/ReviewsPage'));
 
 const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
@@ -78,6 +79,7 @@ export default function AppRoutes() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="contact" element={<ContactTechnicianPage />} />
           <Route path="history" element={<HistoryPage />} />
+          <Route path="hoa-don" element={<CustomerInvoicePage />} />
           <Route path="reviews" element={<ReviewsPage />} />
         </Route>
 

@@ -7,6 +7,7 @@ import {
     History,
     Star,
     LogOut,
+    ReceiptText,
 } from 'lucide-react';
 import useAuthStore from '@/store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,6 +28,7 @@ const menuItems = [
     { href: '/customer/orders?status=rejected', label: 'Đơn hàng bị từ chối', icon: ClipboardList },
     { href: '/customer/contact', label: 'Liên hệ thợ', icon: MessageSquare },
     { href: '/customer/history', label: 'Lịch sử', icon: History },
+    { href: '/customer/hoa-don', label: 'Hóa đơn', icon: ReceiptText },
     { href: '/customer/reviews', label: 'Đánh giá', icon: Star },
 ];
 

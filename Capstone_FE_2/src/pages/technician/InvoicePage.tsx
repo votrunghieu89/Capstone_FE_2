@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ClipboardList, FilePlus2, FilePenLine, Loader2, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react';
+import { ClipboardList, FilePlus2, FilePenLine, Loader2, Lock, Plus, ReceiptText, Search, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '@/store/authStore';
 import invoiceService, { BankOption, CompletedInvoiceOrder, InvoiceDetail } from '@/services/invoiceService';
@@ -130,12 +130,14 @@ export default function InvoicePage() {
   const { user } = useAuthStore();
   const [orders, setOrders] = useState<CompletedInvoiceOrder[]>([]);
   const [invoiceState, setInvoiceState] = useState<InvoiceStateMap>({});
+  const [paymentState, setPaymentState] = useState<InvoiceStateMap>({});
   const [customerNames, setCustomerNames] = useState<CustomerNameMap>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [banks, setBanks] = useState<BankOption[]>([]);
   const [creatingOrder, setCreatingOrder] = useState<CompletedInvoiceOrder | null>(null);
   const [invoiceFormMode, setInvoiceFormMode] = useState<'create' | 'update'>('create');
+  const [updateInvoicePaid, setUpdateInvoicePaid] = useState(false);
   const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
   const [laborCost, setLaborCost] = useState('');
   const [materials, setMaterials] = useState<MaterialFormItem[]>([emptyMaterial()]);
@@ -147,6 +149,7 @@ export default function InvoicePage() {
   const [invoicePaid, setInvoicePaid] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [invoiceActionLoading, setInvoiceActionLoading] = useState(false);
+  const [zoomedQrCode, setZoomedQrCode] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvoices();
@@ -172,14 +175,21 @@ export default function InvoicePage() {
       const completedOrders = await invoiceService.getTechnicianCompletedOrders(user.id);
       setOrders(completedOrders);
 
-      const [checks, nameEntries] = await Promise.all([
+      const [invoiceEntries, nameEntries] = await Promise.all([
         Promise.all(
           completedOrders.map(async (order) => {
             try {
               const hasInvoice = await invoiceService.checkInvoice(order.orderId);
-              return [order.orderId, hasInvoice] as const;
+              if (!hasInvoice) return [order.orderId, false, false] as const;
+
+              const detail = await invoiceService.getInvoiceDetail(order.orderId);
+              const paid = detail.invoiceId
+                ? await invoiceService.isPayment(detail.invoiceId)
+                : detail.paymentStatus === 1;
+
+              return [order.orderId, true, paid] as const;
             } catch {
-              return [order.orderId, false] as const;
+              return [order.orderId, false, false] as const;
             }
           })
         ),
@@ -197,7 +207,8 @@ export default function InvoicePage() {
         ),
       ]);
 
-      setInvoiceState(Object.fromEntries(checks));
+      setInvoiceState(Object.fromEntries(invoiceEntries.map(([orderId, hasInvoice]) => [orderId, hasInvoice])));
+      setPaymentState(Object.fromEntries(invoiceEntries.map(([orderId, , isPaid]) => [orderId, isPaid])));
       setCustomerNames(Object.fromEntries(nameEntries.filter(([, name]) => Boolean(name))));
     } catch (error) {
       console.error('Failed to load technician invoices:', error);
@@ -218,6 +229,8 @@ export default function InvoicePage() {
   }, [orders, search]);
 
   const createdCount = Object.values(invoiceState).filter(Boolean).length;
+  const paidCount = Object.values(paymentState).filter(Boolean).length;
+  const unpaidInvoiceCount = Math.max(createdCount - paidCount, 0);
   const waitingCount = Math.max(orders.length - createdCount, 0);
   const selectedBank = banks.find((bank) => bank.bankCode === bankCode);
   const laborCostVnd = moneyInputToVnd(laborCost);
@@ -225,10 +238,12 @@ export default function InvoicePage() {
     sum + moneyInputToVnd(material.price) * Number(material.quantity || 0)
   ), 0);
   const grandTotal = laborCostVnd + materialTotal;
+  const isUpdateLocked = invoiceFormMode === 'update' && updateInvoicePaid;
 
   const openCreateInvoice = (order: CompletedInvoiceOrder) => {
     setCreatingOrder(order);
     setInvoiceFormMode('create');
+    setUpdateInvoicePaid(false);
     setLaborCost('');
     setMaterials([emptyMaterial()]);
     setBankCode('');
@@ -239,9 +254,12 @@ export default function InvoicePage() {
   const openUpdateInvoice = async (order: CompletedInvoiceOrder) => {
     setCreatingOrder(order);
     setInvoiceFormMode('update');
+    setUpdateInvoicePaid(false);
     setIsSubmittingInvoice(true);
     try {
       const updateInfo = await invoiceService.getInvoiceUpdateInfo(order.orderId);
+      const paid = updateInfo.invoiceId ? await invoiceService.isPayment(updateInfo.invoiceId) : false;
+      setUpdateInvoicePaid(paid);
       setLaborCost(updateInfo.laborCost > 0 ? String(Math.round(updateInfo.laborCost / 1000)) : '');
       setMaterials(
         updateInfo.materials.length > 0
@@ -276,6 +294,10 @@ export default function InvoicePage() {
 
   const handleCreateInvoice = async () => {
     if (!creatingOrder) return;
+    if (isUpdateLocked) {
+      toast.error('Hóa đơn đã thanh toán, không thể cập nhật.');
+      return;
+    }
 
     const validMaterials = materials
       .map((material) => ({
@@ -395,17 +417,21 @@ export default function InvoicePage() {
 
           </div>
 
-          <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
               <p className="text-[10px] uppercase tracking-widest text-slate-500">Tổng đơn</p>
               <p className="mt-1 text-2xl font-black text-white">{orders.length}</p>
             </div>
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-emerald-300">Đã có HĐ</p>
-              <p className="mt-1 text-2xl font-black text-white">{createdCount}</p>
+              <p className="text-[10px] uppercase tracking-widest text-emerald-300">Đã thanh toán</p>
+              <p className="mt-1 text-2xl font-black text-white">{paidCount}</p>
+            </div>
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 px-4 py-3">
+              <p className="text-[10px] uppercase tracking-widest text-blue-300">Chưa thanh toán</p>
+              <p className="mt-1 text-2xl font-black text-white">{unpaidInvoiceCount}</p>
             </div>
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
-              <p className="text-[10px] uppercase tracking-widest text-amber-300">Chưa có</p>
+              <p className="text-[10px] uppercase tracking-widest text-amber-300">Chưa có HĐ</p>
               <p className="mt-1 text-2xl font-black text-white">{waitingCount}</p>
             </div>
           </div>
@@ -449,6 +475,7 @@ export default function InvoicePage() {
         <div className="grid gap-4">
           {filteredOrders.map((order, index) => {
             const hasInvoice = Boolean(invoiceState[order.orderId]);
+            const isPaid = Boolean(paymentState[order.orderId]);
 
             return (
               <motion.div
@@ -465,12 +492,24 @@ export default function InvoicePage() {
                         className={cn(
                           'rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider',
                           hasInvoice
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                            ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
                             : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
                         )}
                       >
                         {hasInvoice ? 'Đã tạo hóa đơn' : 'Chưa tạo hóa đơn'}
                       </span>
+                      {hasInvoice && (
+                        <span
+                          className={cn(
+                            'rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider',
+                            isPaid
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                          )}
+                        >
+                          {isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                        </span>
+                      )}
                     </div>
 
                     <h2 className="mt-3 truncate text-lg font-bold text-white">
@@ -537,6 +576,12 @@ export default function InvoicePage() {
                 <p className="mt-1 text-xs text-slate-500">
                   Khách hàng: <span className="text-slate-300">{customerNames[creatingOrder.orderId] || 'Đang cập nhật'}</span>
                 </p>
+                {isUpdateLocked && (
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                    <Lock className="h-3.5 w-3.5" />
+                    Hóa đơn đã thanh toán, không thể chỉnh sửa
+                  </div>
+                )}
               </div>
               <button
                 type="button"
@@ -549,135 +594,151 @@ export default function InvoicePage() {
 
             <div className="grid flex-1 gap-6 overflow-y-auto p-6 xl:grid-cols-[minmax(0,2fr)_minmax(300px,0.7fr)]">
               <div className="min-w-0 space-y-5">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">Chi phí sửa chữa</h3>
-                  <div className="mt-4 space-y-2">
-                    <label className="text-xs font-semibold text-slate-400">Tiền công</label>
-                    <Input
-                      value={laborCost}
-                      onChange={(event) => setLaborCost(onlyDigits(event.target.value))}
-                      placeholder="Ví dụ: 300"
-                      className="h-11 rounded-xl border-white/10 bg-white/5 text-white"
-                    />
-                    <p className="text-xs text-slate-500">
-                      <span className="font-bold text-emerald-300">{formatCurrency(laborCostVnd)}</span>
+                {isUpdateLocked ? (
+                  <div className="flex min-h-[360px] flex-col items-center justify-center rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-8 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/15">
+                      <Lock className="h-8 w-8 text-emerald-300" />
+                    </div>
+                    <h3 className="mt-5 text-xl font-bold text-white">Hóa đơn đã thanh toán</h3>
+                    <p className="mt-2 max-w-md text-sm text-slate-400">
+                      Các thông tin chi phí, vật liệu và tài khoản thanh toán đã được khóa nên không thể thay đổi.
                     </p>
                   </div>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-white">Vật liệu</h3>
-                      <p className="mt-1 text-xs text-slate-500">Thêm từng vật liệu đã sử dụng cho đơn này.</p>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-white">Chi phí sửa chữa</h3>
+                      <div className="mt-4 space-y-2">
+                        <label className="text-xs font-semibold text-slate-400">Tiền công</label>
+                        <Input
+                          value={laborCost}
+                          onChange={(event) => setLaborCost(onlyDigits(event.target.value))}
+                          placeholder="Ví dụ: 300"
+                          className="h-11 rounded-xl border-white/10 bg-white/5 text-white"
+                        />
+                        <p className="text-xs text-slate-500">
+                          <span className="font-bold text-emerald-300">{formatCurrency(laborCostVnd)}</span>
+                        </p>
+                      </div>
                     </div>
-                    <Button
-                      type="button"
-                      onClick={() => setMaterials((prev) => [...prev, emptyMaterial()])}
-                      className="h-9 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
-                    >
-                      <Plus className="mr-1.5 h-4 w-4" />
-                      Thêm
-                    </Button>
-                  </div>
 
-                  <div className="mt-4 max-h-[42vh] space-y-3 overflow-y-auto pr-2 custom-scrollbar">
-                    {materials.map((material, index) => (
-                      <div key={index} className="rounded-2xl border border-white/10 bg-[#050b18] p-4">
-                        <div className="mb-3 flex items-center justify-between gap-3">
-                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Vật liệu #{index + 1}</p>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            disabled={materials.length === 1}
-                            onClick={() => setMaterials((prev) => prev.filter((_, idx) => idx !== index))}
-                            className="h-8 rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 text-rose-200 hover:bg-rose-500/20 disabled:opacity-40"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-bold uppercase tracking-wider text-white">Vật liệu</h3>
+                          <p className="mt-1 text-xs text-slate-500">Thêm từng vật liệu đã sử dụng cho đơn này.</p>
                         </div>
-                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_120px] lg:items-end">
-                          <div className="min-w-0 space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-400">Tên vật liệu</label>
-                            <Input
-                              value={material.materialName}
-                              onChange={(event) => updateMaterial(index, 'materialName', event.target.value)}
-                              placeholder="Ví dụ: Dây điện"
-                              className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                            />
-                          </div>
-                          <div className="min-w-0 space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-400">Giá</label>
-                            <div className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3">
-                              <Input
-                                value={material.price}
-                                onChange={(event) => updateMaterial(index, 'price', event.target.value)}
-                                placeholder="Ví dụ: 50"
-                                className="h-10 min-w-0 flex-1 rounded-xl border-white/10 bg-white/5 text-white"
-                              />
-                              <span className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-right text-[11px] font-semibold text-emerald-300">
-                                {formatCurrency(moneyInputToVnd(material.price))}
-                              </span>
+                        <Button
+                          type="button"
+                          onClick={() => setMaterials((prev) => [...prev, emptyMaterial()])}
+                          className="h-9 rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+                        >
+                          <Plus className="mr-1.5 h-4 w-4" />
+                          Thêm
+                        </Button>
+                      </div>
+
+                      <div className="mt-4 max-h-[42vh] space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                        {materials.map((material, index) => (
+                          <div key={index} className="rounded-2xl border border-white/10 bg-[#050b18] p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Vật liệu #{index + 1}</p>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                disabled={materials.length === 1}
+                                onClick={() => setMaterials((prev) => prev.filter((_, idx) => idx !== index))}
+                                className="h-8 rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 text-rose-200 hover:bg-rose-500/20 disabled:opacity-40"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_120px] lg:items-end">
+                              <div className="min-w-0 space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-400">Tên vật liệu</label>
+                                <Input
+                                  value={material.materialName}
+                                  onChange={(event) => updateMaterial(index, 'materialName', event.target.value)}
+                                  placeholder="Ví dụ: Dây điện"
+                                  className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
+                                />
+                              </div>
+                              <div className="min-w-0 space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-400">Giá</label>
+                                <div className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3">
+                                  <Input
+                                    value={material.price}
+                                    onChange={(event) => updateMaterial(index, 'price', event.target.value)}
+                                    placeholder="Ví dụ: 50"
+                                    className="h-10 min-w-0 flex-1 rounded-xl border-white/10 bg-white/5 text-white"
+                                  />
+                                  <span className="rounded-xl border border-white/10 bg-white/5 px-2 py-2 text-right text-[11px] font-semibold text-emerald-300">
+                                    {formatCurrency(moneyInputToVnd(material.price))}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-400">Số lượng</label>
+                                <Input
+                                  value={material.quantity}
+                                  onChange={(event) => updateMaterial(index, 'quantity', event.target.value)}
+                                  placeholder="1"
+                                  className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
+                                />
+                              </div>
                             </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-400">Số lượng</label>
-                            <Input
-                              value={material.quantity}
-                              onChange={(event) => updateMaterial(index, 'quantity', event.target.value)}
-                              placeholder="1"
-                              className="h-10 rounded-xl border-white/10 bg-white/5 text-white"
-                            />
-                          </div>
-                        </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="min-w-0 space-y-5 xl:sticky xl:top-0 xl:self-start">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">Thông tin thanh toán</h3>
-                  <div className="mt-4 space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-400">Ngân hàng</label>
-                      <select
-                        value={bankCode}
-                        onChange={(event) => setBankCode(event.target.value)}
-                        className="h-11 w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 text-sm text-white outline-none focus:border-blue-500/50"
-                      >
-                        <option value="">Chọn ngân hàng...</option>
-                        {banks.map((bank) => (
-                          <option key={bank.bankCode} value={bank.bankCode}>
-                            {bank.bankName}
-                          </option>
-                        ))}
-                      </select>
-                      {selectedBank && <p className="text-xs text-slate-500">Mã ngân hàng: {selectedBank.bankCode}</p>}
-                    </div>
+                {!isUpdateLocked && (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-white">Thông tin thanh toán</h3>
+                    <div className="mt-4 space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-400">Ngân hàng</label>
+                        <select
+                          value={bankCode}
+                          onChange={(event) => setBankCode(event.target.value)}
+                          className="h-11 w-full rounded-xl border border-white/10 bg-[#0b1220] px-3 text-sm text-white outline-none focus:border-blue-500/50"
+                        >
+                          <option value="">Chọn ngân hàng...</option>
+                          {banks.map((bank) => (
+                            <option key={bank.bankCode} value={bank.bankCode}>
+                              {bank.bankName}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedBank && <p className="text-xs text-slate-500">Mã ngân hàng: {selectedBank.bankCode}</p>}
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-400">Mã số thẻ / số tài khoản</label>
-                      <Input
-                        value={bankAccount}
-                        onChange={(event) => setBankAccount(event.target.value)}
-                        placeholder="Nhập số tài khoản"
-                        className="h-11 rounded-xl border-white/10 bg-white/5 text-white"
-                      />
-                    </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-400">Mã số thẻ / số tài khoản</label>
+                        <Input
+                          value={bankAccount}
+                          onChange={(event) => setBankAccount(event.target.value)}
+                          placeholder="Nhập số tài khoản"
+                          className="h-11 rounded-xl border-white/10 bg-white/5 text-white"
+                        />
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-400">Tên tài khoản</label>
-                      <Input
-                        value={bankAccountName}
-                        onChange={(event) => setBankAccountName(event.target.value)}
-                        placeholder="Nhập tên chủ tài khoản"
-                        className="h-11 rounded-xl border-white/10 bg-white/5 text-white"
-                      />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-400">Tên tài khoản</label>
+                        <Input
+                          value={bankAccountName}
+                          onChange={(event) => setBankAccountName(event.target.value)}
+                          placeholder="Nhập tên chủ tài khoản"
+                          className="h-11 rounded-xl border-white/10 bg-white/5 text-white"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
                   <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Tổng thanh toán</p>
@@ -699,15 +760,26 @@ export default function InvoicePage() {
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  disabled={isSubmittingInvoice}
-                  onClick={handleCreateInvoice}
-                  className="h-12 w-full rounded-2xl bg-blue-600 font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {isSubmittingInvoice ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ReceiptText className="mr-2 h-4 w-4" />}
-                  {invoiceFormMode === 'create' ? 'Hoàn thành' : 'Cập nhật hóa đơn'}
-                </Button>
+                {isUpdateLocked ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCreatingOrder(null)}
+                    className="h-12 w-full rounded-2xl border-white/10 bg-white/5 font-bold text-slate-200 hover:bg-white/10 hover:text-white"
+                  >
+                    Đóng
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    disabled={isSubmittingInvoice}
+                    onClick={handleCreateInvoice}
+                    className="h-12 w-full rounded-2xl bg-blue-600 font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {isSubmittingInvoice ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ReceiptText className="mr-2 h-4 w-4" />}
+                    {invoiceFormMode === 'create' ? 'Hoàn thành' : 'Cập nhật hóa đơn'}
+                  </Button>
+                )}
               </div>
             </div>
           </motion.div>
@@ -779,7 +851,14 @@ export default function InvoicePage() {
 
                     <div className="ml-auto flex h-40 w-40 items-center justify-center rounded-2xl border border-white/10 bg-white p-2">
                       {invoiceDetail.qrCode ? (
-                        <img src={invoiceDetail.qrCode} alt="QR thanh toán" className="h-full w-full object-contain" />
+                        <button
+                          type="button"
+                          onClick={() => setZoomedQrCode(invoiceDetail.qrCode || null)}
+                          className="h-full w-full rounded-xl transition hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          title="Bấm để phóng to mã QR"
+                        >
+                          <img src={invoiceDetail.qrCode} alt="QR thanh toán" className="h-full w-full object-contain" />
+                        </button>
                       ) : (
                         <p className="text-center text-xs text-slate-500">Không có QR thanh toán</p>
                       )}
@@ -859,6 +938,32 @@ export default function InvoicePage() {
                 </div>
               </div>
             ) : null}
+          </motion.div>
+        </div>
+      )}
+
+      {zoomedQrCode && (
+        <div
+          className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => setZoomedQrCode(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            onClick={(event) => event.stopPropagation()}
+            className="relative rounded-3xl border border-white/10 bg-[#071022] p-5 shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setZoomedQrCode(null)}
+              className="absolute -right-3 -top-3 rounded-full border border-white/10 bg-slate-900 p-2 text-slate-300 shadow-lg hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="rounded-2xl bg-white p-4">
+              <img src={zoomedQrCode} alt="QR thanh toán phóng to" className="h-[min(72vh,520px)] w-[min(72vw,520px)] object-contain" />
+            </div>
+            <p className="mt-3 text-center text-sm text-slate-400">Mã QR thanh toán</p>
           </motion.div>
         </div>
       )}

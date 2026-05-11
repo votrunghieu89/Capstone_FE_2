@@ -56,13 +56,14 @@ export default function CitiesPage() {
     const loadId = toast.loading("Đang thêm thành phố...")
 
     try {
-      await adminPost("/admin/cities", { cityName: cityName })
+      await adminPost("/admin/cities", { CityName: cityName })
       await fetchCities()
       setNewCity("")
       setIsCreateOpen(false)
       toast.success(`Đã thêm thành phố ${cityName}`, { id: loadId })
-    } catch {
-      toast.error("Không thể thêm thành phố. Vui lòng thử lại", { id: loadId })
+    } catch (error: any) {
+      const message = error?.response?.data?.message || "Không thể thêm thành phố. Vui lòng thử lại"
+      toast.error(message, { id: loadId })
     } finally {
       setIsSubmitting(false)
     }
