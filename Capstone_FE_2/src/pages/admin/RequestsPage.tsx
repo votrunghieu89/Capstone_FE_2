@@ -29,6 +29,7 @@ import {
 import { Lock, LockOpen, Search, Loader2, ShieldCheck } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { ConfirmToast } from "@/components/admin/ConfirmToast"
+import { adminGet, adminPut, normalizeListPayload } from "@/utils/adminHttp"
 
 // Cập nhật Type hỗ trợ Admin
 type AccountRole = "nguoi-dung" | "ky-thuat-vien" | "admin"
@@ -73,27 +74,24 @@ export default function RequestsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<AccountItem | null>(null)
 
-useEffect(() => {
+  useEffect(() => {
     fetchUsers()
   }, [])
- 
+
   const fetchUsers = async () => {
     setIsLoading(true)
     try {
-      const token = localStorage.getItem("accessToken")
-      const res = await fetch("http://localhost:5271/api/admin/users", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const data = await res.json()
+      const payload = await adminGet("/admin/users")
+      const data = normalizeListPayload<any>(payload)
       const mapped: AccountItem[] = data.map((u: any) => ({
-        id: u.id,
-        email: u.email,
-        phone: u.phoneNumber || "--",
+        id: u.id || u.Id,
+        email: u.email || u.Email || "--",
+        phone: u.phoneNumber || u.PhoneNumber || u.phone || u.Phone || "--",
         // Logic fix: Ưu tiên normalize, nếu không ra gì mới để mặc định
-        role: normalizeRole(u.role) || "nguoi-dung",
-        isActive: u.isActive === 1,
+        role: normalizeRole(u.role || u.Role) || "nguoi-dung",
+        isActive: Number(u.isActive ?? u.IsActive ?? 0) === 1,
         isVerified: true,
-        createdAt: u.createdAt || u.createAt,
+        createdAt: u.createdAt || u.CreatedAt || u.createAt || u.CreateAt,
       }))
       setAccounts(mapped)
     } catch (err) {
@@ -136,12 +134,19 @@ useEffect(() => {
 
   const executeToggleActive = async (id: string, currentStatus: boolean) => {
     const loadId = toast.loading("Đang xử lý...")
+    const actionPath = currentStatus ? "lock" : "unlock"
+    const snapshot = accounts
+
+    setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: !currentStatus } : a)))
+
     try {
-      // Logic gọi API thực tế của bạn sẽ nằm ở đây
-      setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: !currentStatus } : a)))
-      toast.success(`${currentStatus ? "Đã khóa" : "Đã mở khóa"} thành công!`, { id: loadId })
-    } catch (error) {
-      toast.error("Thao tác thất bại", { id: loadId })
+      const result: any = await adminPut(`/admin/users/${id}/${actionPath}`, {})
+      const message = result?.data || result?.message || (currentStatus ? "Đã khóa tài khoản thành công" : "Đã mở khóa tài khoản thành công")
+      toast.success(message, { id: loadId })
+      await fetchUsers()
+    } catch (error: any) {
+      setAccounts(snapshot)
+      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Thao tác thất bại", { id: loadId })
     }
   }
 
