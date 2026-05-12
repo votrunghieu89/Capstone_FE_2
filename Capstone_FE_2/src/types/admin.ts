@@ -74,17 +74,6 @@ export interface UserDetailItem {
   createdAt: string
 }
 
-export interface AdminNotificationItem {
-  id: string
-  title: string
-  message: string
-  createdAt: string
-  notificationType: string | null
-  referenceId: string | null
-  referenceType: string | null
-  isRead: boolean
-}
-
 export interface AdminServiceSummaryItem {
   name: string
   total: number

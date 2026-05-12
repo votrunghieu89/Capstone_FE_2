@@ -5,7 +5,6 @@ import {
   Users,
   Wrench,
   MapPin,
-  Bell,
   ReceiptText,
   LogOut,
   ChevronLeft,
@@ -25,10 +24,6 @@ const mainNav = [
   { title: "Dịch vụ", href: "/admin/dich-vu", icon: Wrench },
   { title: "Thành phố", href: "/admin/thanh-pho", icon: MapPin },
   { title: "Hóa đơn", href: "/admin/hoa-don", icon: ReceiptText },
-]
-
-const secondaryNav = [
-  { title: "Thông báo", href: "/admin/thong-bao", icon: Bell },
 ]
 
 export function AppSidebar() {
@@ -97,33 +92,6 @@ export function AppSidebar() {
           )
         })}
 
-        <Separator className="bg-white/5 my-4 mx-2" />
-
-        <span className={cn(
-          "text-[10px] font-bold uppercase tracking-[0.1em] text-slate-600 mb-2",
-          collapsed ? "text-center" : "px-3"
-        )}>
-          {collapsed ? "•••" : "Hệ thống"}
-        </span>
-        {secondaryNav.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all",
-                isActive
-                  ? "bg-white/10 text-white font-semibold"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white",
-                collapsed && "justify-center px-0 w-10 h-10 mx-auto"
-              )}
-            >
-              <item.icon className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span className="flex-1 truncate">{item.title}</span>}
-            </Link>
-          )
-        })}
       </nav>
 
       {/* User Section */}

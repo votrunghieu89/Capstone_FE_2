@@ -27,7 +27,6 @@ const RequestsPage = lazy(() => import('@/pages/admin/RequestsPage'));
 const TechniciansPage = lazy(() => import('@/pages/admin/TechniciansPage'));
 const ServicesPage = lazy(() => import('@/pages/admin/ServicesPage'));
 const CitiesPage = lazy(() => import('@/pages/admin/CitiesPage'));
-const NotificationsPage = lazy(() => import('@/pages/admin/NotificationsPage'));
 const AdminInvoicesPage = lazy(() => import('@/pages/admin/InvoicesPage'));
 const TechDashboardPage = lazy(() => import('@/pages/technician/DashboardPage'));
 const TechProfilePage = lazy(() => import('@/pages/technician/ProfilePage'));
@@ -90,7 +89,6 @@ export default function AppRoutes() {
           <Route path="dich-vu" element={<ServicesPage />} />
           <Route path="thanh-pho" element={<CitiesPage />} />
           <Route path="hoa-don" element={<AdminInvoicesPage />} />
-          <Route path="thong-bao" element={<NotificationsPage />} />
         </Route>
 
         {/* Technician */}
