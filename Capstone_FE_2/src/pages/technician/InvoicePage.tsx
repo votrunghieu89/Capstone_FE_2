@@ -408,7 +408,7 @@ export default function InvoicePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pl-3 md:pl-5">
       <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.03] p-6 shadow-[0_20px_70px_rgba(0,0,0,0.25)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

@@ -21,9 +21,8 @@ export default function ProfilePage() {
     const [formData, setFormData] = useState({
         fullName: user?.fullName || '',
         phoneNumber: '',
-        address: '',
-        description: ''
     });
+    const [memberSince, setMemberSince] = useState('');
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -32,17 +31,24 @@ export default function ProfilePage() {
             try {
                 const data = await profileService.getCustomerProfile(user.id);
                 // Depending on the backend response structure, map accordingly
-                const profile = data.data || data;
-                setFormData(prev => ({
-                    ...prev,
-                    fullName: profile.fullName || profile.FullName || user.fullName || '',
-                    phoneNumber: profile.phoneNumber || profile.PhoneNumber || '',
-                    address: profile.address || profile.Address || '',
-                    description: profile.description || profile.Description || ''
-                }));
-                setAvatarPreview(profile.avatarUrl || profile.AvatarUrl || user?.avatarUrl || '');
+                const profile = data?.data || data;
+                setFormData({
+                    fullName: profile?.fullName || profile?.FullName || user.fullName || '',
+                    phoneNumber: profile?.phoneNumber || profile?.PhoneNumber || '',
+                });
+                setAvatarPreview(
+                    profile?.avatarURL || profile?.AvatarURL || profile?.avatarUrl || profile?.AvatarUrl || user?.avatarUrl || ''
+                );
+                const createdAt = profile?.createAt || profile?.CreateAt;
+                if (createdAt) {
+                    const date = new Date(createdAt);
+                    if (!Number.isNaN(date.getTime())) {
+                        setMemberSince(date.toLocaleDateString('vi-VN'));
+                    }
+                }
             } catch (error) {
                 console.error("Failed to load profile:", error);
+                toast.error("Không thể tải hồ sơ cá nhân");
             } finally {
                 setIsLoading(false);
             }
@@ -60,12 +66,16 @@ export default function ProfilePage() {
         if (!user?.id) return;
         setIsSaving(true);
         try {
-            await profileService.updateCustomerProfile({
+            await profileService.updateCustomerProfile(user.id, {
                 fullName: formData.fullName,
                 phoneNumber: formData.phoneNumber,
-                address: formData.address,
-                description: formData.description
             }, avatarFile || undefined);
+            const refreshed = await profileService.getCustomerProfile(user.id);
+            const profile = refreshed?.data || refreshed;
+            setAvatarPreview(
+                profile?.avatarURL || profile?.AvatarURL || profile?.avatarUrl || profile?.AvatarUrl || avatarPreview
+            );
+            setAvatarFile(null);
             toast.success("Cập nhật hồ sơ thành công!");
             setIsEditing(false);
         } catch (error: any) {
@@ -92,7 +102,7 @@ export default function ProfilePage() {
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-white">Hồ sơ cá nhân</h1>
                 <p className="text-muted-foreground mt-2">
-                    Quản lý thông tin liên hệ và địa chỉ của bạn.
+                    Quản lý thông tin liên hệ của bạn.
                 </p>
             </div>
 
@@ -125,7 +135,9 @@ export default function ProfilePage() {
                         </div>
                         <div className="text-center">
                             <h3 className="font-semibold text-lg text-white">{formData.fullName || 'Khách Hàng'}</h3>
-                            <p className="text-sm text-zinc-400">Thành viên từ 2026</p>
+                            <p className="text-sm text-zinc-400">
+                                {memberSince ? `Thành viên từ ${memberSince}` : 'Thành viên'}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -179,17 +191,6 @@ export default function ProfilePage() {
                                     disabled
                                     className="bg-[#050b18] border-white/10 text-zinc-500 disabled:opacity-50"
                                     title="Email không thể thay đổi"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="address" className="text-zinc-400">Địa chỉ mặc định</Label>
-                                <Input
-                                    id="address"
-                                    value={formData.address}
-                                    onChange={handleChange}
-                                    disabled={!isEditing}
-                                    className="bg-[#050b18] border-white/10 text-white focus-visible:ring-primary focus-visible:border-primary disabled:opacity-75"
                                 />
                             </div>
                         </div>

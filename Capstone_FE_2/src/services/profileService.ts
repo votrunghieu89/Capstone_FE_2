@@ -3,8 +3,6 @@ import api from './api';
 export interface UpdateProfileDTO {
   fullName: string;
   phoneNumber: string;
-  address?: string;
-  description?: string;
 }
 
 const profileService = {
@@ -13,14 +11,13 @@ const profileService = {
     return res.data;
   },
 
-  updateCustomerProfile: async (data: UpdateProfileDTO, avatarFile?: File) => {
+  updateCustomerProfile: async (customerId: string, data: UpdateProfileDTO, avatarFile?: File) => {
     const formData = new FormData();
+    formData.append('Id', customerId);
     formData.append('FullName', data.fullName || '');
     formData.append('PhoneNumber', data.phoneNumber || '');
-    formData.append('Address', data.address || '');
-    formData.append('Description', data.description || '');
     if (avatarFile) {
-      formData.append('AvatarFile', avatarFile);
+      formData.append('AvatarURl', avatarFile);
     }
 
     const res = await api.put('/customer/profile', formData);

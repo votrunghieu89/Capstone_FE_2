@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -14,7 +15,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  MoreHorizontal, Phone, Star, Eye, MessageSquare, Loader2, Mail, MapPin, Wrench, Plus, Trash2
+  ChevronLeft, ChevronRight, MoreHorizontal, Phone, Star, Eye, MessageSquare, Loader2, Mail, MapPin, Wrench, Plus, Trash2
 } from "lucide-react"
 import { adminApi } from "@/services/adminApi"
 import { toast } from "react-hot-toast";
@@ -54,10 +55,13 @@ function getInitials(name: string) {
   return name.split(" ").map(x => x[0]).join("").toUpperCase()
 }
 
+const TECHNICIANS_PER_PAGE = 9
+
 export default function TechniciansPage() {
   const [technicians, setTechnicians] = useState<TechItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
   const [selectedTech, setSelectedTech] = useState<TechItem | null>(null)
 
   const [isLoading, setIsLoading] = useState(true)
@@ -140,6 +144,21 @@ export default function TechniciansPage() {
       (statusFilter === "all" || t.status === statusFilter)
     )
   }, [technicians, searchQuery, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TECHNICIANS_PER_PAGE))
+  const currentPageSafe = Math.min(currentPage, totalPages)
+  const paginatedTechnicians = filtered.slice(
+    (currentPageSafe - 1) * TECHNICIANS_PER_PAGE,
+    currentPageSafe * TECHNICIANS_PER_PAGE
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, statusFilter])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   // Điều hướng mở Modal
   const openDetail = (tech: TechItem) => {
@@ -290,7 +309,9 @@ export default function TechniciansPage() {
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading ? (
           <div className="col-span-full flex justify-center py-20"><Loader2 className="animate-spin text-blue-500" /></div>
-        ) : filtered.map((tech) => (
+        ) : filtered.length === 0 ? (
+          <div className="col-span-full text-center py-20 text-slate-500">Không tìm thấy kỹ thuật viên nào</div>
+        ) : paginatedTechnicians.map((tech) => (
           <Card key={tech.id} className="bg-[#0b111f] border-slate-800 hover:border-blue-500/50 transition-all shadow-lg hover:shadow-blue-500/5">
             <CardContent className="p-5">
               <div className="flex justify-between items-start mb-4">
@@ -336,6 +357,59 @@ export default function TechniciansPage() {
           </Card>
         ))}
       </div>
+
+      {!isLoading && filtered.length > TECHNICIANS_PER_PAGE && (
+        <div className="mt-6 flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0b111f] px-4 py-3 sm:flex-row">
+          <p className="text-sm text-slate-500">
+            Hiển thị {(currentPageSafe - 1) * TECHNICIANS_PER_PAGE + 1}
+            {" - "}
+            {Math.min(currentPageSafe * TECHNICIANS_PER_PAGE, filtered.length)}
+            {" "}trên {filtered.length} kỹ thuật viên
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={currentPageSafe === 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              className="h-9 rounded-xl border-slate-700 bg-[#0f1627] px-3 text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+
+            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+              <Button
+                key={page}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(page)}
+                className={cn(
+                  "h-9 min-w-9 rounded-xl border-slate-700 px-3 font-semibold",
+                  page === currentPageSafe
+                    ? "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-[#0f1627] text-slate-300 hover:bg-slate-800 hover:text-white"
+                )}
+              >
+                {page}
+              </Button>
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={currentPageSafe === totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              className="h-9 rounded-xl border-slate-700 bg-[#0f1627] px-3 text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

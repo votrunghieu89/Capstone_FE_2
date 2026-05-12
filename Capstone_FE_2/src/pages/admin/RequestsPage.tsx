@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Lock, LockOpen, Search, Loader2, ShieldCheck } from "lucide-react"
+import { ChevronLeft, ChevronRight, Lock, LockOpen, Search, Loader2, ShieldCheck } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { ConfirmToast } from "@/components/admin/ConfirmToast"
 import { adminGet, adminPut, normalizeListPayload } from "@/utils/adminHttp"
@@ -66,9 +66,12 @@ function formatDate(value: string) {
   return date.toLocaleDateString("vi-VN")
 }
 
+const ACCOUNTS_PER_PAGE = 8
+
 export default function RequestsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
   const [accounts, setAccounts] = useState<AccountItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -109,6 +112,21 @@ export default function RequestsPage() {
       return matchesSearch && matchesRole
     })
   }, [accounts, searchQuery, roleFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredAccounts.length / ACCOUNTS_PER_PAGE))
+  const currentPageSafe = Math.min(currentPage, totalPages)
+  const paginatedAccounts = filteredAccounts.slice(
+    (currentPageSafe - 1) * ACCOUNTS_PER_PAGE,
+    currentPageSafe * ACCOUNTS_PER_PAGE
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, roleFilter])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const handleToggleAccountActive = (id: string) => {
     const target = accounts.find((a) => a.id === id)
@@ -214,7 +232,7 @@ export default function RequestsPage() {
                   <TableRow><TableCell colSpan={4} className="text-center py-10"><Loader2 className="animate-spin inline mr-2 text-blue-500" /> Đang tải dữ liệu...</TableCell></TableRow>
                 ) : filteredAccounts.length === 0 ? (
                   <TableRow><TableCell colSpan={4} className="text-center py-10 text-slate-500">Không tìm thấy tài khoản nào</TableCell></TableRow>
-                ) : filteredAccounts.map((account) => (
+                ) : paginatedAccounts.map((account) => (
                   <TableRow key={account.id} className="hover:bg-[#111b32] border-b border-slate-800/80 cursor-pointer transition-colors" onClick={() => handleOpenDetail(account)}>
                     <TableCell className="text-sm text-slate-400 py-4 font-medium">{account.email}</TableCell>
                     <TableCell className="text-center">
@@ -253,6 +271,59 @@ export default function RequestsPage() {
             </Table>
           </CardContent>
         </Card>
+
+        {!isLoading && filteredAccounts.length > ACCOUNTS_PER_PAGE && (
+          <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0b111f] px-4 py-3 sm:flex-row">
+            <p className="text-sm text-slate-500">
+              Hiển thị {(currentPageSafe - 1) * ACCOUNTS_PER_PAGE + 1}
+              {" - "}
+              {Math.min(currentPageSafe * ACCOUNTS_PER_PAGE, filteredAccounts.length)}
+              {" "}trên {filteredAccounts.length} tài khoản
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPageSafe === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                className="h-9 rounded-xl border-slate-700 bg-[#0f1627] px-3 text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(page)}
+                  className={cn(
+                    "h-9 min-w-9 rounded-xl border-slate-700 px-3 font-semibold",
+                    page === currentPageSafe
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-[#0f1627] text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}
+                >
+                  {page}
+                </Button>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPageSafe === totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                className="h-9 rounded-xl border-slate-700 bg-[#0f1627] px-3 text-slate-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

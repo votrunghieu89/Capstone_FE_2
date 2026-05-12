@@ -70,6 +70,7 @@ export default function CustomerInvoicePage() {
   const [selectedInvoice, setSelectedInvoice] = useState<CustomerInvoiceOrder | null>(null);
   const [invoiceDetail, setInvoiceDetail] = useState<InvoiceDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [zoomedQrCode, setZoomedQrCode] = useState<string | null>(null);
 
   const filteredInvoices = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -365,7 +366,14 @@ export default function CustomerInvoicePage() {
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
                         <p className="mb-4 text-sm font-bold uppercase tracking-wider text-zinc-400">Mã QR thanh toán</p>
                         {invoiceDetail.qrCode ? (
-                          <img src={invoiceDetail.qrCode} alt="QR thanh toán" className="mx-auto h-56 w-56 rounded-2xl bg-white p-3 object-contain" />
+                          <button
+                            type="button"
+                            onClick={() => setZoomedQrCode(invoiceDetail.qrCode || null)}
+                            className="mx-auto block rounded-2xl bg-white p-3 transition hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-primary"
+                            title="Bấm để phóng to mã QR"
+                          >
+                            <img src={invoiceDetail.qrCode} alt="QR thanh toán" className="h-56 w-56 object-contain" />
+                          </button>
                         ) : (
                           <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-white/10 text-sm text-zinc-500">
                             Chưa có mã QR
@@ -376,6 +384,38 @@ export default function CustomerInvoicePage() {
                   </div>
                 </div>
               ) : null}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {zoomedQrCode && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            onClick={() => setZoomedQrCode(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 12 }}
+              onClick={(event) => event.stopPropagation()}
+              className="relative rounded-3xl border border-white/10 bg-[#071022] p-5 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={() => setZoomedQrCode(null)}
+                className="absolute -right-3 -top-3 rounded-full border border-white/10 bg-slate-900 p-2 text-slate-300 shadow-lg hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <div className="rounded-2xl bg-white p-4">
+                <img src={zoomedQrCode} alt="QR thanh toán phóng to" className="h-[min(72vh,520px)] w-[min(72vw,520px)] object-contain" />
+              </div>
+              <p className="mt-3 text-center text-sm text-slate-400">Mã QR thanh toán</p>
             </motion.div>
           </motion.div>
         )}
