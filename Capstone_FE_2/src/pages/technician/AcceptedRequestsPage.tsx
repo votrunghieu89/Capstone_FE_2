@@ -4,7 +4,7 @@ import {
   Phone, User, ChevronRight,
   CheckCircle2, Cloud, Navigation,
   Activity, Target, ArrowRight, RefreshCcw,
-  ZoomIn, X, Image as ImageIcon, Zap, MessageCircle, Send
+  ZoomIn, X, Image as ImageIcon, Zap, MessageCircle, Send, Ban
 } from 'lucide-react';
 import { openGoogleMapsLocation, getMapEmbedSrc, openGoogleMapsRoute, getMapEmbedSrcByAddress } from '@/utils/mapUtils';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
@@ -33,6 +33,10 @@ export default function TechAcceptedRequestsPage() {
   const [fetchingMedia, setFetchingMedia] = useState<Set<string>>(new Set());
   const [profile, setProfile] = useState<TechnicianProfileViewDTO | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectOrderId, setRejectOrderId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
   const [showChatBox, setShowChatBox] = useState(false);
   const [chatTarget, setChatTarget] = useState<ViewOrderDTO | null>(null);
   const [chatRoomId, setChatRoomId] = useState('');
@@ -357,6 +361,41 @@ export default function TechAcceptedRequestsPage() {
     }
   };
 
+  const handleOpenRejectModal = (orderId: string) => {
+    if (!user?.id) return;
+    setRejectOrderId(orderId);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  const confirmRejectAcceptedOrder = async () => {
+    if (!user?.id || !rejectOrderId || !rejectReason.trim()) return;
+    setRejectLoading(true);
+    try {
+      await technicianOrderService.rejectOrder({
+        orderId: rejectOrderId,
+        technicianId: user.id,
+        reason: rejectReason.trim(),
+      });
+      toast.success('Đã hủy đơn hàng');
+      setShowRejectModal(false);
+      setRejectOrderId(null);
+      setRejectReason('');
+      await Promise.all([loadRequests(), loadStats(), checkInProgress()]);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Không thể hủy đơn hàng');
+    } finally {
+      setRejectLoading(false);
+    }
+  };
+
+  const closeRejectModal = () => {
+    if (rejectLoading) return;
+    setShowRejectModal(false);
+    setRejectOrderId(null);
+    setRejectReason('');
+  };
+
   if (loading) {
     return (
       <div className="flex bg-[#020617] items-center justify-center min-h-[calc(100vh-80px)]">
@@ -547,6 +586,15 @@ export default function TechAcceptedRequestsPage() {
                             className="w-full px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-500/20 active:scale-95 disabled:opacity-50"
                           >
                             Bắt đầu ngay <Zap size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRejectModal(request.orderId)}
+                            disabled={actionLoading || rejectLoading}
+                            className="w-full px-4 py-3.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-black text-[10px] uppercase tracking-widest rounded-2xl border border-red-500/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <Ban size={14} />
+                            Hủy
                           </button>
                           <button
                             onClick={() => navigate(`/technician/don-hang/chi-tiet/${request.orderId}`)}
@@ -746,6 +794,74 @@ export default function TechAcceptedRequestsPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showRejectModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm"
+              onClick={closeRejectModal}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.93, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.93, y: 16 }}
+              className="bg-[#0f172a] border border-white/10 rounded-[28px] p-7 w-full max-w-md relative z-10 shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
+                    <AlertCircle size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white tracking-tight">Hủy đơn đã tiếp nhận</h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeRejectModal}
+                  className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 transition-colors"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">
+                    Lý do từ chối <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Nhập lý do (ví dụ: quá xa, không đủ thiết bị, bận việc...)"
+                    className="w-full bg-black/30 border border-white/10 focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/30 rounded-2xl p-4 text-sm text-slate-300 placeholder:text-slate-600 resize-none h-28 outline-none transition-all"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={closeRejectModal}
+                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest transition-all"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmRejectAcceptedOrder()}
+                    disabled={rejectLoading || !rejectReason.trim()}
+                    className="flex-1 py-3 bg-rose-500 hover:bg-rose-600 active:scale-95 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 transition-all flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {rejectLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Xác nhận từ chối'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </>

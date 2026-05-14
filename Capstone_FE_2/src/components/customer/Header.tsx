@@ -1,4 +1,4 @@
-import { Menu, Bell, LogOut, CheckCheck } from 'lucide-react';
+import { Menu, Bell, LogOut, CheckCheck, MessageSquareWarning, Phone } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,11 +14,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+const COMPLAINT_HOTLINE = "0766571523";
+
 export function Header({ onMenuClick }: { onMenuClick: () => void }) {
     const { user, logout } = useAuthStore();
     const navigate = useNavigate();
     const { notifications, markAsRead, markAllAsRead } = useNotificationSignalR();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+    const [showComplaintModal, setShowComplaintModal] = useState(false);
 
     const handleLogout = () => {
         logout();
@@ -42,7 +45,16 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
                     </h2>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowComplaintModal(true)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-amber-400/90 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/20 transition-colors outline-none"
+                    >
+                        <MessageSquareWarning className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                        <span className="text-xs sm:text-sm font-semibold hidden sm:inline">Khiếu nại</span>
+                    </button>
+
                     {/* ── Notifications ── */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -158,6 +170,49 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
                                 <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 rounded-xl border border-white/10 text-sm font-semibold text-zinc-300 hover:bg-white/5 transition-all">Không, ở lại</button>
                                 <button onClick={handleLogout} className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-bold text-white transition-all">Có, đăng xuất</button>
                             </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showComplaintModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+                        onClick={() => setShowComplaintModal(false)}
+                    >
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="relative bg-[#0a1122] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl"
+                        >
+                            <div className="text-center mb-5">
+                                <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
+                                    <MessageSquareWarning className="w-7 h-7 text-amber-400" />
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-2">Khiếu nại và hỗ trợ</h3>
+                                <p className="text-sm text-zinc-400 leading-relaxed">
+                                    Nếu có vấn đề gì, vui lòng liên hệ số điện thoại bên dưới để được hỗ trợ nhanh nhất.
+                                </p>
+                                <a
+                                    href={`tel:${COMPLAINT_HOTLINE}`}
+                                    className="mt-4 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-bold text-lg hover:bg-emerald-600/30 transition-colors"
+                                >
+                                    <Phone className="w-5 h-5" />
+                                    {COMPLAINT_HOTLINE}
+                                </a>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowComplaintModal(false)}
+                                className="w-full py-3 rounded-xl border border-white/10 text-sm font-semibold text-zinc-300 hover:bg-white/5 transition-all"
+                            >
+                                Đóng
+                            </button>
                         </motion.div>
                     </motion.div>
                 )}
