@@ -35,19 +35,19 @@ function Navbar() {
     if (isAuthenticated && !user) {
       fetchMe();
     }
-    
+
     // Sync tech profile to ensure avatar and name are up to date after login
     if (isAuthenticated && user?.id && (user as any).role?.toLowerCase() === 'technician') {
       const syncTechProfile = async () => {
         try {
           const profileInfo = await technicianService.getProfile(user.id);
           if (profileInfo && (profileInfo.fullName !== user.fullName || profileInfo.avatarURL !== user.avatarUrl)) {
-             useAuthStore.getState().setUser({
-                ...user,
-                fullName: profileInfo.fullName || user.fullName,
-                avatarUrl: profileInfo.avatarURL || user.avatarUrl,
-                phone: profileInfo.phoneNumber || user.phone
-             });
+            useAuthStore.getState().setUser({
+              ...user,
+              fullName: profileInfo.fullName || user.fullName,
+              avatarUrl: profileInfo.avatarURL || user.avatarUrl,
+              phone: profileInfo.phoneNumber || user.phone
+            });
           }
         } catch (e) {
           console.error("Failed to sync profile in MainLayout:", e);
@@ -102,16 +102,6 @@ function Navbar() {
           </span>
         </a>
 
-        {/* Nav links */}
-          <a href="#" className="text-zinc-400 font-bold hover:text-white transition-colors">
-            Đối tác thợ
-          </a>
-          <a href="#" className="text-zinc-400 font-bold hover:text-white transition-colors">
-            Công việc
-          </a>
-          <a href="#" className="text-zinc-400 font-bold hover:text-white transition-colors">
-            Hỗ trợ Kỹ thuật
-          </a>
 
         {/* Actions */}
         <div className="flex items-center gap-8">

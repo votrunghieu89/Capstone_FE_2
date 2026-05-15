@@ -1,9 +1,6 @@
-import { useState } from "react";
-import { Search, ArrowRight, MapPin, Zap, Shield } from "lucide-react";
+import { MapPin, Zap, Shield, Phone, Wrench } from "lucide-react";
 
 export function HeroSection() {
-  const [query, setQuery] = useState("");
-
   return (
     <section className="relative min-h-screen overflow-hidden bg-ff-primary">
       {/* Subtle grid pattern */}
@@ -39,22 +36,42 @@ export function HeroSection() {
             </span>
           </h1>
 
-          {/* Quick Search Bar */}
-          <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/30" />
-              <input
-                type="text"
-                placeholder="Mô tả sự cố của bạn..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="h-14 w-full rounded-xl border border-white/10 bg-white/5 pl-12 pr-4 text-base text-white placeholder:text-white/30 transition-all duration-200 focus:border-ff-accent-blue/50 focus:outline-none focus:ring-2 focus:ring-ff-accent-blue/20"
-              />
+          {/* Technician registration callout */}
+          <div className="w-full max-w-xl">
+            <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.09] via-white/[0.04] to-transparent p-px shadow-xl shadow-black/25">
+              <div className="relative rounded-[15px] bg-ff-primary/80 px-5 py-5 backdrop-blur-sm sm:px-6 sm:py-6">
+                <div
+                  className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-ff-cta-orange/25 blur-3xl transition-opacity duration-500 group-hover:opacity-90"
+                  aria-hidden
+                />
+                <div className="pointer-events-none absolute -bottom-8 -left-8 h-28 w-28 rounded-full bg-ff-accent-blue/20 blur-3xl" aria-hidden />
+                <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-ff-cta-orange/30 bg-ff-cta-orange/15 text-ff-cta-orange shadow-inner">
+                    <Wrench className="h-6 w-6" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-3 text-left">
+                    <p className="text-[15px] leading-relaxed text-white/90 sm:text-base">
+                      Nếu bạn muốn{" "}
+                      <span className="font-semibold text-white">
+                        đăng ký trở thành thợ sửa chữa
+                      </span>
+                      , hãy liên hệ số điện thoại bên dưới — chúng tôi sẽ hỗ trợ bạn sớm nhất có thể.
+                    </p>
+                    <a
+                      href="tel:0766571523"
+                      className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-ff-cta-orange/40 bg-ff-cta-orange/15 px-4 py-3.5 text-lg font-bold tracking-wide text-white ring-2 ring-transparent transition-all duration-200 hover:border-ff-cta-orange/70 hover:bg-ff-cta-orange/25 hover:ring-ff-cta-orange/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ff-accent-blue focus-visible:ring-offset-2 focus-visible:ring-offset-ff-primary sm:w-auto sm:justify-start"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-ff-cta-orange text-white shadow-lg shadow-ff-cta-orange/30">
+                        <Phone className="h-4 w-4" />
+                      </span>
+                      <span className="bg-gradient-to-r from-white to-white/85 bg-clip-text text-transparent">
+                        0766 571 523
+                      </span>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button className="h-14 gap-2 rounded-xl bg-ff-cta-orange px-8 text-base font-semibold text-white hover:bg-ff-cta-orange/90 transition-colors duration-200 flex items-center justify-center">
-              Đăng yêu cầu
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </button>
           </div>
 
           {/* Secondary CTA */}
