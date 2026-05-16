@@ -41,6 +41,7 @@ type AccountItem = {
   role: AccountRole
   isActive: boolean
   isVerified: boolean
+  isOnline: number
   createdAt: string
 }
 
@@ -93,6 +94,7 @@ export default function RequestsPage() {
         // Logic fix: Ưu tiên normalize, nếu không ra gì mới để mặc định
         role: normalizeRole(u.role || u.Role) || "nguoi-dung",
         isActive: Number(u.isActive ?? u.IsActive ?? 0) === 1,
+        isOnline: Number(u.isOnline ?? u.IsOnline ?? 0),
         isVerified: true,
         createdAt: u.createdAt || u.CreatedAt || u.createAt || u.CreateAt,
       }))
@@ -138,6 +140,11 @@ export default function RequestsPage() {
       return
     }
 
+    if (target.isActive && target.isOnline === 2) {
+      toast.error("Tài khoản đang có đơn sửa chữa, không thể khóa")
+      return
+    }
+
     const action = target.isActive ? "Khóa" : "Mở khóa"
 
     toast((t) => (
@@ -164,7 +171,14 @@ export default function RequestsPage() {
       await fetchUsers()
     } catch (error: any) {
       setAccounts(snapshot)
-      toast.error(error?.response?.data?.error || error?.response?.data?.message || "Thao tác thất bại", { id: loadId })
+      const status = error?.response?.status
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.response?.data?.data
+      toast.error(
+        status === 409 && currentStatus
+          ? "Tài khoản đang có đơn sửa chữa, không thể khóa"
+          : msg || "Thao tác thất bại",
+        { id: loadId }
+      )
     }
   }
 
@@ -251,14 +265,15 @@ export default function RequestsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={account.role === "admin"} // Khóa nút cho admin
+                        disabled={account.role === "admin" || (account.isActive && account.isOnline === 2)}
+                        title={account.isActive && account.isOnline === 2 ? "Tài khoản đang có đơn sửa chữa" : undefined}
                         onClick={(e) => { e.stopPropagation(); handleToggleAccountActive(account.id); }}
                         className={cn(
                           "w-28",
                           account.isActive
                             ? "border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
                             : "border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10",
-                          account.role === "admin" && "opacity-30 cursor-not-allowed grayscale"
+                          (account.role === "admin" || (account.isActive && account.isOnline === 2)) && "opacity-30 cursor-not-allowed grayscale"
                         )}
                       >
                         {account.isActive ? <Lock className="h-3.5 w-3.5 mr-1.5" /> : <LockOpen className="h-3.5 w-3.5 mr-1.5" />}
