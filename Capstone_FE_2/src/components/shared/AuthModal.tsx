@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { X, Mail, Lock, User, Phone, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react';
+import { X, Mail, Lock, User, Phone, Eye, EyeOff, Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import axios from 'axios';
@@ -39,8 +39,12 @@ interface AuthModalProps {
    ═══════════════════════════════════════ */
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
+  const [registerStep, setRegisterStep] = useState<'form' | 'otp'>('form');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingPassword, setPendingPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const { login, register: registerUser, isLoading } = useAuthStore();
+  const { login, isLoading, setLoading } = useAuthStore();
 
   // ── Login Form ──
   const loginForm = useForm<LoginForm>({
@@ -102,38 +106,111 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   const handleRegister = async (data: RegisterForm) => {
+    const email = data.email.trim().toLowerCase();
     try {
-      await registerUser({
-        email: data.email,
+      setLoading(true);
+      await authService.saveRegisterInfo({
+        email,
         password: data.password,
-        fullName: data.fullName,
-        phone: data.phone || undefined,
+        fullName: data.fullName.trim(),
+        phoneNumber: data.phone?.trim() || '',
       });
+      await authService.sendOTP(email);
 
-      // Try to sign in immediately after successful registration so customer actions
-      // have a valid access token without requiring an extra manual login step.
+      setPendingEmail(email);
+      setPendingPassword(data.password);
+      setOtp('');
+      setRegisterStep('otp');
+      toast.success('Mã OTP đã được gửi đến email của bạn!');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const serverMessage = (err.response?.data as { message?: string } | undefined)?.message;
+        toast.error(serverMessage || 'Không thể lưu thông tin đăng ký hoặc gửi OTP');
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Đăng ký thất bại');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!pendingEmail) return;
+    try {
+      setLoading(true);
+      await authService.sendOTP(pendingEmail);
+      toast.success('Đã gửi lại mã OTP!');
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        const serverMessage = (err.response?.data as { message?: string } | undefined)?.message;
+        toast.error(serverMessage || 'Không thể gửi lại OTP');
+      } else {
+        toast.error('Không thể gửi lại OTP');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtpAndRegister = async () => {
+    if (!pendingEmail) return;
+    const code = otp.trim();
+    if (code.length < 6) {
+      toast.error('Vui lòng nhập đủ 6 số OTP');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await authService.verifyOTP(pendingEmail, code);
+      await authService.confirmRegisterCustomer(pendingEmail);
+
       const result = await authService.login({
-        email: data.email,
-        password: data.password,
+        email: pendingEmail,
+        password: pendingPassword,
       });
       login(result);
 
       toast.success('Đăng ký thành công! Bạn đã được đăng nhập tự động 🎉');
+      resetRegisterFlow();
       onClose();
-      registerForm.reset();
       window.location.href = '/customer';
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Đăng ký thất bại';
-      toast.error(msg);
+      if (axios.isAxiosError(err)) {
+        const serverMessage = (err.response?.data as { message?: string } | undefined)?.message;
+        toast.error(serverMessage || 'Xác thực OTP hoặc hoàn tất đăng ký thất bại');
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Xác thực OTP thất bại');
+      }
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const resetRegisterFlow = () => {
+    setRegisterStep('form');
+    setPendingEmail('');
+    setPendingPassword('');
+    setOtp('');
+    registerForm.reset();
   };
 
   const switchTab = (newTab: 'login' | 'register') => {
     setTab(newTab);
     setShowPassword(false);
+    resetRegisterFlow();
     loginForm.clearErrors();
     registerForm.clearErrors();
   };
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetRegisterFlow();
+      setTab('login');
+      setShowPassword(false);
+      loginForm.clearErrors();
+    }
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -176,30 +253,39 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   <Sparkles size={12} /> FastFix
                 </div>
                 <h2 className="text-2xl font-bold">
-                  {tab === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+                  {tab === 'login'
+                    ? 'Đăng nhập'
+                    : registerStep === 'otp'
+                      ? 'Xác thực OTP'
+                      : 'Tạo tài khoản'}
                 </h2>
                 <p className="text-sm text-text-secondary mt-1">
                   {tab === 'login'
                     ? 'Chào mừng bạn trở lại FastFix!'
-                    : 'Tham gia cộng đồng sửa chữa #1 Đà Nẵng'}
+                    : registerStep === 'otp'
+                      ? `Nhập mã 6 số đã gửi tới ${pendingEmail}`
+                      : 'Tham gia cộng đồng sửa chữa #1 Đà Nẵng'}
                 </p>
               </div>
 
               {/* Tabs */}
-              <div className="flex bg-white/5 rounded-xl p-1 mb-6">
-                {(['login', 'register'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => switchTab(t)}
-                    className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${tab === t
-                      ? 'bg-primary text-white shadow-md shadow-primary/30'
-                      : 'text-text-secondary hover:text-white'
-                      }`}
-                  >
-                    {t === 'login' ? 'Đăng nhập' : 'Đăng ký'}
-                  </button>
-                ))}
-              </div>
+              {registerStep === 'form' && (
+                <motion.div className="flex bg-white/5 rounded-xl p-1 mb-6">
+                  {(['login', 'register'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => switchTab(t)}
+                      className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${tab === t
+                        ? 'bg-primary text-white shadow-md shadow-primary/30'
+                        : 'text-text-secondary hover:text-white'
+                        }`}
+                    >
+                      {t === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
 
               {/* ── LOGIN FORM ── */}
               {tab === 'login' && (
@@ -274,8 +360,61 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 </motion.form>
               )}
 
+              {/* ── REGISTER OTP STEP ── */}
+              {tab === 'register' && registerStep === 'otp' && (
+                <motion.div
+                  key="register-otp"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRegisterStep('form');
+                      setOtp('');
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-white transition-colors"
+                  >
+                    <ArrowLeft size={14} /> Quay lại chỉnh sửa thông tin
+                  </button>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Mã xác nhận (OTP)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="------"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center text-2xl tracking-[0.5em] font-bold outline-none focus:border-primary/50 focus:shadow-[0_0_20px_rgba(37,99,235,0.1)] transition-all placeholder:text-text-secondary/30"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleVerifyOtpAndRegister}
+                    disabled={isLoading || otp.length < 6}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-br from-primary to-primary-dark text-white font-bold text-sm shadow-lg shadow-primary/30 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? <Loader2 size={18} className="animate-spin" /> : <>Xác nhận & hoàn tất đăng ký</>}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={isLoading}
+                    className="w-full text-xs text-primary-light hover:text-primary transition-colors disabled:opacity-50"
+                  >
+                    Gửi lại mã OTP
+                  </button>
+                </motion.div>
+              )}
+
               {/* ── REGISTER FORM ── */}
-              {tab === 'register' && (
+              {tab === 'register' && registerStep === 'form' && (
                 <motion.form
                   key="register"
                   initial={{ opacity: 0, x: 20 }}
@@ -382,7 +521,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     {isLoading ? (
                       <Loader2 size={18} className="animate-spin" />
                     ) : (
-                      <>Tạo tài khoản</>
+                      <>Tiếp tục & nhận OTP</>
                     )}
                   </button>
                 </motion.form>

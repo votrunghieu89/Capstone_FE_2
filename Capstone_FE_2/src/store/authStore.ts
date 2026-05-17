@@ -62,7 +62,7 @@ const useAuthStore = create<AuthState>()(
         }
 
         await authService.saveRegisterInfo(payload);
-        await authService.confirmRegisterCustomer(payload.email);
+        await authService.sendOTP(payload.email);
       },
 
       logout: () => {
@@ -89,7 +89,7 @@ const useAuthStore = create<AuthState>()(
         // Ensure token is synced to localStorage even if rehydration is slow
         const { token, isAuthenticated } = get();
         const storedToken = localStorage.getItem('accessToken');
-        
+
         if (token) {
           localStorage.setItem('accessToken', token);
         } else if (storedToken && !isAuthenticated) {
