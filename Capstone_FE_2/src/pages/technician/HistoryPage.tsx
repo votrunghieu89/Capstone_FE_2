@@ -237,8 +237,15 @@ export default function TechHistoryPage() {
     try {
       // Technician history should call technician detail endpoint
       const res = await technicianOrderService.getOrderDetail(orderId);
-      // Ensure we extract the correct inner object if nested
-      const data = res?.value || res?.data || res;
+      const raw = res?.value || res?.data || res;
+      const data = raw
+        ? {
+          ...raw,
+          ImageUrls: raw.imageUrls || raw.ImageUrls || [],
+          videoUrl: raw.videoUrl || raw.VideoUrl || '',
+          cityName: raw.cityName || raw.city || '',
+        }
+        : null;
       setOrderDetail(data);
     } catch (error) {
       console.error(error);
@@ -543,6 +550,7 @@ export default function TechHistoryPage() {
                           <th className="pb-3 px-4">Thời gian</th>
                           <th className="pb-3 px-4">Trạng thái</th>
                           <th className="pb-3 px-4 text-center">Đánh giá</th>
+                          <th className="pb-3 px-4 text-center">Thao tác</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.02]">
@@ -600,9 +608,19 @@ export default function TechHistoryPage() {
                                   <span className="text-slate-600 font-bold">-</span>
                                 )}
                               </td>
+                              <td className="py-4 px-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => openDetailModal(item.orderId)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase tracking-widest hover:bg-blue-500/20 transition-colors"
+                                >
+                                  <Eye size={14} />
+                                  Chi tiết
+                                </button>
+                              </td>
                             </tr>
                             <tr className="border-b border-white/[0.02]">
-                              <td colSpan={7} className="px-4 pb-4 pt-1">
+                              <td colSpan={8} className="px-4 pb-4 pt-1">
                                 <div className="bg-black/20 p-3 rounded-xl ml-4 mr-4 flex flex-col gap-1.5 border border-white/[0.02]">
                                   <div className="flex items-center gap-2">
                                     <MessageSquare size={12} className="text-slate-500" />
