@@ -43,6 +43,7 @@ export interface ViewOrderDetailDTO {
   longitude: string;
   status: string;
   orderDate: string;
+  estimatedTime?: number;
   completeAt: string;
   attachments?: OrderAttachment[]; // Vẫn giữ để tương thích nếu cần
   videoUrl?: string;               // Thêm để khớp Backend thực tế

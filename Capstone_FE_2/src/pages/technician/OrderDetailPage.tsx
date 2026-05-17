@@ -14,7 +14,7 @@ import technicianOrderService from '@/services/technicianOrderService';
 import aiService from '@/services/aiService';
 import useAuthStore from '@/store/authStore';
 import { ViewOrderDetailDTO } from '@/types/order';
-import { format } from 'date-fns';
+import { buildEtaWindowText, getEtaFallbackLabel } from '@/lib/orderEta';
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -75,7 +75,7 @@ export default function OrderDetailPage() {
       const detailData = resDetail?.value || resDetail?.data || resDetail;
       if (!detailData) throw new Error('No data');
 
-      const pendingItem   = pendingList.find((o: any) => o.orderId === id);
+      const pendingItem = pendingList.find((o: any) => o.orderId === id);
       const confirmedItem = confirmedList.find((o: any) => o.orderId === id);
       const listItem = confirmedItem || pendingItem;
 
@@ -95,6 +95,11 @@ export default function OrderDetailPage() {
         ImageUrls: detailData.imageUrls || detailData.ImageUrls || [],
         videoUrl: detailData.videoUrl || detailData.VideoUrl || '',
         orderDate: listItem?.orderDate || detailData.orderDate || detailData.OrderDate || new Date().toISOString(),
+        estimatedTime:
+          listItem?.estimatedTime ??
+          (listItem as any)?.EstimatedTime ??
+          detailData.estimatedTime ??
+          detailData.EstimatedTime,
       });
 
       if (detailData.aiDiagnostic) setAiDiagnosis(detailData.aiDiagnostic);
@@ -210,13 +215,22 @@ export default function OrderDetailPage() {
   const isCanceled = order.status === 'Cancelled' || order.status === 'Canceled';
   const mediaList = order.ImageUrls || (order as any).imageUrls || [];
   const hasMedia = order.videoUrl || mediaList.length > 0;
-  
+
   const addr = order.address || '';
   const city = order.cityName || '';
   const fullAddress = addr + (city && !addr.includes(city) ? `, ${city}` : '');
   const orderIdShort = `#${String(order.orderId || '').slice(0, 8).toUpperCase()}`;
-  // Đồng bộ với NewRequests: cộng 1 tiếng vào thời gian đặt đơn
-  const expectedTime = order.orderDate ? format(new Date(new Date(order.orderDate).getTime() + 60 * 60 * 1000), 'HH:mm') : '--:--';
+  const createdRaw =
+    order.orderDate ||
+    (order as any)?.OrderDate ||
+    (order as any)?.createdAt ||
+    (order as any)?.CreatedAt;
+  const etaRaw =
+    order.estimatedTime ??
+    (order as any)?.EstimatedTime ??
+    (order as any)?.eta ??
+    (order as any)?.ETA;
+  const expectedTime = buildEtaWindowText(etaRaw, createdRaw) || getEtaFallbackLabel(etaRaw);
 
   return (
     <div className="h-[calc(100vh-80px)] bg-[#020617] text-slate-200 overflow-hidden">
@@ -248,27 +262,16 @@ export default function OrderDetailPage() {
                 <span className="text-sm font-semibold">{order.customerName || 'Khách Hàng Test'}</span>
               </div>
             </div>
-            {/* Trạng thái đơn góc phải */}
-            {isPending ? (
-              <div className="flex items-center gap-3 px-4 py-2 rounded-full border border-amber-500/20 bg-[#0f172a] shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">DỰ KIẾN HOÀN THÀNH</span>
-                </div>
-                <span className="text-base font-black text-amber-400">{expectedTime}</span>
-              </div>
-            ) : isCanceled ? (
+            {/* Dự kiến hoàn thành — đồng bộ NewRequests */}
+            {isCanceled ? (
               <div className="flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-black uppercase tracking-widest shrink-0 bg-rose-500/10 border-rose-500/20 text-rose-400">
                 <div className="w-2 h-2 rounded-full bg-rose-500" />
                 Đã hủy
               </div>
             ) : (
-              <div className="flex items-center gap-3 px-4 py-2 rounded-full border border-amber-500/20 bg-[#0f172a] shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">DỰ KIẾN HOÀN THÀNH</span>
-                </div>
-                <span className="text-base font-black text-amber-400">{expectedTime}</span>
+              <div className="flex items-center gap-2 min-w-0 flex-wrap shrink-0 sm:justify-end">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 shrink-0">Dự kiến hoàn thành</span>
+                <span className="text-[11px] font-bold text-emerald-300/95 tabular-nums">{expectedTime}</span>
               </div>
             )}
           </div>
@@ -326,7 +329,7 @@ export default function OrderDetailPage() {
                       >
                         {isYoutubeVideo(order.videoUrl) ? (
                           <div className="w-full h-full relative pointer-events-none">
-                            <img 
+                            <img
                               src={`https://img.youtube.com/vi/${order.videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/)?.[1]}/hqdefault.jpg`}
                               className="w-full h-full object-cover opacity-80"
                               alt="Youtube Thumbnail"
@@ -339,7 +342,7 @@ export default function OrderDetailPage() {
                             muted
                             playsInline
                             preload="metadata"
-                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => { })}
                             onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
                           />
                         )}
@@ -436,7 +439,7 @@ export default function OrderDetailPage() {
 
           <div className="flex-1 flex flex-col p-5 gap-4 overflow-y-auto custom-scrollbar relative z-10 -mt-6">
             {/* ── Address Box ── */}
-            <div 
+            <div
               className="bg-[#0f1629] border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4 cursor-pointer hover:border-blue-500/30 transition-colors shadow-xl"
               onClick={() => openGoogleMapsRoute(
                 techLocation ? `${techLocation.address}, ${techLocation.cityName}` : gpsLocation,
@@ -543,11 +546,10 @@ export default function OrderDetailPage() {
                   <button
                     onClick={handleCompleteOrder}
                     disabled={completeLoading || completeSent}
-                    className={`w-full h-14 rounded-xl text-sm font-black uppercase tracking-[0.05em] shadow-lg transition-all flex items-center justify-center gap-2 ${
-                      completeSent
+                    className={`w-full h-14 rounded-xl text-sm font-black uppercase tracking-[0.05em] shadow-lg transition-all flex items-center justify-center gap-2 ${completeSent
                         ? 'bg-slate-700/50 text-slate-400 cursor-not-allowed'
                         : 'bg-[#00c07f] hover:bg-[#00a36c] active:scale-[0.98] text-white shadow-emerald-500/20'
-                    }`}
+                      }`}
                   >
                     {completeSent ? (
                       <>
@@ -607,11 +609,11 @@ export default function OrderDetailPage() {
               >
                 {isYoutubeVideo(lightboxUrl) ? (
                   <div className="w-full aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black">
-                    <iframe 
-                      src={getYoutubeEmbedUrl(lightboxUrl!)} 
-                      title="YouTube video player" 
-                      frameBorder="0" 
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    <iframe
+                      src={getYoutubeEmbedUrl(lightboxUrl!)}
+                      title="YouTube video player"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                       className="w-full h-full"
                     ></iframe>
