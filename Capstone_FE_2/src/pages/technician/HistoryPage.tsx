@@ -26,6 +26,13 @@ interface ExtendedOrderDTO extends ViewOrderDTO {
   feedback?: string;
 }
 
+function formatOrderDateTime(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return format(date, 'dd/MM/yyyy HH:mm', { locale: vi });
+}
+
 export default function TechHistoryPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -241,9 +248,23 @@ export default function TechHistoryPage() {
       const data = raw
         ? {
           ...raw,
+          orderDate:
+            raw.orderDate ||
+            raw.OrderDate ||
+            raw.createAt ||
+            raw.CreateAt ||
+            raw.createdAt ||
+            raw.CreatedAt,
+          customerPhone:
+            raw.customerPhone ||
+            raw.phoneNumber ||
+            raw.PhoneNumber ||
+            raw.phoneNumgber ||
+            raw.PhoneNumgber,
+          address: raw.address || raw.Address || '',
+          cityName: raw.cityName || raw.City || raw.city || '',
           ImageUrls: raw.imageUrls || raw.ImageUrls || [],
           videoUrl: raw.videoUrl || raw.VideoUrl || '',
-          cityName: raw.cityName || raw.city || '',
         }
         : null;
       setOrderDetail(data);
@@ -741,7 +762,7 @@ export default function TechHistoryPage() {
                       </div>
                       <div className="bg-[#1a1b26] p-4 rounded-2xl border border-white/5">
                         <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Thời gian tạo</p>
-                        <p className="font-bold text-white text-sm">{format(new Date(orderDetail.orderDate), 'dd/MM/yyyy HH:mm')}</p>
+                        <p className="font-bold text-white text-sm">{formatOrderDateTime(orderDetail.orderDate)}</p>
                       </div>
                     </div>
 
@@ -759,7 +780,9 @@ export default function TechHistoryPage() {
                       </div>
                       <div className="flex items-start gap-3 mt-3 pt-3 border-t border-white/5">
                         <MapPin size={16} className="text-slate-500 shrink-0 mt-0.5" />
-                        <p className="text-sm font-medium text-slate-300 leading-tight">{orderDetail.address}</p>
+                        <p className="text-sm font-medium text-slate-300 leading-tight">
+                          {[orderDetail.address, orderDetail.cityName].filter(Boolean).join(', ') || 'Chưa có địa chỉ'}
+                        </p>
                       </div>
                     </div>
 
