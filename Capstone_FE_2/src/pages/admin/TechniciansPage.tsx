@@ -17,7 +17,9 @@ import {
 import {
   ChevronLeft, ChevronRight, MoreHorizontal, Phone, Star, Eye, MessageSquare, Loader2, Mail, MapPin, Wrench, Plus, Trash2
 } from "lucide-react"
+import axios from "axios"
 import { adminApi } from "@/services/adminApi"
+import authService from "@/services/authService"
 import { toast } from "react-hot-toast";
 import { ConfirmToast } from "@/components/admin/ConfirmToast";
 type TechStatus = "san-sang" | "nghi-phep"
@@ -72,7 +74,7 @@ export default function TechniciansPage() {
   const [reviewsLoading, setReviewsLoading] = useState(false)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [newTech, setNewTech] = useState({ fullName: "", email: "", phoneNumber: "", description: "" })
+  const [newTech, setNewTech] = useState({ fullName: "", email: "", password: "", phoneNumber: "" })
 
   useEffect(() => {
     loadData()
@@ -115,22 +117,45 @@ export default function TechniciansPage() {
   // 3. Ví dụ: Sử dụng cho chức năng Thêm Kỹ thuật viên (nếu muốn xác nhận trước khi lưu
   // Logic Xóa Đánh giá
   const handleCreate = async () => {
-    if (!newTech.fullName || !newTech.email || !newTech.phoneNumber) {
+    const fullName = newTech.fullName.trim()
+    const email = newTech.email.trim().toLowerCase()
+    const phoneNumber = newTech.phoneNumber.trim()
+    const password = newTech.password
+
+    if (!fullName || !email || !phoneNumber || !password) {
       toast.error("Vui lòng điền đủ thông tin bắt buộc!")
       return
     }
+    if (password.length < 6) {
+      toast.error("Mật khẩu tối thiểu 6 ký tự")
+      return
+    }
+
     setIsSubmitting(true)
     try {
-      await adminApi.createTechnician(newTech)
+      await authService.registerTechnician({
+        email,
+        password,
+        fullName,
+        phoneNumber,
+        address: null,
+        cityId: null,
+        latitude: null,
+        longitude: null,
+      })
 
-      // THÔNG BÁO THÀNH CÔNG
       toast.success("Đã thêm kỹ thuật viên mới!")
 
       setIsCreateOpen(false)
-      setNewTech({ fullName: "", email: "", phoneNumber: "", description: "" })
+      setNewTech({ fullName: "", email: "", password: "", phoneNumber: "" })
       await loadData()
     } catch (e) {
-      toast.error("Lỗi khi tạo mới kỹ thuật viên.")
+      if (axios.isAxiosError(e)) {
+        const msg = (e.response?.data as { message?: string } | undefined)?.message
+        toast.error(msg || "Lỗi khi tạo mới kỹ thuật viên.")
+      } else {
+        toast.error("Lỗi khi tạo mới kỹ thuật viên.")
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -198,16 +223,43 @@ export default function TechniciansPage() {
       </div>
 
       {/* --- MODAL TẠO MỚI --- */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog
+        open={isCreateOpen}
+        onOpenChange={(open) => {
+          setIsCreateOpen(open)
+          if (!open) setNewTech({ fullName: "", email: "", password: "", phoneNumber: "" })
+        }}
+      >
         <DialogContent className="bg-[#0d1322] border-slate-800 text-white">
           <DialogHeader><DialogTitle>Thêm kỹ thuật viên mới</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-4">
-            <Input placeholder="Họ và tên" value={newTech.fullName} onChange={e => setNewTech({ ...newTech, fullName: e.target.value })} className="bg-[#0f1627] border-slate-700" />
-            <div className="grid grid-cols-2 gap-4">
-              <Input placeholder="Email" value={newTech.email} onChange={e => setNewTech({ ...newTech, email: e.target.value })} className="bg-[#0f1627] border-slate-700" />
-              <Input placeholder="SĐT" value={newTech.phoneNumber} onChange={e => setNewTech({ ...newTech, phoneNumber: e.target.value })} className="bg-[#0f1627] border-slate-700" />
-            </div>
-            <textarea placeholder="Mô tả kỹ năng..." value={newTech.description} onChange={e => setNewTech({ ...newTech, description: e.target.value })} className="w-full h-24 bg-[#0f1627] border border-slate-700 rounded p-2 text-sm focus:outline-none focus:border-blue-500" />
+            <Input
+              placeholder="Họ và tên *"
+              value={newTech.fullName}
+              onChange={e => setNewTech({ ...newTech, fullName: e.target.value })}
+              className="bg-[#0f1627] border-slate-700"
+            />
+            <Input
+              type="email"
+              placeholder="Email *"
+              value={newTech.email}
+              onChange={e => setNewTech({ ...newTech, email: e.target.value })}
+              className="bg-[#0f1627] border-slate-700"
+            />
+            <Input
+              type="password"
+              placeholder="Mật khẩu (tối thiểu 6 ký tự) *"
+              value={newTech.password}
+              onChange={e => setNewTech({ ...newTech, password: e.target.value })}
+              className="bg-[#0f1627] border-slate-700"
+            />
+            <Input
+              type="tel"
+              placeholder="Số điện thoại *"
+              value={newTech.phoneNumber}
+              onChange={e => setNewTech({ ...newTech, phoneNumber: e.target.value })}
+              className="bg-[#0f1627] border-slate-700"
+            />
             <Button className="w-full" onClick={handleCreate} disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="animate-spin" /> : "Xác nhận tạo"}
             </Button>
