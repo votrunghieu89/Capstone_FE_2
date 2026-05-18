@@ -46,6 +46,22 @@ const parseLatLng = (value: unknown) => {
 const buildLocationInputKey = (inputAddress: string, inputCityText: string) =>
     `${inputAddress.trim().toLowerCase()}|${inputCityText.trim().toLowerCase()}`;
 
+/** Thời gian tối thiểu hiển thị màn "đang tìm thợ" (ms). */
+const AUTO_FIND_SEARCH_MIN_MS = 10_000;
+
+const waitAutoFindMinDelay = async (
+    startedAt: number,
+    requestId: number,
+    activeRequestRef: React.MutableRefObject<number>
+) => {
+    const deadline = startedAt + AUTO_FIND_SEARCH_MIN_MS;
+    while (Date.now() < deadline) {
+        if (requestId !== activeRequestRef.current) return false;
+        await new Promise<void>((resolve) => setTimeout(resolve, 200));
+    }
+    return requestId === activeRequestRef.current;
+};
+
 const resolveLocationFromAddress = async (inputAddress: string, inputCityText: string) => {
     const address = inputAddress.trim();
     const cityName = inputCityText.trim();
@@ -1419,6 +1435,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         console.log('🔍 AutoFind payload before submit', { selectedService, selectedCityId, cityText, title, desc, address, latitude, longitude });
 
         const requestId = ++searchRequestRef.current;
+        const searchStartedAt = Date.now();
         setIsSearching(true);
         setSearchStatus('searching');
         setSearchPhase('locating');
@@ -1449,6 +1466,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             if (requestId !== searchRequestRef.current) return;
             const res = await autoFindService.checkAcceptance(user.id);
             if (requestId !== searchRequestRef.current) return;
+            if (!(await waitAutoFindMinDelay(searchStartedAt, requestId, searchRequestRef))) return;
+
             if (!res || !(res.id || res.technicianId || res.TechnicianId)) {
                 setSearchStatus('not_found');
                 setSearchReason('Không có thợ phù hợp với tiêu chí bạn chọn.');
@@ -1476,6 +1495,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             setSearchReason('');
         } catch (err: any) {
             if (requestId !== searchRequestRef.current) return;
+            if (!(await waitAutoFindMinDelay(searchStartedAt, requestId, searchRequestRef))) return;
             const status = err?.response?.status;
             const message = err?.response?.data?.message || '';
             if (status === 400) {
@@ -1497,6 +1517,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
 
     const handleRejectTechnician = async () => {
         if (!user?.id || !foundTech) return;
+        const rejectStartedAt = Date.now();
+        const requestId = searchRequestRef.current;
         setIsSearching(true);
         setIsTransitioning(true);
 
@@ -1516,6 +1538,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                     break;
                 }
             }
+
+            if (!(await waitAutoFindMinDelay(rejectStartedAt, requestId, searchRequestRef))) return;
 
             if (!nextCandidate) {
                 setFoundTech(null);
@@ -1546,9 +1570,11 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             setSearchReason('');
             toast.success('Đã đề xuất kỹ thuật viên tiếp theo.');
         } catch {
-            setSearchStatus('not_found');
-            setSearchReason('Không còn thợ nào khác phù hợp lúc này.');
-            toast.error('Không có thợ phù hợp tiếp theo.');
+            if (await waitAutoFindMinDelay(rejectStartedAt, requestId, searchRequestRef)) {
+                setSearchStatus('not_found');
+                setSearchReason('Không còn thợ nào khác phù hợp lúc này.');
+                toast.error('Không có thợ phù hợp tiếp theo.');
+            }
         } finally {
             setIsTransitioning(false);
             setIsSearching(false);
@@ -1763,15 +1789,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                                     <p className="mt-1 text-xs text-zinc-500">Kết quả sẽ ưu tiên khu vực gần bạn và dịch vụ đúng nhu cầu.</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={handleGetLocation}
-                                        className="h-11 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
-                                        disabled={isSearching || !address.trim()}
-                                    >
-                                        Lấy tọa độ
-                                    </Button>
+
                                     <Button onClick={handleStartSearch} className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-primary-dark" disabled={isSearching}>
                                         {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
                                     </Button>
