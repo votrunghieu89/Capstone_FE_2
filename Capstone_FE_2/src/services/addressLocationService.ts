@@ -7,6 +7,12 @@ export type AddressLocationInput = {
 
 export type AddressLocationResult = GeocodeResult;
 
+export type AddressLocationOptions = {
+    /** Số biến thể địa chỉ thử trong lượt geocode nhanh (mặc định 2). */
+    fastCandidateLimit?: number;
+    useCache?: boolean;
+};
+
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
 const dedupe = (values: string[]) => {
@@ -18,6 +24,11 @@ const dedupe = (values: string[]) => {
         return true;
     });
 };
+
+const buildCacheKey = (address: string, cityName: string) =>
+    `${normalizeWhitespace(address).toLowerCase()}|||${normalizeWhitespace(cityName).toLowerCase()}`;
+
+const geocodeCache = new Map<string, AddressLocationResult>();
 
 const extractDistrictTokens = (address: string): string[] => {
     const normalized = normalizeWhitespace(address);
@@ -85,8 +96,29 @@ const buildAddressCandidates = (address: string, cityName: string): Array<{ addr
     });
 };
 
+const tryCandidates = async (
+    candidates: Array<{ address: string; cityName: string }>,
+    skipOverpass: boolean
+): Promise<AddressLocationResult | null> => {
+    for (const candidate of candidates) {
+        const result = await geocodingService.resolveAddressToLocation(
+            candidate.address,
+            candidate.cityName,
+            { skipOverpass }
+        );
+        if (result?.lat && result?.lon) {
+            return {
+                ...result,
+                query: result.query || `${candidate.address}, ${candidate.cityName}`,
+            };
+        }
+    }
+    return null;
+};
+
 export async function getAddressLocation(
-    input: AddressLocationInput
+    input: AddressLocationInput,
+    options: AddressLocationOptions = {}
 ): Promise<AddressLocationResult | null> {
     const address = String(input.address || '').trim();
     const cityName = String(input.cityName || '').trim();
@@ -95,16 +127,26 @@ export async function getAddressLocation(
         return null;
     }
 
-    const candidates = buildAddressCandidates(address, cityName);
+    const cacheKey = buildCacheKey(address, cityName);
+    if (options.useCache !== false && geocodeCache.has(cacheKey)) {
+        return geocodeCache.get(cacheKey)!;
+    }
 
-    for (const candidate of candidates) {
-        const result = await geocodingService.resolveAddressToLocation(candidate.address, candidate.cityName);
-        if (result?.lat && result?.lon) {
-            return {
-                ...result,
-                query: result.query || `${candidate.address}, ${candidate.cityName}`,
-            };
-        }
+    const candidates = buildAddressCandidates(address, cityName);
+    const fastLimit = Math.max(1, options.fastCandidateLimit ?? 2);
+    const fastCandidates = candidates.slice(0, fastLimit);
+    const slowCandidates = candidates.slice(fastLimit);
+
+    const fastResult = await tryCandidates(fastCandidates, true);
+    if (fastResult) {
+        geocodeCache.set(cacheKey, fastResult);
+        return fastResult;
+    }
+
+    const slowResult = await tryCandidates(slowCandidates.length ? slowCandidates : fastCandidates, false);
+    if (slowResult) {
+        geocodeCache.set(cacheKey, slowResult);
+        return slowResult;
     }
 
     return null;

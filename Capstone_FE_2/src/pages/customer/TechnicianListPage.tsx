@@ -43,6 +43,9 @@ const parseLatLng = (value: unknown) => {
     return Number.isFinite(num) ? num : null;
 };
 
+const buildLocationInputKey = (inputAddress: string, inputCityText: string) =>
+    `${inputAddress.trim().toLowerCase()}|${inputCityText.trim().toLowerCase()}`;
+
 const resolveLocationFromAddress = async (inputAddress: string, inputCityText: string) => {
     const address = inputAddress.trim();
     const cityName = inputCityText.trim();
@@ -52,10 +55,10 @@ const resolveLocationFromAddress = async (inputAddress: string, inputCityText: s
     }
 
     try {
-        return await getAddressLocation({
-            address,
-            cityName,
-        });
+        return await getAddressLocation(
+            { address, cityName },
+            { fastCandidateLimit: 2, useCache: true }
+        );
     } catch (error) {
         console.warn('resolveLocationFromAddress failed', error, { address, cityName });
         return null;
@@ -1271,6 +1274,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
     const [foundTech, setFoundTech] = useState<any>(null);
     const [selectedCityId, setSelectedCityId] = useState('');
     const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'not_found'>('idle');
+    const [searchPhase, setSearchPhase] = useState<'locating' | 'matching'>('matching');
+    const [geocodeInputKey, setGeocodeInputKey] = useState('');
     const [searchReason, setSearchReason] = useState('');
     const searchRequestRef = useRef(0);
     const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -1297,8 +1302,10 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         setAddress('');
         setLatitude('');
         setLongitude('');
+        setGeocodeInputKey('');
         setResolvedDisplayAddress('');
         setResolvedGeoMeta({});
+        setSearchPhase('matching');
         setIsSearching(false);
         setIsTransitioning(false);
         setIsConfirming(false);
@@ -1360,7 +1367,50 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
             confidence: resolvedLocation?.confidence,
             query: resolvedLocation?.query
         });
+        setGeocodeInputKey(buildLocationInputKey(address, cityText));
         toast.success('Đã lấy được latitude/longitude');
+    };
+
+    const resolveCoordsForAutoFind = async () => {
+        const inputKey = buildLocationInputKey(address, cityText);
+        const cachedLat = parseLatLng(latitude);
+        const cachedLng = parseLatLng(longitude);
+
+        if (cachedLat !== null && cachedLng !== null && geocodeInputKey === inputKey) {
+            return {
+                lat: cachedLat,
+                lng: cachedLng,
+                displayName: resolvedDisplayAddress || `${address}, ${cityText || 'Việt Nam'}`,
+                fromCache: true as const,
+            };
+        }
+
+        const resolvedLocation = await resolveLocationFromAddress(address, cityText).catch(() => null);
+        const candidateLat = parseLatLng(resolvedLocation?.lat);
+        const candidateLng = parseLatLng(resolvedLocation?.lon);
+
+        if (candidateLat === null || candidateLng === null) {
+            return null;
+        }
+
+        const displayName = resolvedLocation?.display_name || `${address}, ${cityText || 'Việt Nam'}`;
+        setLatitude(candidateLat.toString());
+        setLongitude(candidateLng.toString());
+        setResolvedDisplayAddress(displayName);
+        setResolvedGeoMeta({
+            source: resolvedLocation?.source,
+            method: resolvedLocation?.method,
+            confidence: resolvedLocation?.confidence,
+            query: resolvedLocation?.query,
+        });
+        setGeocodeInputKey(inputKey);
+
+        return {
+            lat: candidateLat,
+            lng: candidateLng,
+            displayName,
+            fromCache: false as const,
+        };
     };
 
     const handleStartSearch = async () => {
@@ -1371,23 +1421,21 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         const requestId = ++searchRequestRef.current;
         setIsSearching(true);
         setSearchStatus('searching');
+        setSearchPhase('locating');
         try {
-            const resolvedLocation = await resolveLocationFromAddress(address, cityName).catch(() => null);
+            const coords = await resolveCoordsForAutoFind();
             if (requestId !== searchRequestRef.current) return;
-            const candidateLat = parseLatLng(resolvedLocation?.lat ?? latitude);
-            const candidateLng = parseLatLng(resolvedLocation?.lon ?? longitude);
-            if (candidateLat === null || candidateLng === null) {
+            if (!coords) {
                 toast.error('Không xác định được tọa độ từ địa chỉ và thành phố');
                 setSearchStatus('idle');
                 return;
             }
 
-            const latValue = candidateLat.toString();
-            const lngValue = candidateLng.toString();
-            setLatitude(latValue);
-            setLongitude(lngValue);
-            setResolvedDisplayAddress(resolvedLocation?.display_name || `${address}, ${cityName || 'Việt Nam'}`);
+            const latValue = coords.lat.toString();
+            const lngValue = coords.lng.toString();
+            setResolvedDisplayAddress(coords.displayName);
 
+            setSearchPhase('matching');
             await autoFindService.clearSession(user.id).catch(() => undefined);
             if (requestId !== searchRequestRef.current) return;
             await autoFindService.findTechnicians(user.id, {
@@ -1442,7 +1490,8 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
         } finally {
             if (requestId !== searchRequestRef.current) return;
             setIsSearching(false);
-            setTimeout(() => setIsTransitioning(false), 500);
+            setSearchPhase('matching');
+            setIsTransitioning(false);
         }
     };
 
@@ -1714,6 +1763,15 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                                     <p className="mt-1 text-xs text-zinc-500">Kết quả sẽ ưu tiên khu vực gần bạn và dịch vụ đúng nhu cầu.</p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleGetLocation}
+                                        className="h-11 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                                        disabled={isSearching || !address.trim()}
+                                    >
+                                        Lấy tọa độ
+                                    </Button>
                                     <Button onClick={handleStartSearch} className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-primary-dark" disabled={isSearching}>
                                         {isSearching ? 'Đang tìm...' : 'Bắt đầu tìm kiếm thợ'}
                                     </Button>
@@ -1732,8 +1790,14 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                             </div>
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-white">Đang tìm thợ gần bạn...</h3>
-                            <p className="mt-2 max-w-md text-sm text-zinc-400">Hệ thống đang kiểm tra thợ phù hợp nhất theo dịch vụ, khu vực và trạng thái rảnh.</p>
+                            <h3 className="text-xl font-bold text-white">
+                                {searchPhase === 'locating' ? 'Đang xác định vị trí...' : 'Đang tìm thợ gần bạn...'}
+                            </h3>
+                            <p className="mt-2 max-w-md text-sm text-zinc-400">
+                                {searchPhase === 'locating'
+                                    ? 'Đang lấy tọa độ từ địa chỉ (lần sau sẽ nhanh hơn nếu không đổi địa chỉ).'
+                                    : 'Hệ thống đang kiểm tra thợ phù hợp nhất theo dịch vụ, khu vực và trạng thái rảnh.'}
+                            </p>
                         </div>
                         <Button
                             variant="ghost"
@@ -1746,6 +1810,7 @@ function AutoFindDialog({ services, cities, onClose }: { services: ServiceDTO[],
                                 setIsConfirming(false);
                                 setFoundTech(null);
                                 setSearchReason('');
+                                setSearchPhase('matching');
                                 setSearchStatus('idle');
                             }}
                         >

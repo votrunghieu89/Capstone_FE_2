@@ -10,6 +10,11 @@ export interface GeocodeResult {
     road?: string | null;
 }
 
+export type GeocodeOptions = {
+    /** Bỏ Overpass (có thể mất 5–25s) — dùng Nominatim/Photon trước. */
+    skipOverpass?: boolean;
+};
+
 function parseVietnameseAddress(address: string) {
     const trimmed = address.trim();
     const match = trimmed.match(/^(?:s[oố]\s*)?(\d+[A-Za-z]?(?:[/\-]\d+[A-Za-z]?)*)\s+(.+)$/i);
@@ -315,7 +320,11 @@ function applyHouseNumberJitter(baseLat: number, baseLon: number, houseNumber: s
 }
 
 const geocodingService = {
-    resolveAddressToLocation: async (addressText: string, cityNameText: string): Promise<GeocodeResult | null> => {
+    resolveAddressToLocation: async (
+        addressText: string,
+        cityNameText: string,
+        options?: GeocodeOptions
+    ): Promise<GeocodeResult | null> => {
         const address = String(addressText || '').trim();
         const city = String(cityNameText || '').trim();
 
@@ -367,8 +376,8 @@ const geocodingService = {
                 return null;
             }
 
-            // Phase 2: Overpass Deep Search
-            if (parsed.houseNumber) {
+            // Phase 2: Overpass Deep Search (chậm — có thể bỏ qua khi cần phản hồi nhanh)
+            if (parsed.houseNumber && !options?.skipOverpass) {
                 const deep = await overpassDeepSearch(
                     parsed.streetName, parsed.houseNumber,
                     String(streetResult.lat), String(streetResult.lon)
